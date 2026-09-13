@@ -1,0 +1,62 @@
+# Fedora Workstation Live @RELEASE@ remastered for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED).
+# Kernel @ABI@ with the Denali OLED device tree loaded explicitly by GRUB.
+set default="0"
+set timeout=@TIMEOUT@
+set timeout_style=menu
+
+function load_video {
+	insmod efi_gop
+	insmod all_video
+}
+set basicgfx="nomodeset"
+
+insmod gzio
+insmod part_gpt
+insmod ext2
+
+search --file --set=root @MARKER@
+
+# Low GRUB resolution: the 2880x1920 panel renders native-mode text unreadably small.
+if loadfont ($root)@FONT@; then
+	set gfxmode=@GFXMODE@
+	load_video
+	insmod gfxterm
+	terminal_output gfxterm
+else
+	load_video
+	terminal_output console
+fi
+terminal_input console
+
+set live_root="root=live:CDLABEL=@VOLID@ rd.live.image"
+set sp11_args="@ARGS_INSTALLED@"
+set live_args="@ARGS_LIVE@"
+set dtb="($root)@DTB@"
+
+menuentry "Fedora @RELEASE@ Live for Surface Pro 11 (kernel @ABI@)" --class fedora --class gnu-linux --class gnu --class os {
+	linux ($root)@KERNEL@ quiet rhgb $live_root $sp11_args $live_args
+	initrd ($root)@INITRD@
+	devicetree $dtb
+}
+menuentry "Fedora @RELEASE@ Live for Surface Pro 11 (verbose boot)" --class fedora --class gnu-linux --class gnu --class os {
+	linux ($root)@KERNEL@ $live_root $sp11_args $live_args
+	initrd ($root)@INITRD@
+	devicetree $dtb
+}
+submenu "Troubleshooting -->" {
+	menuentry "Surface Pro 11 kernel, basic graphics (nomodeset)" --class fedora --class gnu-linux --class gnu --class os {
+		linux ($root)@KERNEL@ quiet rhgb $live_root $sp11_args $live_args $basicgfx
+		initrd ($root)@INITRD@
+		devicetree $dtb
+	}
+	menuentry "Stock Fedora @RELEASE@ kernel with Denali DTB (no touch, no Wi-Fi)" --class fedora --class gnu-linux --class gnu --class os {
+		linux ($root)@KERNEL_STOCK@ quiet rhgb $live_root $sp11_args $live_args
+		initrd ($root)@INITRD_STOCK@
+		devicetree $dtb
+	}
+	menuentry "Test this media & start Fedora @RELEASE@ Live for Surface Pro 11" --class fedora --class gnu-linux --class gnu --class os {
+		linux ($root)@KERNEL@ quiet rhgb $live_root $sp11_args $live_args rd.live.check
+		initrd ($root)@INITRD@
+		devicetree $dtb
+	}
+}

@@ -1,0 +1,15 @@
+Fedora Workstation Live @RELEASE@ for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED, incl. 5G SKU)
+
+Kernel:        @ABI@ (ooaklee/linux_ms_dev_kit-sp11 @COMMIT@, mode: @MODE@)
+Device tree:   @DTB@ (loaded explicitly by GRUB; installed system uses GRUB_DEVICETREE in BLS entries)
+Built:         @DATE@ for SKU @SKU@
+Secure Boot:   must be DISABLED (unsigned kernel).
+
+Live session:  Wi-Fi, Bluetooth, GPU acceleration, touch and pen work. Audio and battery status are
+               unavailable on the live USB because the audio DSP is kept off while booting from USB-C
+               (modprobe.blacklist=qcom_q6v5_pas). They work after installation to the internal disk.
+
+Installation:  run "Install to Hard Drive". The installed system boots this kernel with the Denali DTB;
+               a one-shot service (sp11-first-boot) removes the live-only DSP blacklist on the first boot.
+
+RPMs used to build this media are under /sp11/rpms.
