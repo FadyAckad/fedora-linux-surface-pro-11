@@ -24,6 +24,7 @@ check r test -x "$ROOTFS/usr/libexec/sp11-iptsd"
 check r test -x "$ROOTFS/usr/libexec/sp11/sp11-bt-set-addr"
 check r grep -q "SP11_BT_MAC=\"$SP11_BT_MAC\"" "$ROOTFS/etc/sp11/bluetooth-address"
 check r test -x "$ROOTFS/usr/lib/kernel/install.d/15-sp11-surface.install"
+check r grep -q "^kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
 stock=$(r find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' ! -name "vmlinuz-$KERNEL_ABI" | wc -l); check test "$stock" -eq 0

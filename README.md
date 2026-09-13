@@ -66,8 +66,11 @@ hand-off in a chroot, proving the BLS entry gets the Denali DTB and the SP11 ker
 - GRUB: `gfxterm` at `1024x768,800x600,auto` on live media and installed system.
 - The stock Fedora kernel stays installed in the live root but hidden from Anaconda; the Troubleshooting menu
   keeps a stock-kernel entry with the Denali DTB.
-- SELinux: the ooaklee config's LSM list (`landlock,lockdown,yama,integrity,apparmor`) does not activate
-  SELinux; Fedora runs without MAC enforcement on this kernel.
+- LSM: the ooaklee config's LSM list (`landlock,lockdown,yama,integrity,apparmor`) activates AppArmor, not
+  SELinux, so Fedora runs without MAC enforcement on this kernel. Because the config also sets
+  `CONFIG_SECURITY_APPARMOR_RESTRICT_USERNS=y` and Fedora has no AppArmor profiles, the support RPM ships
+  `/usr/lib/sysctl.d/90-sp11.conf` with `kernel.apparmor_restrict_unprivileged_userns = 0`; without it
+  Flatpak, browser sandboxes and rootless containers fail with `bwrap: Creating new namespace failed`.
 
 ## Fedora 45 or a newer kernel release
 

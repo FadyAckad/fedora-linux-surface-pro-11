@@ -26,8 +26,8 @@ Device-bound support for Microsoft Surface Pro 11 (X1E80100, OLED, SKU @SKU@):
 Qualcomm ADSP/CDSP/GPU firmware extracted from this device's Windows installation,
 ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, WCN7850 Wi-Fi board
 data, Bluetooth public-address service, kernel-install boot policy plugin
-(Denali DTB, GRUB resolution, kernel arguments), dracut policy and the
-first-boot finalizer. The firmware is proprietary and must not be redistributed.
+(Denali DTB, GRUB resolution, kernel arguments), dracut policy, sysctl policy
+(unprivileged user namespaces for Flatpak) and the first-boot finalizer. The firmware is proprietary and must not be redistributed.
 
 %prep
 %build
@@ -36,6 +36,7 @@ first-boot finalizer. The firmware is proprietary and must not be redistributed.
 cp -a %{stage}/. %{buildroot}/
 
 %post
+/usr/lib/systemd/systemd-sysctl /usr/lib/sysctl.d/90-sp11.conf >/dev/null 2>&1 || :
 /usr/bin/udevadm control --reload >/dev/null 2>&1 || :
 /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
 /usr/libexec/sp11/sp11-ucm-apply || :
@@ -58,6 +59,7 @@ cp -a %{stage}/. %{buildroot}/
 /usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules
 /usr/lib/kernel/install.d/15-sp11-surface.install
 /usr/lib/dracut/dracut.conf.d/90-sp11.conf
+/usr/lib/sysctl.d/90-sp11.conf
 %dir /etc/sp11
 %config(noreplace) /etc/sp11/bluetooth-address
 /etc/sp11/sp11.env
