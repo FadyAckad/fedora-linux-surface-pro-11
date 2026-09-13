@@ -1,0 +1,92 @@
+%global commit @COMMIT@
+%global debug_package %{nil}
+%global _build_id_links none
+
+Name:           sp11-iptsd
+Version:        @VERSION@
+Release:        1.sp11%{?dist}
+Summary:        Surface Pro 11 stylus daemon (upstream iptsd on the kernel HIDRAW bridge)
+License:        GPL-2.0-or-later AND MIT
+URL:            https://github.com/linux-surface/iptsd
+Source0:        iptsd-%{commit}.tar.gz
+Source1:        70-sp11-iptsd.rules
+Source2:        sp11-iptsd@.service
+Source3:        sp11-iptsd-restart
+Source4:        surface-pro-11-0c80.conf
+Source5:        surface-pro-11-0c83.conf
+ExclusiveArch:  aarch64
+
+BuildRequires:  gcc-c++
+BuildRequires:  meson
+BuildRequires:  ninja-build
+BuildRequires:  pkgconf-pkg-config
+BuildRequires:  cli11-devel
+BuildRequires:  eigen3-devel
+BuildRequires:  fmt-devel
+BuildRequires:  spdlog-devel
+BuildRequires:  inih-devel
+BuildRequires:  guidelines-support-library-devel
+BuildRequires:  systemd-rpm-macros
+Requires:       systemd
+Requires:       systemd-udev
+Requires:       coreutils
+Requires:       gawk
+Conflicts:      iptsd
+Conflicts:      g6-pen
+Provides:       sp11-iptsd = %{version}-%{release}
+
+%description
+Unmodified upstream iptsd %{version} (commit %{commit}) built against Fedora's
+libraries, plus ooaklee's Surface Pro 11 integration: the kernel mshw0485 driver
+keeps direct touch and exposes a private HIDRAW bridge (045E:0C80 / 045E:0C83);
+this daemon decodes the stylus stream and creates the pen input device.
+
+%prep
+%setup -q -n iptsd-%{commit}
+
+%build
+%meson --bindir=libexec -Dservice_manager=[] -Dsample_config=false -Ddebug_tools=[] \
+  -Dforce_access_checks=true -Dwerror=false -Db_lto=false --wrap-mode=nofallback
+%meson_build
+
+%install
+install -D -m 0755 %{_vpath_builddir}/src/iptsd %{buildroot}%{_libexecdir}/sp11-iptsd
+install -D -m 0755 %{_vpath_builddir}/src/iptsd-check-device %{buildroot}%{_libexecdir}/sp11-iptsd-check-device
+install -D -m 0644 %{SOURCE4} %{buildroot}%{_datadir}/iptsd/surface-pro-11-0c80.conf
+install -D -m 0644 %{SOURCE5} %{buildroot}%{_datadir}/iptsd/surface-pro-11-0c83.conf
+install -D -m 0644 %{SOURCE1} %{buildroot}%{_udevrulesdir}/70-sp11-iptsd.rules
+install -D -m 0644 %{SOURCE2} %{buildroot}%{_unitdir}/sp11-iptsd@.service
+install -D -m 0755 %{SOURCE3} %{buildroot}%{_prefix}/lib/systemd/system-sleep/sp11-iptsd-restart
+install -D -m 0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE.iptsd
+
+%post
+%systemd_post sp11-iptsd@.service
+/usr/bin/udevadm control --reload-rules >/dev/null 2>&1 || :
+for hidraw in /sys/class/hidraw/hidraw*; do
+  [ -e "$hidraw" ] || continue
+  case "$(/usr/bin/readlink -f "$hidraw/device" 2>/dev/null || :)" in
+    */001C:045E:0C80.*|*/001C:045E:0C83.*)
+      /usr/bin/udevadm trigger --action=add --subsystem-match=hidraw --sysname-match="${hidraw##*/}" >/dev/null 2>&1 || : ;;
+  esac
+done
+
+%preun
+%systemd_preun sp11-iptsd@.service
+
+%postun
+%systemd_postun_with_restart sp11-iptsd@.service
+/usr/bin/udevadm control --reload-rules >/dev/null 2>&1 || :
+
+%files
+%license %{_licensedir}/%{name}
+%{_libexecdir}/sp11-iptsd
+%{_libexecdir}/sp11-iptsd-check-device
+%{_datadir}/iptsd/surface-pro-11-0c80.conf
+%{_datadir}/iptsd/surface-pro-11-0c83.conf
+%{_unitdir}/sp11-iptsd@.service
+%{_udevrulesdir}/70-sp11-iptsd.rules
+%{_prefix}/lib/systemd/system-sleep/sp11-iptsd-restart
+
+%changelog
+* Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1.sp11
+- Build pinned upstream iptsd with ooaklee's SP11 integration for Fedora
