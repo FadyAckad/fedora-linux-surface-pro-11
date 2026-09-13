@@ -1,0 +1,55 @@
+#!/usr/bin/sh
+# grub-mkconfig helper: add a "Windows Boot Manager" entry for the Surface Pro 11 dual-boot.
+# Fedora's os-prober has no EFI Windows probe on aarch64 and Fedora's aarch64 GRUB image lacks the
+# chainloader command, so this script locates the ESP that holds bootmgfw.efi itself and loads the
+# `chain` module from /boot/grub2/arm64-efi (kept in sync by /usr/libexec/sp11/sp11-grub-modules).
+set -e
+
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+export TEXTDOMAIN=grub
+export TEXTDOMAINDIR="${datarootdir}/locale"
+. "$pkgdatadir/grub-mkconfig_lib"
+
+[ -x /usr/libexec/sp11/sp11-grub-modules ] && /usr/libexec/sp11/sp11-grub-modules || :
+[ -f /boot/grub2/arm64-efi/chain.mod ] || exit 0
+
+esp_type="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+bootmgr="EFI/Microsoft/Boot/bootmgfw.efi"
+found_dev=""
+
+# blkid low-level probing works without a udev database (Anaconda chroot, first boot, plain systems);
+# lsblk's PARTTYPE column does not.
+for dev in $(blkid -c /dev/null -o device -t TYPE=vfat 2>/dev/null); do
+  ptype=$(blkid -p -s PART_ENTRY_TYPE -o value "$dev" 2>/dev/null || true)
+  [ "$ptype" = "$esp_type" ] || continue
+  mp=$(findmnt -rno TARGET "$dev" 2>/dev/null | head -n 1)
+  if [ -n "$mp" ]; then
+    if [ -f "$mp/$bootmgr" ]; then found_dev=$dev; break; fi
+  else
+    tmp=$(mktemp -d)
+    hit=""
+    if mount -o ro "$dev" "$tmp" 2>/dev/null; then
+      [ -f "$tmp/$bootmgr" ] && hit=1
+      umount "$tmp"
+    fi
+    rmdir "$tmp"
+    if [ -n "$hit" ]; then found_dev=$dev; break; fi
+  fi
+done
+[ -n "$found_dev" ] || exit 0
+
+uuid=$(blkid -c /dev/null -s UUID -o value "$found_dev")
+[ -n "$uuid" ] || exit 0
+gettext_printf "Adding boot menu entry for Windows Boot Manager on %s ...\n" "$found_dev" >&2
+
+cat << EOF2
+menuentry 'Windows Boot Manager (on $found_dev)' --class windows --class os \$menuentry_id_option 'sp11-windows-$uuid' {
+	insmod part_gpt
+	insmod fat
+	insmod chain
+	search --no-floppy --fs-uuid --set=root $uuid
+	chainloader /$bootmgr
+}
+EOF2

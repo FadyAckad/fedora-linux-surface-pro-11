@@ -76,6 +76,8 @@ chmod 0600 "$STAGE/etc/sp11/bluetooth-address"
 
 ## 5. Boot policy: kernel-install plugin, first-boot finalizer, dracut policy, UCM apply helper
 install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
+install -m 0755 "$FILES_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
+install -D -m 0755 "$FILES_DIR/29_sp11_windows" "$STAGE/etc/grub.d/29_sp11_windows"
 install -m 0755 "$FILES_DIR/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-first-boot"
 install -D -m 0644 "$FILES_DIR/sp11-first-boot.service" "$STAGE/usr/lib/systemd/system/sp11-first-boot.service"
 install -d "$STAGE/usr/lib/systemd/system/multi-user.target.wants"
@@ -94,11 +96,12 @@ SP11_GRUB_GFXMODE="$GRUB_GFXMODE_VALUE"
 SP11_GRUB_TIMEOUT="$GRUB_TIMEOUT_VALUE"
 SP11_SKU="$SP11_SKU"
 ENV
-bash -n "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" "$STAGE/usr/libexec/sp11/sp11-first-boot" || die "shell syntax error in payload scripts"
+bash -n "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" "$STAGE/usr/libexec/sp11/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-grub-modules" || die "shell syntax error in payload scripts"
+sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"
 
 ## 6. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
-  STAGE="$STAGE" VERSION="1.1" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
+  STAGE="$STAGE" VERSION="1.3" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"

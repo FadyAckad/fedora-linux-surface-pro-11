@@ -1,0 +1,23 @@
+#!/usr/bin/bash
+# Make GRUB modules that Fedora's aarch64 GRUB image lacks loadable at boot.
+# Fedora builds `chain` (the chainloader command) only into x86 images, but ships the version-matched
+# module in grub2-efi-aa64-modules. GRUB resolves `insmod NAME` as $prefix/arm64-efi/NAME.mod and
+# $prefix is /boot/grub2 on installed Fedora, so copy the module and its dependencies there.
+# Module loading is refused only while Secure Boot is enabled, which the unsigned kernel already rules out.
+set -eu
+src=/usr/lib/grub/arm64-efi
+dst=/boot/grub2/arm64-efi
+[ -f "$src/chain.mod" ] || exit 0
+[ -d /boot/grub2 ] || exit 0
+
+deps_of() {  # recursive dependency closure from moddep.lst
+  local name=$1 dep
+  printf '%s\n' "$name"
+  for dep in $(sed -n "s/^$name: *//p" "$src/moddep.lst"); do deps_of "$dep"; done
+}
+install -d -m 0755 "$dst"
+for mod in $(deps_of chain | sort -u); do
+  [ -f "$src/$mod.mod" ] || continue
+  cmp -s "$src/$mod.mod" "$dst/$mod.mod" || install -m 0644 "$src/$mod.mod" "$dst/$mod.mod"
+done
+command -v restorecon >/dev/null 2>&1 && restorecon -R "$dst" >/dev/null 2>&1 || :

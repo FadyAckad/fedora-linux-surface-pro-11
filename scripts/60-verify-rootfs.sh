@@ -24,6 +24,8 @@ check r test -x "$ROOTFS/usr/libexec/sp11-iptsd"
 check r test -x "$ROOTFS/usr/libexec/sp11/sp11-bt-set-addr"
 check r grep -q "SP11_BT_MAC=\"$SP11_BT_MAC\"" "$ROOTFS/etc/sp11/bluetooth-address"
 check r test -x "$ROOTFS/usr/lib/kernel/install.d/15-sp11-surface.install"
+check r test -x "$ROOTFS/etc/grub.d/29_sp11_windows"
+check r test -f "$ROOTFS/usr/lib/grub/arm64-efi/chain.mod"
 check r grep -q "^kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
@@ -35,7 +37,7 @@ log "--- kernel-install hand-off simulation (chroot, Anaconda-like inputs)"
 T="$WORK_DIR/iso/handoff-test"; r rm -rf "$T"; mkdir -p "$T"
 # Work on a throwaway overlay of the real root so the live root stays untouched.
 r mkdir -p "$T/upper" "$T/work" "$T/merged"
-cleanup() { r umount -R "$T/merged/dev" "$T/merged/proc" "$T/merged/sys" 2>/dev/null || true; r umount "$T/merged" 2>/dev/null || true; }
+cleanup() { [ -n "${LOOP:-}" ] && { r umount "$T/esp" 2>/dev/null || true; r losetup -d "$LOOP" 2>/dev/null || true; }; r umount -R "$T/merged/dev" "$T/merged/proc" "$T/merged/sys" 2>/dev/null || true; r umount "$T/merged" 2>/dev/null || true; }
 trap cleanup EXIT
 r mount -t overlay overlay -o "lowerdir=$ROOTFS,upperdir=$T/upper,workdir=$T/work" "$T/merged" || die "overlay mount failed"
 M="$T/merged"
@@ -68,5 +70,26 @@ check r grep -q '^GRUB_DEVICETREE="qcom/x1e80100-microsoft-denali-oled.dtb"' "$M
 check r grep -q '^GRUB_TERMINAL_OUTPUT="gfxterm"' "$M/etc/default/grub"
 check r grep -q "^GRUB_GFXMODE=$GRUB_GFXMODE_VALUE" "$M/etc/default/grub"
 check r test ! -e "$M/etc/modprobe.d/anaconda-denylist.conf"
+
+log "--- Windows chainload generator (fake Windows ESP on a loop device, run in the chroot)"
+IMG="$T/fake-esp.img"; LOOP=""
+cleanup_loop() { [ -n "$LOOP" ] && { r umount "$T/esp" 2>/dev/null || true; r losetup -d "$LOOP" 2>/dev/null || true; }; }
+truncate -s 64M "$IMG"
+printf 'label: gpt\ntype=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name=FAKE-WIN-ESP\n' | r sfdisk -q "$IMG" >/dev/null
+LOOP=$(r losetup -fP --show "$IMG") && log "loop device: $LOOP"
+r mkfs.vfat -F 32 -n WINESP "${LOOP}p1" >/dev/null
+mkdir -p "$T/esp"; r mount "${LOOP}p1" "$T/esp"
+r mkdir -p "$T/esp/EFI/Microsoft/Boot"; r touch "$T/esp/EFI/Microsoft/Boot/bootmgfw.efi"; r umount "$T/esp"
+ESP_UUID=$(r blkid -s UUID -o value "${LOOP}p1")
+r mkdir -p "$M/boot/grub2"
+GEN_OUT=$(r chroot "$M" /usr/bin/env pkgdatadir=/usr/share/grub /etc/grub.d/29_sp11_windows 2>"$T/generator.err") || warn "generator exited non-zero: $(cat "$T/generator.err")"
+printf '%s\n' "$GEN_OUT" | sed 's/^/    /'
+check grep -q "search --no-floppy --fs-uuid --set=root $ESP_UUID" <<<"$GEN_OUT"
+check grep -q "chainloader /EFI/Microsoft/Boot/bootmgfw.efi" <<<"$GEN_OUT"
+check grep -q "^menuentry 'Windows Boot Manager (on ${LOOP}p1)'" <<<"$GEN_OUT"
+check r test -f "$M/boot/grub2/arm64-efi/chain.mod"
+check r cmp -s "$M/usr/lib/grub/arm64-efi/chain.mod" "$M/boot/grub2/arm64-efi/chain.mod"
+check r test -z "$(r findmnt -rno TARGET "${LOOP}p1")"
+cleanup_loop
 cleanup; trap - EXIT
 [ "$fail" = 0 ] && log "all checks passed" || die "some checks failed"

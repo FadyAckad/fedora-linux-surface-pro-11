@@ -19,6 +19,9 @@ Requires:       dracut
 Requires:       systemd
 Requires:       systemd-udev
 Requires:       grub2-tools-minimal
+Requires:       grub2-tools
+Requires:       grub2-efi-aa64-modules
+Requires:       util-linux
 Requires:       kmod
 
 %description
@@ -27,7 +30,8 @@ Qualcomm ADSP/CDSP/GPU firmware extracted from this device's Windows installatio
 ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, WCN7850 Wi-Fi board
 data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, sysctl policy
-(unprivileged user namespaces for Flatpak) and the first-boot finalizer. The firmware is proprietary and must not be redistributed.
+(unprivileged user namespaces for Flatpak), a GRUB menu entry that chainloads the
+Windows Boot Manager, and the first-boot finalizer. The firmware is proprietary and must not be redistributed.
 
 %prep
 %build
@@ -41,8 +45,18 @@ cp -a %{stage}/. %{buildroot}/
 /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
 /usr/libexec/sp11/sp11-ucm-apply || :
 
+%posttrans
+# Regenerate the GRUB menu on an installed system so the Windows entry appears without a reboot.
+if [ -f /boot/grub2/grub.cfg ] && ! grep -qw rd.live.image /proc/cmdline 2>/dev/null; then
+  /usr/libexec/sp11/sp11-grub-modules || :
+  /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 || :
+fi
+
 %triggerin -- alsa-ucm
 /usr/libexec/sp11/sp11-ucm-apply || :
+
+%triggerin -- grub2-efi-aa64-modules
+/usr/libexec/sp11/sp11-grub-modules || :
 
 %files
 %defattr(-,root,root,-)
@@ -58,6 +72,7 @@ cp -a %{stage}/. %{buildroot}/
 /usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service
 /usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules
 /usr/lib/kernel/install.d/15-sp11-surface.install
+/etc/grub.d/29_sp11_windows
 /usr/lib/dracut/dracut.conf.d/90-sp11.conf
 /usr/lib/sysctl.d/90-sp11.conf
 %dir /etc/sp11

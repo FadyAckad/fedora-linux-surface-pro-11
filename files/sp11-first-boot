@@ -26,6 +26,7 @@ grub_set GRUB_GFXMODE "$SP11_GRUB_GFXMODE"
 grub_set GRUB_TERMINAL_OUTPUT "\"gfxterm\""
 grub_set GRUB_TIMEOUT "$SP11_GRUB_TIMEOUT"
 grub_set GRUB_TIMEOUT_STYLE "menu"
+/usr/libexec/sp11/sp11-grub-modules || :
 if command -v grub2-mkconfig >/dev/null 2>&1; then
   cfg=$(readlink -f /etc/grub2-efi.cfg 2>/dev/null || echo /boot/grub2/grub.cfg)
   grub2-mkconfig -o "$cfg" >/dev/null 2>&1 || :

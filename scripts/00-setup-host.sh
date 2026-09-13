@@ -19,7 +19,7 @@ PKGS=(
   gcc-c++ cmake meson ninja-build pkgconf-pkg-config cli11-devel eigen3-devel fmt-devel spdlog-devel
   inih-devel guidelines-support-library-devel systemd-rpm-macros
   # ISO remaster
-  xorriso erofs-utils erofs-fuse dracut dracut-live cpio curl git
+  xorriso erofs-utils erofs-fuse dracut dracut-live cpio curl git dosfstools
 )
 log "installing build dependencies"
 as_root dnf install -y -q "${PKGS[@]}"
