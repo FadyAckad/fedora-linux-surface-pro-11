@@ -1,0 +1,41 @@
+#!/usr/bin/bash
+# One-shot finalizer for the installed system (never runs on live media).
+# Removes the live-only ADSP blacklist, applies the installed kernel arguments and GRUB policy,
+# regenerates the initramfs, and starts the audio DSP immediately.
+set -eu
+. /etc/sp11/sp11.env
+state=/var/lib/sp11/first-boot.done
+[ -e "$state" ] && exit 0
+grep -qw rd.live.image /proc/cmdline && exit 0
+
+rm -f /etc/modprobe.d/anaconda-denylist.conf
+modprobe qcom_q6v5_pas 2>/dev/null || :
+
+if command -v grubby >/dev/null 2>&1; then
+  grubby --update-kernel=ALL --remove-args="$SP11_ARGS_LIVE_ONLY" || :
+  grubby --update-kernel=ALL --args="$SP11_ARGS_INSTALLED" || :
+fi
+
+grub_set() {
+  local key=$1 value=$2 file=/etc/default/grub
+  [ -f "$file" ] || : > "$file"
+  if grep -q "^${key}=" "$file"; then sed -i "s|^${key}=.*|${key}=${value}|" "$file"; else printf '%s=%s\n' "$key" "$value" >> "$file"; fi
+}
+grub_set GRUB_DEVICETREE "\"$SP11_DTB\""
+grub_set GRUB_GFXMODE "$SP11_GRUB_GFXMODE"
+grub_set GRUB_TERMINAL_OUTPUT "\"gfxterm\""
+grub_set GRUB_TIMEOUT "$SP11_GRUB_TIMEOUT"
+grub_set GRUB_TIMEOUT_STYLE "menu"
+if command -v grub2-mkconfig >/dev/null 2>&1; then
+  cfg=$(readlink -f /etc/grub2-efi.cfg 2>/dev/null || echo /boot/grub2/grub.cfg)
+  grub2-mkconfig -o "$cfg" >/dev/null 2>&1 || :
+fi
+
+# Rebuild the running kernel's initramfs: drops the live denylist copy, adds the Denali DSP firmware.
+kver=$(uname -r)
+if [ -f "/boot/initramfs-$kver.img" ]; then
+  dracut -f "/boot/initramfs-$kver.img" "$kver" >/dev/null 2>&1 || :
+fi
+
+install -d /var/lib/sp11
+date -u +%FT%TZ > "$state"

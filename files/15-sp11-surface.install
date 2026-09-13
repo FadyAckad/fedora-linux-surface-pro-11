@@ -1,0 +1,49 @@
+#!/usr/bin/bash
+# kernel-install plugin (runs before Fedora's 20-grub.install and systemd's 90-loaderentry.install).
+# Enforces the Surface Pro 11 boot policy every time a kernel is added, including during Anaconda's
+# installation to internal storage, which rewrites /etc/default/grub:
+#   - GRUB_DEVICETREE: the BLS entry gets "devicetree /dtb-<version>/<Denali OLED dtb>"
+#   - low GRUB resolution via gfxterm
+#   - installed-system kernel arguments; live-only ADSP blacklist removed
+set -eu
+[ "${1:-}" = add ] || exit 0
+[ -n "${KERNEL_INSTALL_MACHINE_ID:-}" ] || exit 0
+[ -f /etc/sp11/sp11.env ] || exit 0
+. /etc/sp11/sp11.env
+
+grub_set() {
+  local key=$1 value=$2 file=/etc/default/grub
+  [ -f "$file" ] || : > "$file"
+  if grep -q "^${key}=" "$file"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
+grub_set GRUB_DEVICETREE "\"$SP11_DTB\""
+grub_set GRUB_GFXMODE "$SP11_GRUB_GFXMODE"
+grub_set GRUB_TERMINAL_OUTPUT "\"gfxterm\""
+grub_set GRUB_TIMEOUT "$SP11_GRUB_TIMEOUT"
+grub_set GRUB_TIMEOUT_STYLE "menu"
+
+# systemd's 90-loaderentry.install reads the DTB name from here.
+install -d /etc/kernel
+printf '%s\n' "$SP11_DTB" > /etc/kernel/devicetree
+
+# 20-grub.install builds BLS "options" from /etc/kernel/cmdline when it exists.
+if [ -f /etc/kernel/cmdline ]; then
+  new=""
+  for a in $(tr '\n' ' ' < /etc/kernel/cmdline); do
+    case " $SP11_ARGS_LIVE_ONLY " in *" $a "*) continue ;; esac
+    case "$a" in root=live:*|rd.live.*|rd.live.image|initrd=*|BOOT_IMAGE=*) continue ;; esac
+    new="$new $a"
+  done
+  for a in $SP11_ARGS_INSTALLED; do
+    case " $new " in *" $a "*) ;; *) new="$new $a" ;; esac
+  done
+  printf '%s\n' "${new# }" > /etc/kernel/cmdline
+fi
+
+# Anaconda persists modprobe.blacklist=<module> from the live command line; the ADSP must run on NVMe.
+rm -f /etc/modprobe.d/anaconda-denylist.conf
+exit 0

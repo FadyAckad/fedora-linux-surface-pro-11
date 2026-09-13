@@ -1,0 +1,68 @@
+%global stage @STAGE@
+%global debug_package %{nil}
+%global __os_install_post %{nil}
+%global __strip /bin/true
+%global _build_id_links none
+%undefine _missing_build_ids_terminate_build
+
+Name:           sp11-surface-support
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Surface Pro 11 device support: firmware, audio, Bluetooth, boot policy
+License:        GPL-2.0-or-later AND LicenseRef-Proprietary-Firmware
+ExclusiveArch:  aarch64
+AutoReqProv:    no
+
+Requires:       bluez
+Requires:       alsa-ucm
+Requires:       dracut
+Requires:       systemd
+Requires:       systemd-udev
+Requires:       grub2-tools-minimal
+Requires:       kmod
+
+%description
+Device-bound support for Microsoft Surface Pro 11 (X1E80100, OLED, SKU @SKU@):
+Qualcomm ADSP/CDSP/GPU firmware extracted from this device's Windows installation,
+ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, WCN7850 Wi-Fi board
+data, Bluetooth public-address service, kernel-install boot policy plugin
+(Denali DTB, GRUB resolution, kernel arguments), dracut policy and the
+first-boot finalizer. The firmware is proprietary and must not be redistributed.
+
+%prep
+%build
+
+%install
+cp -a %{stage}/. %{buildroot}/
+
+%post
+/usr/bin/udevadm control --reload >/dev/null 2>&1 || :
+/usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+/usr/libexec/sp11/sp11-ucm-apply || :
+
+%triggerin -- alsa-ucm
+/usr/libexec/sp11/sp11-ucm-apply || :
+
+%files
+%defattr(-,root,root,-)
+/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/
+/usr/lib/firmware/qcom/x1e80100/X1E80100-Microsoft-Surface-Pro-11-tplg.bin
+/usr/lib/firmware/ath12k/WCN7850/hw2.0/board.bin
+/usr/share/alsa/ucm2/Qualcomm/x1e80100/MICROSOFT-Surface-Pro-11in.conf
+/usr/share/alsa/ucm2/Qualcomm/x1e80100/SP11-HiFi.conf
+/usr/share/sp11/
+/usr/libexec/sp11/
+/usr/lib/systemd/system/sp11-bluetooth-address@.service
+/usr/lib/systemd/system/sp11-first-boot.service
+/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service
+/usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules
+/usr/lib/kernel/install.d/15-sp11-surface.install
+/usr/lib/dracut/dracut.conf.d/90-sp11.conf
+%dir /etc/sp11
+%config(noreplace) /etc/sp11/bluetooth-address
+/etc/sp11/sp11.env
+/etc/kernel/devicetree
+
+%changelog
+* Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- Surface Pro 11 support payload

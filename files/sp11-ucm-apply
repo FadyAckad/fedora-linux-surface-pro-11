@@ -1,0 +1,13 @@
+#!/usr/bin/bash
+# Install the Surface Pro 11 ALSA UCM device matcher over alsa-ucm's x1e80100 selector.
+# alsa-ucm ships that path as a symlink; a plain replacement is what upstream integrations do.
+# Re-run automatically by the RPM trigger whenever alsa-ucm is updated.
+set -eu
+src=/usr/share/sp11/ucm/x1e80100.conf
+dst=/usr/share/alsa/ucm2/conf.d/x1e80100/x1e80100.conf
+[ -s "$src" ] || exit 0
+install -d "$(dirname "$dst")"
+if [ -L "$dst" ] || ! cmp -s "$src" "$dst"; then
+  rm -f "$dst"
+  install -m 0644 "$src" "$dst"
+fi

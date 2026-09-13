@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+# Set the controller's public Bluetooth address from /etc/sp11/bluetooth-address (raw HCI mgmt, no btmgmt).
+set -eu
+hci=${1:-hci0}
+idx=${hci#hci}
+mac=$(sed -n 's/^SP11_BT_MAC=//p' /etc/sp11/bluetooth-address | tr -d '"' | head -1)
+case "$mac" in
+  [0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]:[0-9A-F][0-9A-F]) ;;
+  *) echo "sp11-bt-apply: invalid or missing SP11_BT_MAC in /etc/sp11/bluetooth-address" >&2; exit 1 ;;
+esac
+exec /usr/libexec/sp11/sp11-bt-set-addr "$idx" "$mac"

@@ -1,0 +1,2 @@
+# Surface Pro 11 (WCN7850): the controller enumerates without a valid public address.
+ACTION=="add", SUBSYSTEM=="bluetooth", ENV{DEVTYPE}=="host", KERNEL=="hci[0-9]*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="sp11-bluetooth-address@%k.service"

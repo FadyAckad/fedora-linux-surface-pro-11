@@ -1,0 +1,103 @@
+#!/usr/bin/bash
+# Step 4: build the sp11-surface-support RPM: device firmware from this machine's Windows installation,
+# ooaklee FullIO v19c audio files, Wi-Fi board data, Bluetooth address service, kernel-install boot
+# policy plugin, dracut policy and the first-boot finalizer.
+. "$(dirname "$0")/lib.sh"
+require_cmd gcc python3 xz rpm2cpio cpio rpmbuild
+load_hardware
+
+if [ -n "$(rpm_of sp11-surface-support)" ] && [ "${FORCE:-0}" != 1 ]; then
+  log "support RPM already built: $(rpm_of sp11-surface-support) (FORCE=1 to rebuild)"; exit 0
+fi
+
+SDIR="$BUILD_DIR/support"; STAGE="$SDIR/stage"
+rm -rf "$STAGE"; mkdir -p "$STAGE"
+
+## 1. Qualcomm platform firmware from the Windows DriverStore (device-bound; newest copy of each file wins,
+##    the same rule Fedora's qcom-firmware-extract uses).
+FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
+[ -d "$FR" ] || die "Windows DriverStore not found at $FR (is Windows mounted at $WINDOWS_ROOT?)"
+FWD="$STAGE/usr/lib/firmware/qcom/x1e80100/microsoft/Denali"; install -d "$FWD"
+pick_fw() { find "$FR" -maxdepth 2 -type f -iname "$1" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-; }
+REQUIRED_FW="qcadsp8380.mbn adsp_dtbs.elf qccdsp8380.mbn cdsp_dtbs.elf qcdxkmsuc8380.mbn"
+OPTIONAL_FW="adspr.jsn adsps.jsn adspua.jsn battmgr.jsn cdspr.jsn qcdxkmsucpurwa.mbn qcvss8380.mbn"
+for f in $REQUIRED_FW $OPTIONAL_FW; do
+  src=$(pick_fw "$f")
+  if [ -z "$src" ]; then
+    case " $REQUIRED_FW " in *" $f "*) die "required firmware $f not found in $FR" ;; esac
+    warn "optional firmware $f not found"; continue
+  fi
+  install -m 0644 "$src" "$FWD/$f"
+  log "firmware $f <- ${src#"$FR"/}"
+done
+# The Denali device tree names the DSP DTB blobs *_dtb.mbn (upstream T14s naming is *_dtbs.elf). Ship both.
+install -m 0644 "$FWD/adsp_dtbs.elf" "$FWD/adsp_dtb.mbn"
+install -m 0644 "$FWD/cdsp_dtbs.elf" "$FWD/cdsp_dtb.mbn"
+for f in qcadsp8380.mbn qccdsp8380.mbn qcdxkmsuc8380.mbn; do
+  file "$FWD/$f" | grep ELF >/dev/null || die "$f does not look like a signed ELF (MBN) image"
+done
+
+## 2. Audio: FullIO v19c topology + UCM (regex corrected for the 5G SKU and validated against this machine)
+AUDIO_DIR="$CACHE_DIR/$AUDIO_RELEASE_TAG"
+( cd "$AUDIO_DIR" && sha256sum -c --quiet SHA256SUMS ) || die "audio release checksum failure"
+install -D -m 0644 "$AUDIO_DIR/X1E80100-Microsoft-Surface-Pro-11-tplg.bin" "$STAGE/usr/lib/firmware/qcom/x1e80100/X1E80100-Microsoft-Surface-Pro-11-tplg.bin"
+install -D -m 0644 "$AUDIO_DIR/MICROSOFT-Surface-Pro-11in.conf" "$STAGE/usr/share/alsa/ucm2/Qualcomm/x1e80100/MICROSOFT-Surface-Pro-11in.conf"
+install -D -m 0644 "$AUDIO_DIR/SP11-HiFi.conf" "$STAGE/usr/share/alsa/ucm2/Qualcomm/x1e80100/SP11-HiFi.conf"
+UCM_OUT="$STAGE/usr/share/sp11/ucm/x1e80100.conf"; install -d "$(dirname "$UCM_OUT")"
+grep -q 'Regex "Microsoft Corporation.\*Surface.\*Microsoft Surface Pro, 11th Edition"' "$AUDIO_DIR/x1e80100.conf" \
+  || die "unexpected SP11 matcher in $AUDIO_DIR/x1e80100.conf; review UCM_SP11_REGEX handling"
+sed "s|Regex \"Microsoft Corporation\.\*Surface\.\*Microsoft Surface Pro, 11th Edition\"|Regex \"$UCM_SP11_REGEX\"|" \
+  "$AUDIO_DIR/x1e80100.conf" > "$UCM_OUT"
+grep -qF "Regex \"$UCM_SP11_REGEX\"" "$UCM_OUT" || die "UCM regex substitution failed"
+printf '%s\n' "$SP11_UCM_DMI_INFO" | grep -Eq "$UCM_SP11_REGEX" || die "UCM regex does not match this device: $SP11_UCM_DMI_INFO"
+log "UCM matcher validated against '$SP11_UCM_DMI_INFO'"
+
+## 3. Wi-Fi: WCN7850 board.bin fallback extracted from linux-firmware's board-2.bin
+WIFI_TMP="$SDIR/wifi"; rm -rf "$WIFI_TMP"; mkdir -p "$WIFI_TMP/x"
+RPM_AF=$(ls -t "$CACHE_DIR"/wifi/atheros-firmware-*.rpm 2>/dev/null | head -1); [ -n "$RPM_AF" ] || die "atheros-firmware RPM missing (run scripts/10-fetch-sources.sh)"
+( cd "$WIFI_TMP" && rpm2cpio "$RPM_AF" | cpio -idm --quiet './usr/lib/firmware/ath12k/WCN7850/hw2.0/board-2.bin*' ) || die "cannot extract board-2.bin"
+B2=$(find "$WIFI_TMP/usr" -name 'board-2.bin*' | head -1); [ -n "$B2" ] || die "board-2.bin not in atheros-firmware"
+case "$B2" in *.xz) xz -d "$B2"; B2=${B2%.xz} ;; *.zst) zstd -dq --rm "$B2"; B2=${B2%.zst} ;; esac
+( cd "$WIFI_TMP/x" && python3 "$CACHE_DIR/ath12k-bdencoder" --extract "$B2" >/dev/null 2>&1 ) || die "ath12k-bdencoder extraction failed"
+[ -s "$WIFI_TMP/x/$WIFI_BOARD_ENTRY.bin" ] || die "board entry '$WIFI_BOARD_ENTRY' not found in board-2.bin"
+install -D -m 0644 "$WIFI_TMP/x/$WIFI_BOARD_ENTRY.bin" "$STAGE/usr/lib/firmware/ath12k/WCN7850/hw2.0/board.bin"
+log "Wi-Fi board.bin: $WIFI_BOARD_ENTRY ($(stat -c %s "$STAGE/usr/lib/firmware/ath12k/WCN7850/hw2.0/board.bin") bytes)"
+
+## 4. Bluetooth public address (raw HCI management helper + udev-triggered service)
+verify_sha256 "$CACHE_DIR/sp11-bt-set-addr.c" "$BT_HELPER_SHA256"
+install -d "$STAGE/usr/libexec/sp11"
+gcc -O2 -Wall -Wextra -o "$STAGE/usr/libexec/sp11/sp11-bt-set-addr" "$CACHE_DIR/sp11-bt-set-addr.c" || die "sp11-bt-set-addr failed to compile"
+install -m 0755 "$FILES_DIR/sp11-bt-apply" "$STAGE/usr/libexec/sp11/sp11-bt-apply"
+install -D -m 0644 "$FILES_DIR/sp11-bluetooth-address@.service" "$STAGE/usr/lib/systemd/system/sp11-bluetooth-address@.service"
+install -D -m 0644 "$FILES_DIR/99-sp11-bluetooth-address.rules" "$STAGE/usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules"
+install -d -m 0755 "$STAGE/etc/sp11"
+printf '# Bluetooth public address of this Surface Pro 11 (from Windows)\nSP11_BT_MAC="%s"\n' "$SP11_BT_MAC" > "$STAGE/etc/sp11/bluetooth-address"
+chmod 0600 "$STAGE/etc/sp11/bluetooth-address"
+
+## 5. Boot policy: kernel-install plugin, first-boot finalizer, dracut policy, UCM apply helper
+install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
+install -m 0755 "$FILES_DIR/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-first-boot"
+install -D -m 0644 "$FILES_DIR/sp11-first-boot.service" "$STAGE/usr/lib/systemd/system/sp11-first-boot.service"
+install -d "$STAGE/usr/lib/systemd/system/multi-user.target.wants"
+ln -sf ../sp11-first-boot.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
+install -D -m 0755 "$FILES_DIR/15-sp11-surface.install" "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install"
+install -D -m 0644 "$FILES_DIR/90-sp11.conf" "$STAGE/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
+install -d "$STAGE/etc/kernel"; printf '%s\n' "$SP11_DTB" > "$STAGE/etc/kernel/devicetree"
+cat > "$STAGE/etc/sp11/sp11.env" <<ENV
+# Surface Pro 11 boot policy (generated by scripts/30-build-support-rpm.sh)
+SP11_KERNEL_ABI="$KERNEL_ABI"
+SP11_DTB="$SP11_DTB"
+SP11_ARGS_INSTALLED="$SP11_ARGS_INSTALLED"
+SP11_ARGS_LIVE_ONLY="$SP11_ARGS_LIVE_ONLY"
+SP11_GRUB_GFXMODE="$GRUB_GFXMODE_VALUE"
+SP11_GRUB_TIMEOUT="$GRUB_TIMEOUT_VALUE"
+SP11_SKU="$SP11_SKU"
+ENV
+bash -n "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" "$STAGE/usr/libexec/sp11/sp11-first-boot" || die "shell syntax error in payload scripts"
+
+## 6. RPM
+log "building sp11-surface-support RPM"
+RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
+  STAGE="$STAGE" VERSION="1.0" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
+rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
+log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"
