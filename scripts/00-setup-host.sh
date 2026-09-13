@@ -20,6 +20,8 @@ PKGS=(
   inih-devel guidelines-support-library-devel systemd-rpm-macros
   # ISO remaster
   xorriso erofs-utils erofs-fuse dracut dracut-live cpio curl git dosfstools
+  # Windows Bluetooth pairing export
+  python3-hivex hivex
 )
 log "installing build dependencies"
 as_root dnf install -y -q "${PKGS[@]}"

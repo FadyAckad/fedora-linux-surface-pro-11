@@ -67,6 +67,28 @@ sudo dnf upgrade ./sp11-surface-support-<version>.fc44.aarch64.rpm
 The package regenerates `/boot/grub2/grub.cfg` itself. Rebuild the ISO afterwards so new installs
 carry the same version.
 
+## Bluetooth pairings from Windows (Flex Keyboard, Slim Pen 2)
+
+BLE devices keep one bond per host address. The Linux controller uses the same address as Windows, so
+copying Windows' pairing keys into BlueZ makes both systems work without re-pairing. Run in WSL:
+
+```bash
+scripts/70-export-bt-pairings.sh
+```
+
+It exports the registry subtree `BTHPORT\Parameters` (one UAC prompt: the keys are readable only with
+elevation), converts every device paired in Windows into BlueZ `info` files with `scripts/bt-pairings-from-hive.py`
+(LTK, EDIV/ERand, IRK, secure-connections flag, link keys for classic devices, names and USB IDs from PnP) and
+writes `build/out/sp11-bt-pairings.tar.gz`. Copy the tarball to Fedora via USB and run:
+
+```bash
+tar -xzf sp11-bt-pairings.tar.gz && sudo ./sp11-bt-import-pairings          # or --only 11:22:33:44:55:66
+```
+
+Existing Linux pairings for the same devices are backed up under `/var/lib/sp11/`. Re-pairing a device in
+either OS invalidates the other side's bond; re-run the export afterwards. The tarball contains secrets; do
+not share it.
+
 ## What the scripts decide for you
 
 - Kernel: ooaklee `7.2.0-jg-0sp11v23` source; config exported from

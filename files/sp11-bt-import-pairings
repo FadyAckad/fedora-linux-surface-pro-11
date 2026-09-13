@@ -1,0 +1,53 @@
+#!/usr/bin/bash
+# Import Bluetooth pairings exported from Windows into BlueZ on this Fedora system.
+# Usage: sudo ./sp11-bt-import-pairings [--only AA:BB:CC:DD:EE:FF ...]
+# Expects <ADAPTER>/<DEVICE>/info directories next to this script (as produced by
+# scripts/70-export-bt-pairings.sh on the WSL side). Existing device directories are backed up.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+[ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
+only=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only) only+=("$(printf '%s' "$2" | tr 'a-f-' 'A-F:')"); shift 2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+wanted() { [ ${#only[@]} -eq 0 ] && return 0; local m; for m in "${only[@]}"; do [ "$m" = "$1" ] && return 0; done; return 1; }
+
+shopt -s nullglob
+infos=("$here"/*:*:*:*:*:*/*:*:*:*:*:*/info)
+[ ${#infos[@]} -gt 0 ] || { echo "no <ADAPTER>/<DEVICE>/info files next to $0" >&2; exit 1; }
+
+stamp=$(date +%Y%m%d-%H%M%S)
+backup=/var/lib/sp11/bluetooth-backup-$stamp
+imported=0
+# BlueZ reads info files only at startup, so stop it while replacing them (skipped without a running systemd,
+# e.g. when applying to a mounted root from live media).
+have_systemd=0
+[ -z "${SP11_NO_SYSTEMD:-}" ] && [ -d /run/systemd/system ] && systemctl is-active bluetooth.service >/dev/null 2>&1 && have_systemd=1
+if [ "$have_systemd" = 1 ]; then systemctl stop bluetooth.service; trap 'systemctl start bluetooth.service' EXIT; fi
+for info in "${infos[@]}"; do
+  dev=$(basename "$(dirname "$info")"); adapter=$(basename "$(dirname "$(dirname "$info")")")
+  wanted "$dev" || continue
+  adir="/var/lib/bluetooth/$adapter"
+  if [ ! -d "$adir" ]; then
+    echo "adapter $adapter is unknown to BlueZ here (have: $(ls /var/lib/bluetooth 2>/dev/null | tr '\n' ' '))." >&2
+    echo "The Linux controller must use the same address as Windows; check sp11-bluetooth-address@hci0.service." >&2
+    exit 1
+  fi
+  if [ -d "$adir/$dev" ]; then
+    install -d -m 0700 "$backup/$adapter"
+    cp -a "$adir/$dev" "$backup/$adapter/"
+    rm -rf "$adir/$dev"
+  fi
+  install -d -m 0700 "$adir/$dev"
+  install -m 0600 "$info" "$adir/$dev/info"
+  name=$(sed -n 's/^Name=//p' "$info" | head -1)
+  echo "imported $dev ${name:+($name) }-> $adir/$dev/info"
+  imported=$((imported + 1))
+done
+command -v restorecon >/dev/null 2>&1 && restorecon -R /var/lib/bluetooth || :
+[ "$imported" -gt 0 ] || { echo "nothing imported" >&2; exit 1; }
+[ -d "$backup" ] && echo "previous pairings backed up under $backup"
+if [ "$have_systemd" = 1 ]; then echo "restarting bluetooth; devices connect when they next advertise (press a key / touch the pen)"; else echo "bluetooth not restarted (no running systemd); reboot or restart bluetooth.service"; fi

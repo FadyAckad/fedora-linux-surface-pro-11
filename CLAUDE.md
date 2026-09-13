@@ -7,7 +7,9 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
 
 Never commit, push or create branches. Short, professional communication; no compliments. Validate
 instead of guessing. Revisit the owner's requirement list at the end of a task. `README.md` is the
-user-facing guide; keep it concise and current when behaviour changes.
+user-facing guide; keep it concise and current when behaviour changes. Do not rebuild or change the
+ISO on your own initiative: deliver improvements as support-RPM/script changes and ask the owner
+whether each one should also go into the ISO.
 
 ## Repository
 
@@ -120,6 +122,24 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
   `chain.mod` and its dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi`, re-run by an RPM
   trigger on `grub2-efi-aa64-modules`). Chainloading through GRUB changes the measured boot path; a
   BitLocker recovery prompt on the first Windows boot is possible.
+
+## Bluetooth dual-boot pairings
+
+- Windows keeps bonds in `HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys\<adapter>`:
+  LE devices as subkeys `<device>` with `LTK` (16 B), `KeyLength`, `ERand` (QWORD, little-endian → BlueZ
+  `Rand` decimal), `EDIV`, `IRK`, `AddressType` (1 = random), `AuthReq` (0x04 MITM, 0x08 Secure
+  Connections); classic devices as 16-byte values named by address. The `Keys` key is SYSTEM-only, but
+  `reg save` of the parent `Parameters` key works from an elevated prompt (backup semantics).
+- BlueZ 5.86 `info` fields: `[LongTermKey] Key/Authenticated/EncSize/EDiv/Rand` where `Authenticated` is the
+  MGMT LTK type (0 legacy, 1 legacy+MITM, 2 SC, 3 SC+MITM); `[IdentityResolvingKey] Key`; `[LinkKey]
+  Key/Type/PINLength`; `[General] AddressType=static|public`. Static random addresses need the `0xC0` bits.
+- Both Surface devices are BLE with static addresses: keyboard `11:22:33:44:55:66` (USB IDs 045E:0C7A),
+  pen `11:22:33:44:55:77` (045E:0C0F). Adapter `AA:BB:CC:DD:EE:FF` on both OSes (set by
+  `sp11-bluetooth-address@.service`), which is what makes key transfer possible.
+- `scripts/70-export-bt-pairings.sh` (WSL, one UAC prompt) → `build/out/sp11-bt-pairings.tar.gz` with
+  `files/sp11-bt-import-pairings`; converter `scripts/bt-pairings-from-hive.py` (python3-hivex). Tested with
+  a synthetic hive built from `C:\Users\Default\NTUSER.DAT` and an overlay chroot of the live root.
+  BitLocker state of `C:` is unknown (needs elevation), so nothing reads the NTFS partition from Linux.
 
 ## Hardware-verified status (owner reports, 2026-09-13)
 
