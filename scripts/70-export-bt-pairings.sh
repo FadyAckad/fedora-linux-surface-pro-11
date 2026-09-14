@@ -2,7 +2,7 @@
 # Export this machine's Windows Bluetooth pairings for the Surface Pro Flex Keyboard and Slim Pen 2
 # (selected by USB ID, BT_PAIRING_USB_IDS in sp11.conf) as BlueZ info files plus an import script, bundled for transfer to the installed Fedora.
 # Runs in WSL. Triggers ONE Windows UAC prompt: the pairing keys are readable only with elevation.
-# Idempotent: re-uses the exported hive from the same day unless FORCE=1.
+# Always exports afresh: re-pairing in Windows rewrites the keys in place, so a cached hive would be stale.
 . "$(dirname "$0")/lib.sh"
 require_cmd python3 powershell.exe tar
 python3 -c 'import hivex' 2>/dev/null || die "python3-hivex missing (run scripts/00-setup-host.sh)"
@@ -16,17 +16,13 @@ HIVE_WIN="$WINTMP_WIN\\sp11-bthport-parameters.hiv"; HIVE_WSL="$WINTMP_WSL/sp11-
 LOG_WIN="$WINTMP_WIN\\sp11-regsave.log"
 
 mkdir -p "$OUT"; rm -rf "$OUT"/*:*
-if [ ! -s "$OUT/bthport-parameters.hiv" ] || [ "${FORCE:-0}" = 1 ]; then
-  rm -f "$HIVE_WSL"
-  log "exporting HKLM\\SYSTEM\\CurrentControlSet\\Services\\BTHPORT\\Parameters (accept the UAC prompt)"
-  powershell.exe -NoProfile -Command "\$p = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-Command',\"reg save 'HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters' '$HIVE_WIN' /y *> '$LOG_WIN'\"; exit \$p.ExitCode" >/dev/null 2>&1 \
-    || die "elevation was refused or failed (UAC prompt cancelled?)"
-  [ -s "$HIVE_WSL" ] || die "reg save produced no file; log: $(tr -d '\r\0' < "$WINTMP_WSL/sp11-regsave.log" 2>/dev/null)"
-  mv -f "$HIVE_WSL" "$OUT/bthport-parameters.hiv"; rm -f "$WINTMP_WSL/sp11-regsave.log"
-  chmod 0600 "$OUT/bthport-parameters.hiv"
-else
-  log "re-using $OUT/bthport-parameters.hiv (FORCE=1 to export again)"
-fi
+rm -f "$HIVE_WSL" "$OUT/bthport-parameters.hiv"
+log "exporting HKLM\\SYSTEM\\CurrentControlSet\\Services\\BTHPORT\\Parameters (accept the UAC prompt)"
+powershell.exe -NoProfile -Command "\$p = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-Command',\"reg save 'HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters' '$HIVE_WIN' /y *> '$LOG_WIN'\"; exit \$p.ExitCode" >/dev/null 2>&1 \
+  || die "elevation was refused or failed (UAC prompt cancelled?)"
+[ -s "$HIVE_WSL" ] || die "reg save produced no file; log: $(tr -d '\r\0' < "$WINTMP_WSL/sp11-regsave.log" 2>/dev/null)"
+mv -f "$HIVE_WSL" "$OUT/bthport-parameters.hiv"; rm -f "$WINTMP_WSL/sp11-regsave.log"
+chmod 0600 "$OUT/bthport-parameters.hiv"
 
 log "collecting device names and USB IDs from Windows PnP (no elevation)"
 powershell.exe -NoProfile -Command "Get-PnpDevice | Where-Object { \$_.InstanceId -match '^BTH(LE|ENUM)\\\\DEV_' } | Select-Object FriendlyName,InstanceId,HardwareIds | ConvertTo-Json -Depth 3" \

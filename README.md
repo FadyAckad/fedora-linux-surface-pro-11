@@ -80,10 +80,10 @@ copying Windows' pairing keys into BlueZ makes both systems work without re-pair
 scripts/70-export-bt-pairings.sh
 ```
 
-It exports the registry subtree `BTHPORT\Parameters` (one UAC prompt: the keys are readable only with
-elevation), converts the Flex Keyboard and Slim Pen 2 bonds (selected by USB ID, `BT_PAIRING_USB_IDS`
-in `sp11.conf`) into BlueZ `info` files and writes `build/out/sp11-bt-pairings.tar.gz`. Copy the
-tarball to Fedora via USB and run:
+Every run exports the registry subtree `BTHPORT\Parameters` afresh (one UAC prompt: the keys are
+readable only with elevation), converts the Flex Keyboard and Slim Pen 2 bonds (selected by USB ID,
+`BT_PAIRING_USB_IDS` in `sp11.conf`) into BlueZ `info` files and writes
+`build/out/sp11-bt-pairings.tar.gz`. Copy the tarball to Fedora via USB and run:
 
 ```bash
 tar -xzf sp11-bt-pairings.tar.gz && sudo /usr/libexec/sp11/sp11-bt-import-pairings
