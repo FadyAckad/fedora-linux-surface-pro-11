@@ -69,7 +69,7 @@ sudo dnf upgrade ./sp11-surface-support-<version>.fc44.aarch64.rpm
 ```
 
 The package regenerates `/boot/grub2/grub.cfg` itself. Rebuild the ISO afterwards so new installs
-carry the same version.
+carry the same version. Upgrading `sp11-iptsd` restarts the running pen daemon.
 
 ## Bluetooth pairings from Windows (Flex Keyboard, Slim Pen 2)
 

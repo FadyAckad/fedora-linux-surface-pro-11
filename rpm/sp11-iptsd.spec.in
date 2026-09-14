@@ -4,7 +4,7 @@
 
 Name:           sp11-iptsd
 Version:        @VERSION@
-Release:        1.sp11%{?dist}
+Release:        @RPMREL@%{?dist}
 Summary:        Surface Pro 11 stylus daemon (upstream iptsd on the kernel HIDRAW bridge)
 License:        GPL-2.0-or-later AND MIT
 URL:            https://github.com/linux-surface/iptsd
@@ -72,9 +72,16 @@ done
 
 %preun
 %systemd_preun sp11-iptsd@.service
+if [ $1 -eq 0 ]; then
+  /usr/bin/systemctl stop 'sp11-iptsd@*.service' >/dev/null 2>&1 || :
+fi
 
 %postun
-%systemd_postun_with_restart sp11-iptsd@.service
+# Restart the running instances so the upgraded binary takes effect without a re-plug; systemctl needs the
+# instance glob, not the bare template name.
+if [ $1 -ge 1 ]; then
+  /usr/bin/systemctl try-restart 'sp11-iptsd@*.service' >/dev/null 2>&1 || :
+fi
 /usr/bin/udevadm control --reload-rules >/dev/null 2>&1 || :
 
 %files
@@ -88,5 +95,8 @@ done
 %{_prefix}/lib/systemd/system-sleep/sp11-iptsd-restart
 
 %changelog
+* Mon Sep 14 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+- Restart the running sp11-iptsd@ instances on upgrade, stop them on erase
+
 * Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1.sp11
 - Build pinned upstream iptsd with ooaklee's SP11 integration for Fedora

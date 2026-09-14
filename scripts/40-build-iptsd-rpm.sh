@@ -24,6 +24,6 @@ done
 grep -q 'KERNELS=="001C:045E:0C83' "$SRC/70-sp11-iptsd.rules" || die "udev rule does not match the OLED digitizer 045E:0C83"
 bash -n "$SRC/sp11-iptsd-restart" || die "rendered sleep hook has a syntax error"
 log "building sp11-iptsd RPM (meson, system libraries)"
-RPM=$(build_rpm "$SPEC_DIR/sp11-iptsd.spec.in" sp11-iptsd "$SRC" COMMIT="$IPTSD_COMMIT" VERSION="$IPTSD_VERSION")
+RPM=$(build_rpm "$SPEC_DIR/sp11-iptsd.spec.in" sp11-iptsd "$SRC" COMMIT="$IPTSD_COMMIT" VERSION="$IPTSD_VERSION" RPMREL="$IPTSD_RPM_RELEASE")
 rpm -qpl "$RPM" | grep -x /usr/libexec/sp11-iptsd >/dev/null || die "RPM lacks /usr/libexec/sp11-iptsd"
 log "iptsd RPM: $RPM ($(du -h "$RPM" | cut -f1))"
