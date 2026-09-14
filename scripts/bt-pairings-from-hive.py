@@ -7,14 +7,13 @@ Input: a registry hive exported with `reg save` of either
   a full SYSTEM hive (ControlSet00N resolved through Select\\Current).
 Optional: a JSON list of Windows PnP devices for names and USB vendor/product IDs.
 
-Windows stores, per adapter (subkey named by the adapter address without separators):
-  <device-address> = REG_BINARY 16 bytes            classic BR/EDR link key
-  <device-address>\\LTK, KeyLength, ERand, EDIV, IRK, AddressType, AuthReq   LE bond
+Windows stores LE bonds per adapter (subkey named by the adapter address without separators) as
+  <device-address>\\LTK, KeyLength, ERand, EDIV, IRK, AddressType, AuthReq
 BlueZ 5.x expects (doc/settings-storage.txt):
   [LongTermKey] Key (hex), Authenticated (MGMT key type: 0 legacy, 1 legacy+MITM, 2 SC, 3 SC+MITM),
                 EncSize, EDiv (decimal), Rand (decimal uint64)
   [IdentityResolvingKey] Key (hex)
-  [LinkKey] Key (hex), Type, PINLength
+Only Bluetooth LE devices are handled (the Surface Pro Flex Keyboard and Slim Pen 2 are LE).
 """
 import argparse
 import json
@@ -84,48 +83,38 @@ def address_type(win_type, mac):
     return "static" if (first & 0xC0) == 0xC0 else "public"
 
 
-def device_info(h, node, link_key, mac, meta):
-    """Build one BlueZ info file from an optional LE bond subkey and an optional classic link key."""
-    ltk = value(h, node, "LTK") if node is not None else None
-    if ltk is None and (link_key is None or len(link_key[1]) != 16):
+def device_info(h, node, mac, meta):
+    """Build one BlueZ info file from a Windows LE bond subkey."""
+    ltk = value(h, node, "LTK")
+    if ltk is None:
         return None
-    techs, desc = [], []
+    win_type = as_int(value(h, node, "AddressType"))
+    authreq = as_int(value(h, node, "AuthReq")) or 0
+    ediv = as_int(value(h, node, "EDIV")) or 0
+    rand = as_int(value(h, node, "ERand")) or 0
+    enc = as_int(value(h, node, "KeyLength")) or 16
+    irk = value(h, node, "IRK")
+    # Windows stores the *requested* AuthReq, so its SC bit does not prove the negotiated method.
+    # Secure Connections always yields EDIV = Rand = 0; legacy pairing never does.
+    sc = ediv == 0 and rand == 0
+    mitm = bool(authreq & AUTHREQ_MITM)
+    key_type = (2 if sc else 0) + (1 if mitm else 0)  # BlueZ Authenticated = MGMT LTK type
     lines = ["[General]"]
     if meta.get("name"):
         lines.append("Name=%s" % meta["name"])
-    if ltk is not None:
-        win_type = as_int(value(h, node, "AddressType"))
-        lines.append("AddressType=%s" % address_type(win_type, mac))
-        techs.append("LE")
-    if link_key is not None:
-        techs.append("BR/EDR")
-    lines += ["SupportedTechnologies=%s;" % ";".join(sorted(techs)), "Trusted=true", "Blocked=false", ""]
+    lines += ["AddressType=%s" % address_type(win_type, mac), "SupportedTechnologies=LE;",
+              "Trusted=true", "Blocked=false", ""]
     if meta.get("vid") is not None:
         lines += ["[DeviceID]", "Source=2", "Vendor=%d" % meta["vid"],
                   "Product=%d" % meta["pid"], "Version=%d" % meta.get("rev", 0), ""]
-    if link_key is not None:
-        # Windows does not record the HCI key type; 4 = unauthenticated combination key (P-192).
-        lines += ["[LinkKey]", "Key=%s" % as_hex(link_key), "Type=4", "PINLength=0", ""]
-        desc.append("BR/EDR link key")
-    if ltk is not None:
-        authreq = as_int(value(h, node, "AuthReq")) or 0
-        ediv = as_int(value(h, node, "EDIV")) or 0
-        rand = as_int(value(h, node, "ERand")) or 0
-        enc = as_int(value(h, node, "KeyLength")) or 16
-        irk = value(h, node, "IRK")
-        # Windows stores the *requested* AuthReq, so its SC bit does not prove the negotiated method.
-        # Secure Connections always yields EDIV = Rand = 0; legacy pairing never does.
-        sc = ediv == 0 and rand == 0
-        mitm = bool(authreq & AUTHREQ_MITM)
-        key_type = (2 if sc else 0) + (1 if mitm else 0)  # BlueZ Authenticated = MGMT LTK type
-        if irk is not None and any(irk[1]):
-            lines += ["[IdentityResolvingKey]", "Key=%s" % as_hex(irk), ""]
-        lines += ["[LongTermKey]", "Key=%s" % as_hex(ltk), "Authenticated=%d" % key_type,
-                  "EncSize=%d" % enc, "EDiv=%d" % ediv, "Rand=%d" % rand, ""]
-        desc.append("LE %s, %s%s" % ("Secure Connections" if sc else "legacy pairing",
-                                     "authenticated" if mitm else "unauthenticated",
-                                     ", IRK" if irk is not None else ""))
-    return "\n".join(lines), "; ".join(desc)
+    if irk is not None and any(irk[1]):
+        lines += ["[IdentityResolvingKey]", "Key=%s" % as_hex(irk), ""]
+    lines += ["[LongTermKey]", "Key=%s" % as_hex(ltk), "Authenticated=%d" % key_type,
+              "EncSize=%d" % enc, "EDiv=%d" % ediv, "Rand=%d" % rand, ""]
+    desc = "LE %s, %s%s" % ("Secure Connections" if sc else "legacy pairing",
+                            "authenticated" if mitm else "unauthenticated",
+                            ", IRK" if irk is not None else "")
+    return "\n".join(lines), desc
 
 
 def load_meta(path):
@@ -183,15 +172,14 @@ def main():
         adapter = fmt_mac(aname)
         if args.adapter and adapter != args.adapter.upper():
             continue
-        link_keys = {h.value_key(v).lower(): h.value_value(v) for v in h.node_values(anode)
-                     if ESP_MAC.match(h.value_key(v).lower())}
-        le_nodes = {h.node_name(d).lower(): d for d in h.node_children(anode)
-                    if ESP_MAC.match(h.node_name(d).lower())}
-        for dname in sorted(set(link_keys) | set(le_nodes)):
+        for dnode in h.node_children(anode):  # LE bonds are subkeys named by device address
+            dname = h.node_name(dnode).lower()
+            if not ESP_MAC.match(dname):
+                continue
             mac = fmt_mac(dname)
             if only and mac not in only:
                 continue
-            res = device_info(h, le_nodes.get(dname), link_keys.get(dname), mac, meta.get(mac, {}))
+            res = device_info(h, dnode, mac, meta.get(mac, {}))
             if res:
                 written.append((adapter, mac, res))
     if not written:
