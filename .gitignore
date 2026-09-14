@@ -1,2 +1,8 @@
 build/
 __pycache__/
+CLAUDE.local.md
+hardware.env
+*.hiv
+sp11-bt-pairings.tar.gz
+*.iso
+*.rpm

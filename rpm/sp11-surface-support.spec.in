@@ -9,7 +9,7 @@ Name:           sp11-surface-support
 Version:        @VERSION@
 Release:        1%{?dist}
 Summary:        Surface Pro 11 device support: firmware, audio, Bluetooth, boot policy
-License:        GPL-2.0-or-later AND LicenseRef-Proprietary-Firmware
+License:        GPL-3.0-or-later AND LicenseRef-Proprietary-Firmware
 ExclusiveArch:  aarch64
 AutoReqProv:    no
 
