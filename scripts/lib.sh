@@ -111,3 +111,7 @@ build_rpm() {
 
 # Newest RPM of a package in $RPM_DIR, or empty. Never fails: callers test the result themselves.
 rpm_of() { ls -t "$RPM_DIR/$1"-[0-9]*.rpm 2>/dev/null | head -1 || true; }
+
+# mounts_under DIR — mount targets strictly below DIR, one per line (empty when none). `findmnt -R` only
+# descends from a mount point, so match the target prefix instead.
+mounts_under() { findmnt -rn -o TARGET | awk -v p="$1/" 'index($0, p) == 1'; }

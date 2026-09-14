@@ -12,7 +12,8 @@ sec "system"; run uname -r; run uptime; run rpm -q kernel-sp11 sp11-surface-supp
 run cat /proc/cmdline
 sec "sysctl / secure boot"; run sysctl kernel.apparmor_restrict_unprivileged_userns; run mokutil --sb-state
 
-sec "touchscreen kernel driver (mshw0485)"; run lsmod; run dmesg | grep -iE 'mshw0485|g6ts|hid-generic|hidraw|spi|qspi|iptsd' | tail -n 80
+# run() caps output at LINES_MAX lines, so filter inside the command and truncate last.
+sec "touchscreen kernel driver (mshw0485)"; run lsmod; run sh -c "dmesg | grep -iE 'mshw0485|g6ts|hid-generic|hidraw|spi|qspi|iptsd' | tail -n 80"
 run ls -l /sys/bus/spi/drivers/mshw0485_touch/ /sys/bus/spi/devices/
 sec "hidraw nodes and their HID parents"
 for h in /sys/class/hidraw/hidraw*; do [ -e "$h" ] || continue; printf '%s -> %s\n' "$(basename "$h")" "$(readlink -f "$h/device")"; done
@@ -21,7 +22,7 @@ for h in /sys/class/hidraw/hidraw*; do [ -e "$h" ] || continue
     dev=/dev/$(basename "$h"); sec "SP11 digitizer bridge $dev"
     run udevadm info "$dev"; printf '\n$ %s\n' "/usr/libexec/sp11-iptsd-check-device $dev"
     /usr/libexec/sp11-iptsd-check-device "$dev"; echo "check-device exit: $?"; run ldd /usr/libexec/sp11-iptsd
-    LINES_MAX=60 run udevadm test "$(udevadm info -q path "$dev")" 2>&1 | grep -iE 'sp11|SYSTEMD_WANTS|hidraw' ;;
+    LINES_MAX=60 run sh -c "udevadm test '$(udevadm info -q path "$dev")' 2>&1 | grep -iE 'sp11|SYSTEMD_WANTS|hidraw'" ;;
   esac
 done
 sec "iptsd service"; run systemctl list-units 'sp11-iptsd@*' --all --no-pager

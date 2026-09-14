@@ -115,7 +115,11 @@ SP11_GRUB_GFXMODE="$GRUB_GFXMODE_VALUE"
 SP11_GRUB_TIMEOUT="$GRUB_TIMEOUT_VALUE"
 SP11_SKU="$SP11_SKU"
 ENV
-bash -n "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,bt-import-pairings,diag} || die "shell syntax error in payload scripts"
+# `bash -n A B C` parses only A (B and C become positional parameters): check every script on its own.
+for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
+         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,bt-import-pairings,diag,bt-apply,ucm-apply}; do
+  bash -n "$f" || die "shell syntax error in ${f#"$STAGE"}"
+done
 sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"
 
 ## 6. RPM

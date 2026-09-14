@@ -20,15 +20,17 @@ mkdir -p "$W"
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(date -u +%s)}"
 
 ## 1. Inspect the source media (paths are read from the ISO, not assumed)
-VOLID=$(xorriso -indev "$ISO" -pvd_info 2>/dev/null | sed -n 's/^Volume Id *: *//p' | head -1)
+# Every substitution below ends in `|| true` so that, under pipefail, a non-matching grep reaches the
+# diagnostic `die` lines.
+VOLID=$(xorriso -indev "$ISO" -pvd_info 2>/dev/null | sed -n 's/^Volume Id *: *//p' | head -1 || true)
 [ -n "$VOLID" ] || die "cannot read the ISO volume id"
 xorriso -osirrox on -indev "$ISO" -extract /EFI/BOOT/grub.cfg "$W/esp-grub.cfg" -extract /boot/grub2/grub.cfg "$W/src-grub.cfg" >/dev/null 2>&1 \
   || die "source ISO lacks /EFI/BOOT/grub.cfg or /boot/grub2/grub.cfg"
 MARKER=$(sed -n 's/^search --file --set=root \([^ ]*\).*/\1/p' "$W/esp-grub.cfg" | head -1)
-KERNEL_ISO=$(grep -m1 -oE 'linux \(\$root\)[^ ]+' "$W/src-grub.cfg" | sed 's/linux (\$root)//')
-INITRD_ISO=$(grep -m1 -oE 'initrd \(\$root\)[^ ]+' "$W/src-grub.cfg" | sed 's/initrd (\$root)//')
-LIVEOS_ISO=$(xorriso -indev "$ISO" -find /LiveOS -type f 2>/dev/null | grep -v '^xorriso' | tr -d "'" | head -1)
-FONT_ISO=$(xorriso -indev "$ISO" -find / -name unicode.pf2 2>/dev/null | grep -v '^xorriso' | tr -d "'" | head -1)
+KERNEL_ISO=$(grep -m1 -oE 'linux \(\$root\)[^ ]+' "$W/src-grub.cfg" | sed 's/linux (\$root)//' || true)
+INITRD_ISO=$(grep -m1 -oE 'initrd \(\$root\)[^ ]+' "$W/src-grub.cfg" | sed 's/initrd (\$root)//' || true)
+LIVEOS_ISO=$(xorriso -indev "$ISO" -find /LiveOS -type f 2>/dev/null | grep -v '^xorriso' | tr -d "'" | head -1 || true)
+FONT_ISO=$(xorriso -indev "$ISO" -find / -name unicode.pf2 2>/dev/null | grep -v '^xorriso' | tr -d "'" | head -1 || true)
 grep -q "root=live:CDLABEL=$VOLID" "$W/src-grub.cfg" || die "source grub.cfg does not use CDLABEL=$VOLID"
 [ -n "$MARKER" ] && [ -n "$KERNEL_ISO" ] && [ -n "$INITRD_ISO" ] && [ -n "$LIVEOS_ISO" ] || die "could not parse the source ISO layout"
 log "source: volid=$VOLID marker=$MARKER kernel=$KERNEL_ISO initrd=$INITRD_ISO liveos=$LIVEOS_ISO font=${FONT_ISO:-none}"
@@ -48,7 +50,9 @@ strings "$GRUBEFI" | grep -x gfxterm >/dev/null || warn "the ISO's GRUB lacks gf
 
 ## 2. Extract the live root (always fresh: the result must depend only on the inputs)
 log "extracting EROFS live root to $ROOTFS (this takes a few minutes)"
-as_root rm -rf "$ROOTFS"
+# An interrupted run can leave /dev, /proc, /sys, /run rbind-mounted below the root; never rm through them.
+[ -z "$(mounts_under "$ROOTFS")" ] || die "mounts left under $ROOTFS from an earlier run; unmount them first: $(mounts_under "$ROOTFS" | tr '\n' ' ')"
+as_root rm -rf --one-file-system "$ROOTFS"
 as_root fsck.erofs --extract="$ROOTFS" --xattrs --preserve "$W/live.erofs" >"$W/fsck-erofs.log" 2>&1 || { tail -5 "$W/fsck-erofs.log" >&2; die "fsck.erofs extraction failed"; }
 [ -d "$ROOTFS/usr/lib/modules" ] || die "extracted root looks wrong"
 STOCK_KVER=$(ls "$ROOTFS/usr/lib/modules" | head -1)

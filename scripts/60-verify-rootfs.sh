@@ -41,7 +41,9 @@ check r chroot "$ROOTFS" /usr/libexec/sp11-iptsd-check-device --help
 check r rpm --root "$ROOTFS" -q kernel
 
 log "--- kernel-install hand-off simulation (chroot, Anaconda-like inputs)"
-T="$WORK_DIR/iso/handoff-test"; r rm -rf "$T"; mkdir -p "$T"
+T="$WORK_DIR/iso/handoff-test"
+[ -z "$(mounts_under "$T")" ] || die "mounts left under $T from an earlier run; unmount them first: $(mounts_under "$T" | tr '\n' ' ')"
+r rm -rf --one-file-system "$T"; mkdir -p "$T"
 # Work on a throwaway overlay of the real root so the live root stays untouched.
 r mkdir -p "$T/upper" "$T/work" "$T/merged"
 cleanup() { [ -n "${LOOP:-}" ] && { r umount "$T/esp" 2>/dev/null || true; r losetup -d "$LOOP" 2>/dev/null || true; }; r umount -R "$T/merged/dev" "$T/merged/proc" "$T/merged/sys" 2>/dev/null || true; r umount "$T/merged" 2>/dev/null || true; }
@@ -72,7 +74,8 @@ check test -n "$entry"
 check r grep -q "^devicetree /dtb-$KERNEL_ABI/$SP11_DTB" "$entry"
 check r test -s "$M/boot/dtb-$KERNEL_ABI/$SP11_DTB"
 for a in $SP11_ARGS_INSTALLED; do check r grep -q "^options .*\b$a\b" "$entry"; done
-for a in $SP11_ARGS_LIVE_ONLY; do check r grep -vq "^options .*$a" "$entry"; done
+# `grep -vq` would succeed on any non-matching line; assert absence with a negated grep instead.
+for a in $SP11_ARGS_LIVE_ONLY; do check r sh -c "! grep -q '^options .*$a' '$entry'"; done
 check r grep -q '^GRUB_DEVICETREE="qcom/x1e80100-microsoft-denali-oled.dtb"' "$M/etc/default/grub"
 check r grep -q '^GRUB_TERMINAL_OUTPUT="gfxterm"' "$M/etc/default/grub"
 check r grep -q "^GRUB_GFXMODE=$GRUB_GFXMODE_VALUE" "$M/etc/default/grub"
