@@ -36,10 +36,9 @@ LOADER_DIR=$(dirname "$KERNEL_ISO")
 DTB_ISO="$LOADER_DIR/dtb/$SP11_DTB"
 
 if [ ! -s "$W/live.erofs" ] || [ "${FORCE:-0}" = 1 ]; then
-  log "extracting live root image, stock kernel and initrd from the ISO"
-  rm -f "$W/live.erofs" "$W/linux-fedora" "$W/initrd-fedora"
-  xorriso -osirrox on -indev "$ISO" -extract "$LIVEOS_ISO" "$W/live.erofs" \
-    -extract "$KERNEL_ISO" "$W/linux-fedora" -extract "$INITRD_ISO" "$W/initrd-fedora" >/dev/null 2>&1 || die "xorriso extraction failed"
+  log "extracting the live root image from the ISO"
+  rm -f "$W/live.erofs"
+  xorriso -osirrox on -indev "$ISO" -extract "$LIVEOS_ISO" "$W/live.erofs" >/dev/null 2>&1 || die "xorriso extraction failed"
 fi
 [ "$(as_root blkid -p -s TYPE -o value "$W/live.erofs")" = erofs ] || die "$LIVEOS_ISO is not an EROFS image"
 GRUBEFI="$W/grubaa64.efi"
@@ -143,8 +142,7 @@ log "remastered root: $(du -h "$W/remastered.erofs" | cut -f1)"
 if [ -n "$FONT_ISO" ]; then FONT_LINE="$FONT_ISO"; else FONT_LINE="/nonexistent-font.pf2"; fi
 render "$FILES_DIR/grub-live.cfg.in" "$W/grub.cfg" RELEASE="$FEDORA_RELEASE" ABI="$KERNEL_ABI" TIMEOUT="$GRUB_TIMEOUT_VALUE" \
   MARKER="$MARKER" FONT="$FONT_LINE" GFXMODE="$GRUB_GFXMODE_VALUE" VOLID="$VOLID" ARGS_INSTALLED="$SP11_ARGS_INSTALLED" \
-  ARGS_LIVE="$SP11_ARGS_LIVE_ONLY" DTB="$DTB_ISO" KERNEL="$KERNEL_ISO" INITRD="$INITRD_ISO" \
-  KERNEL_STOCK="$KERNEL_ISO-fedora" INITRD_STOCK="$INITRD_ISO-fedora"
+  ARGS_LIVE="$SP11_ARGS_LIVE_ONLY" DTB="$DTB_ISO" KERNEL="$KERNEL_ISO" INITRD="$INITRD_ISO"
 grep -q 'fips=1' "$W/grub.cfg" && die "grub.cfg enables FIPS"
 rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "$KRPM" "$SRPM" "$IRPM" "$W/sp11/rpms/"
 render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$FEDORA_RELEASE" ABI="$KERNEL_ABI" COMMIT="${KERNEL_SOURCE_COMMIT:0:12}" \
@@ -156,7 +154,6 @@ rm -f "$OUT" "$OUT.sha256"
 xorriso -indev "$ISO" -outdev "$OUT" -boot_image any replay -volid "$VOLID" \
   -map "$W/remastered.erofs" "$LIVEOS_ISO" \
   -map "$W/vmlinuz" "$KERNEL_ISO" -map "$W/initrd" "$INITRD_ISO" \
-  -map "$W/linux-fedora" "$KERNEL_ISO-fedora" -map "$W/initrd-fedora" "$INITRD_ISO-fedora" \
   -map "$W/dtb" "$LOADER_DIR/dtb" -map "$W/grub.cfg" /boot/grub2/grub.cfg -map "$W/sp11" /sp11 \
   -commit >"$W/xorriso.log" 2>&1 || { tail -20 "$W/xorriso.log" >&2; die "xorriso failed"; }
 

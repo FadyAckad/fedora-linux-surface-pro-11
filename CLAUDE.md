@@ -84,6 +84,8 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
 - Stock live initramfs arguments: `dracut --no-hostonly --no-hostonly-cmdline --install /.profile
   --add "dmsquash-live livenet pollcdrom" --omit multipath`; it includes the `fips` dracut modules,
   which the pipeline omits. Generate it in a chroot of the live root.
+- `rd.live.check` needs an implanted ISO checksum, which xorriso remastering does not carry over; the
+  media-check menu entry was therefore removed.
 - Anaconda 44.30 discovers kernels from `/boot/vmlinuz-*` and runs `kernel-install add <ver>
   /lib/modules/<ver>/vmlinuz`. Deleting stock `/boot/vmlinuz-*` makes the SP11 kernel the only
   candidate while `kernel-core` stays installed. Anaconda rewrites `/etc/default/grub`, persists

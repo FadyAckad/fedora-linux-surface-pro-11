@@ -49,14 +49,4 @@ submenu "Troubleshooting -->" {
 		initrd ($root)@INITRD@
 		devicetree $dtb
 	}
-	menuentry "Stock Fedora @RELEASE@ kernel with Denali DTB (no touch, no Wi-Fi)" --class fedora --class gnu-linux --class gnu --class os {
-		linux ($root)@KERNEL_STOCK@ quiet rhgb $live_root $sp11_args $live_args
-		initrd ($root)@INITRD_STOCK@
-		devicetree $dtb
-	}
-	menuentry "Test this media & start Fedora @RELEASE@ Live for Surface Pro 11" --class fedora --class gnu-linux --class gnu --class os {
-		linux ($root)@KERNEL@ quiet rhgb $live_root $sp11_args $live_args rd.live.check
-		initrd ($root)@INITRD@
-		devicetree $dtb
-	}
 }
