@@ -95,8 +95,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - Stock live initramfs arguments: `dracut --no-hostonly --no-hostonly-cmdline --install /.profile
   --add "dmsquash-live livenet pollcdrom" --omit multipath`; it includes the `fips` dracut modules,
   which the pipeline omits. Generate it in a chroot of the live root.
-- `rd.live.check` needs an implanted ISO checksum, which xorriso remastering does not carry over; the
-  media-check menu entry was therefore removed.
+- `rd.live.check` needs an implanted ISO checksum, which xorriso remastering does not carry over, so the
+  live menu has no media-check entry.
 - Anaconda 44.30 discovers kernels from `/boot/vmlinuz-*` and runs `kernel-install add <ver>
   /lib/modules/<ver>/vmlinuz`. Deleting stock `/boot/vmlinuz-*` makes the SP11 kernel the only
   candidate while `kernel-core` stays installed. Anaconda rewrites `/etc/default/grub`, persists
@@ -117,9 +117,18 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - `grep -q` at the end of a pipeline under `pipefail` fails spuriously (SIGPIPE); use `grep ... >/dev/null`.
 - Under `set -e -o pipefail`, `var=$(ls pattern | head -1)` exits the script silently when the glob does
   not match (`ls` fails, the assignment inherits the status). Append `|| true` inside the substitution.
+  The same applies to `var=$(grep ... | sed ...)` and `var=$(... | grep -v ...)` on empty input.
+- `bash -n A B C` parses only `A` (`B C` become positional parameters); syntax-check files one at a time.
+- `grep -v -q PATTERN FILE` cannot assert absence (it succeeds on any non-matching line); use `! grep -q`.
+- `findmnt -R DIR` lists submounts only when DIR itself is a mount point; `mounts_under` in `lib.sh`
+  matches the target prefix instead. Both `50` and `60` refuse to `rm -rf` a tree with mounts below it.
+- `%systemd_postun_with_restart NAME@.service` on a template unit is a no-op (`systemctl try-restart`
+  rejects a name without instance); restart `'NAME@*.service'` explicitly.
+- dracut `install_items` applies to `--no-hostonly` builds too; `50` parks the support RPM's drop-in
+  during the live initramfs run and installs only the GPU zap shader.
 - Never install RPMs into the live root with `--nodeps`. Workstation Live lacks `spdlog`, which
-  `sp11-iptsd` links against; the first ISO shipped a pen daemon that could not load, so udev's
-  `check-device` failed and no `sp11-iptsd@` unit ever started. `LIVE_EXTRA_PKGS` in `sp11.conf` lists
+  `sp11-iptsd` links against; a daemon that cannot load makes udev's `check-device` fail, so no
+  `sp11-iptsd@` unit starts. `LIVE_EXTRA_PKGS` in `sp11.conf` lists
   packages to download (`10-fetch-sources.sh` → `build/cache/rpm-deps`) and install first;
   `50-build-iso.sh` runs `rpm -U --test` and `--help` on the iptsd binaries; `60-verify-rootfs.sh`
   repeats both checks and `ldd`s the shipped binaries.
@@ -138,9 +147,9 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - Bluetooth address: the controller enumerates without a public address; `sp11-bt-set-addr.c` (OE
   commit 69f40d5) sets it over raw HCI management before `bluetooth.service`, triggered by udev.
   Upstream's `parse_mac` copies the printed octets in order, but the MGMT payload is a little-endian
-  `bdaddr_t`, so the controller came up as `FF:EE:DD:CC:BB:AA`. `30-build-support-rpm.sh` patches
-  `out[i]` to `out[5 - i]` before compiling (support RPM ≥ 1.4). Pairings made under the reversed address
-  stay orphaned in `/var/lib/bluetooth/FF:EE:DD:CC:BB:AA/`.
+  `bdaddr_t`, so the unpatched helper sets `FF:EE:DD:CC:BB:AA`; `30-build-support-rpm.sh` patches
+  `out[i]` to `out[5 - i]` before compiling. `sp11-bt-import-pairings` detects a byte-reversed adapter
+  directory under `/var/lib/bluetooth` and says so.
 - Pen: unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`) on the kernel's
   HIDRAW bridge (`hidraw` parent `001C:045E:0C83.*`, created by `mshw0485_touch` with `ipts_hid_bridge`
   defaulting to on); integration templates from OE `userspace/iptsd-sp11`; the build needs cmake for
@@ -165,17 +174,21 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   the SC bit yet has non-zero EDIV/Rand), so the converter decides Secure Connections from
   `EDIV == ERand == 0` and MITM from AuthReq bit 0x04. Both Surface devices: legacy pairing, authenticated,
   static addresses. Keyboard `11:22:33:44:55:66` (USB 045E:0C7A), pen `11:22:33:44:55:77` (045E:0C0F).
-- `scripts/70-export-bt-pairings.sh` (WSL, one UAC prompt) → `build/out/sp11-bt-pairings.tar.gz`;
+- `scripts/70-export-bt-pairings.sh` (WSL, one UAC prompt, always exports afresh because a re-pairing
+  rewrites the keys in place) → `build/out/sp11-bt-pairings.tar.gz`;
   converter `scripts/bt-pairings-from-hive.py` (python3-hivex, LE only, filtered by `BT_PAIRING_USB_IDS`);
   importer `/usr/libexec/sp11/sp11-bt-import-pairings` (also inside the tarball). Verified: keyboard
   connects over BLE with battery reporting after import.
 
-## Hardware-verified status (owner reports, 2026-09-13/14)
+## Hardware-verified status (owner reports, 2026-09-13/14, support RPM 1.5)
 
-Working: boot, install, display/GPU, Wi-Fi, Bluetooth, touch, pen inking (with `spdlog` present),
-audio, battery, Flatpak (support RPM ≥ 1.1), Windows entry in GRUB before UEFI Firmware Settings
-(≥ 1.3), correct Bluetooth address (≥ 1.4), shared Windows pairings for keyboard and pen.
-Support RPM 1.5 adds `sp11-bt-import-pairings` and `sp11-diag` under `/usr/libexec/sp11`.
+Working: boot, install, display/GPU, Wi-Fi, Bluetooth with the correct address, touch, pen inking,
+audio, battery, Flatpak, Windows entry in GRUB before UEFI Firmware Settings, shared Windows pairings
+for keyboard and pen, `sp11-bt-import-pairings` and `sp11-diag` under `/usr/libexec/sp11`.
+
+Support RPM 1.6 and `sp11-iptsd` 3.1.0-2.sp11 (built 2026-09-14, in `build/rpms/` and on the Windows
+desktop) are not hardware-verified. The ISO in `build/out/` (sha256 `29eff1be…9e0e3`, 2026-09-14) contains
+them; `60-verify-rootfs.sh` passes on its root.
 
 ## References
 

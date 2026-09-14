@@ -74,7 +74,7 @@ log "Wi-Fi board.bin: $WIFI_BOARD_ENTRY ($(stat -c %s "$STAGE/usr/lib/firmware/a
 ## 4. Bluetooth public address (raw HCI management helper + udev-triggered service)
 verify_sha256 "$CACHE_DIR/sp11-bt-set-addr.c" "$BT_HELPER_SHA256"
 # Upstream copies the printed octets into the MGMT payload in string order, but bdaddr_t is little-endian
-# (byte 0 = last printed octet), so the controller came up with the address reversed (FF:EE:DD:CC:BB:AA).
+# (byte 0 = last printed octet), so the unpatched helper sets the address reversed (FF:EE:DD:CC:BB:AA).
 # The bonds transferred from Windows are tied to the real address, so store the octets reversed.
 BT_SRC="$SDIR/sp11-bt-set-addr.c"; cp "$CACHE_DIR/sp11-bt-set-addr.c" "$BT_SRC"
 sed -i 's/^\t\tout\[i\] = (uint8_t)val;$/\t\tout[5 - i] = (uint8_t)val; \/* bdaddr_t is little-endian *\//' "$BT_SRC"

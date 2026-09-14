@@ -31,8 +31,9 @@ free, internet. Every step is idempotent and skips finished work; `FORCE=1` rebu
    `.deb` payload instead (1 min); both yield the same 7816-module set.
 5. `scripts/30-build-support-rpm.sh` builds the `sp11-surface-support` RPM: ADSP/CDSP/GPU firmware
    from the Windows DriverStore, audio topology and ALSA UCM, WCN7850 `board.bin`, Bluetooth address
-   service, kernel-install boot-policy plugin, dracut and sysctl policy, Windows GRUB entry,
-   first-boot finalizer, and the `sp11-bt-import-pairings` and `sp11-diag` tools.
+   service, kernel-install boot-policy plugin with the shared `sp11-grub-defaults` helper, dracut,
+   sysctl and dnf policy, Windows GRUB entry, first-boot finalizer, and the `sp11-bt-import-pairings`
+   and `sp11-diag` tools. The step rebuilds automatically when its `VERSION=` differs from the cached RPM.
 6. `scripts/40-build-iptsd-rpm.sh` builds the `sp11-iptsd` RPM (pinned upstream iptsd plus ooaklee's
    Surface Pro 11 integration).
 7. `scripts/50-build-iso.sh` remasters the live root (EROFS/LZMA with SELinux labels), installs the
@@ -124,7 +125,7 @@ kernel, touchscreen/pen (iptsd), input and Bluetooth state. It changes nothing.
   user namespaces would be denied. `/usr/lib/sysctl.d/90-sp11.conf` sets
   `kernel.apparmor_restrict_unprivileged_userns = 0`. SELinux is compiled in but not active with this
   kernel; Fedora runs without MAC enforcement.
-- Bluetooth address: ooaklee's helper wrote the controller address byte-reversed; the RPM build patches
+- Bluetooth address: ooaklee's helper writes the controller address byte-reversed; the RPM build patches
   the octet order so Linux and Windows use the same address (`AA:BB:CC:DD:EE:FF`), which the shared
   pairings depend on.
 - Audio: ooaklee FullIO v19c topology and UCM; the UCM device matcher is corrected to match the 5G SKU.
@@ -132,13 +133,22 @@ kernel, touchscreen/pen (iptsd), input and Bluetooth state. It changes nothing.
   all ship; the ISO build adds them (`LIVE_EXTRA_PKGS` in `sp11.conf`) and refuses RPMs with unmet
   dependencies.
 - The stock Fedora kernel stays installed in the live root but hidden from Anaconda so the SP11 kernel
-  is the one installed.
+  is the one installed. On the installed system `/etc/dnf/libdnf5.conf.d/90-sp11.conf` excludes the
+  stock kernel packages (`kernel`, `kernel-core`, `kernel-modules*`) from dnf, so an update cannot add a
+  boot entry for a kernel without Surface support (`dnf --disableexcludes=all` overrides it once).
+- The live initramfs carries only the GPU zap shader; the ADSP/CDSP firmware (about 26 MiB) goes into
+  the installed system's initramfs, where the DSP actually runs.
+- Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth
+  radio's address, so an external monitor or a USB Bluetooth dongle attached during detection does not
+  change the result.
 
 ## Fedora 45 or a newer kernel release
 
 Edit `sp11.conf`: `FEDORA_RELEASE`, `FEDORA_COMPOSE` (from the release's ISO filename) and, for a new
 kernel, `KERNEL_RELEASE_TAG`, `KERNEL_PKG_VERSION`, `KERNEL_UPSTREAM_VERSION`, `KERNEL_RPM_RELEASE`,
 `KERNEL_SOURCE_COMMIT` (all on the ooaklee release page). Then run `FORCE=1 scripts/build-all.sh`.
+Checksum-pinned downloads stay cached; the dnf-downloaded packages (`atheros-firmware`, the live-root
+dependencies) are cached per Fedora release and re-downloaded with `FORCE=1`.
 The ISO layout (volume id, marker file, kernel/initrd paths, font) is read from the ISO, not assumed.
 The `x1e80100.conf` regex substitution in `scripts/30-build-support-rpm.sh` expects ooaklee's v19c file
 and fails loudly if the file changes.
