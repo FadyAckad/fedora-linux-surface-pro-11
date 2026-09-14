@@ -16,16 +16,8 @@ if command -v grubby >/dev/null 2>&1; then
   grubby --update-kernel=ALL --args="$SP11_ARGS_INSTALLED" || :
 fi
 
-grub_set() {
-  local key=$1 value=$2 file=/etc/default/grub
-  [ -f "$file" ] || : > "$file"
-  if grep -q "^${key}=" "$file"; then sed -i "s|^${key}=.*|${key}=${value}|" "$file"; else printf '%s=%s\n' "$key" "$value" >> "$file"; fi
-}
-grub_set GRUB_DEVICETREE "\"$SP11_DTB\""
-grub_set GRUB_GFXMODE "$SP11_GRUB_GFXMODE"
-grub_set GRUB_TERMINAL_OUTPUT "\"gfxterm\""
-grub_set GRUB_TIMEOUT "$SP11_GRUB_TIMEOUT"
-grub_set GRUB_TIMEOUT_STYLE "menu"
+# /etc/default/grub policy: same helper as the kernel-install plugin.
+/usr/libexec/sp11/sp11-grub-defaults || :
 /usr/libexec/sp11/sp11-grub-modules || :
 if command -v grub2-mkconfig >/dev/null 2>&1; then
   cfg=$(readlink -f /etc/grub2-efi.cfg 2>/dev/null || echo /boot/grub2/grub.cfg)

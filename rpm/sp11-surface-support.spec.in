@@ -31,7 +31,8 @@ ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, WCN7850 Wi-Fi board
 data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, sysctl policy
 (unprivileged user namespaces for Flatpak), a GRUB menu entry that chainloads the
-Windows Boot Manager, and the first-boot finalizer. The firmware is proprietary and must not be redistributed.
+Windows Boot Manager, a dnf exclusion of the stock kernel packages, and the first-boot
+finalizer. The firmware is proprietary and must not be redistributed.
 
 %prep
 %build
@@ -75,6 +76,7 @@ fi
 /etc/grub.d/29_sp11_windows
 /usr/lib/dracut/dracut.conf.d/90-sp11.conf
 /usr/lib/sysctl.d/90-sp11.conf
+/etc/dnf/libdnf5.conf.d/90-sp11.conf
 %dir /etc/sp11
 %config(noreplace) /etc/sp11/bluetooth-address
 /etc/sp11/sp11.env

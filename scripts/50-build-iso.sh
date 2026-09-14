@@ -96,31 +96,44 @@ GRUB_DISABLE_SUBMENU=true
 GRUB_DISABLE_RECOVERY=true
 GRUB_CMDLINE_LINUX_DEFAULT="quiet rhgb $SP11_ARGS_INSTALLED"
 GRUB_ENABLE_BLSCFG=true
-GRUB_DEVICETREE="$SP11_DTB"
-GRUB_GFXMODE=$GRUB_GFXMODE_VALUE
 GRUB_TERMINAL_INPUT="console"
-GRUB_TERMINAL_OUTPUT="gfxterm"
-GRUB_TIMEOUT=$GRUB_TIMEOUT_VALUE
-GRUB_TIMEOUT_STYLE=menu
 GRUB
+# Device tree, gfxterm resolution and timeout come from the shipped helper, the same one the kernel-install
+# plugin and sp11-first-boot run, so the policy has a single source.
+as_root chroot "$ROOTFS" /usr/libexec/sp11/sp11-grub-defaults || die "sp11-grub-defaults failed in the live root"
+grep -q "^GRUB_DEVICETREE=\"$SP11_DTB\"" "$ROOTFS/etc/default/grub" || die "GRUB_DEVICETREE not set in the live root"
 
-## 5. dracut-live initramfs for the SP11 kernel, generated inside the live root (same arguments Fedora uses)
-cleanup_mounts() { for m in run sys proc dev; do as_root umount -R "$ROOTFS/$m" 2>/dev/null || true; done; }
+## 5. dracut-live initramfs for the SP11 kernel, generated inside the live root (same arguments Fedora uses).
+##    The support RPM's dracut drop-in pulls the whole Denali firmware set into every initramfs. The installed
+##    system needs that (host-only initramfs starts the DSP early); the live media does not (the ADSP driver is
+##    blacklisted there), so park the drop-in for this run and install only the GPU zap shader.
+DRACUT_DROPIN="$ROOTFS/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
+ZAP_FW="/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn"
+restore_dropin() { [ -e "$DRACUT_DROPIN.live-off" ] && as_root mv -f "$DRACUT_DROPIN.live-off" "$DRACUT_DROPIN" || true; }
+cleanup_mounts() { restore_dropin; for m in run sys proc dev; do as_root umount -R "$ROOTFS/$m" 2>/dev/null || true; done; }
 trap cleanup_mounts EXIT
 for m in dev proc sys run; do as_root mount --rbind "/$m" "$ROOTFS/$m"; as_root mount --make-rslave "$ROOTFS/$m"; done
 PROFILE_OPT=""; [ -f "$ROOTFS/.profile" ] && PROFILE_OPT="--install /.profile"
+[ -f "$DRACUT_DROPIN" ] || die "missing $DRACUT_DROPIN (support RPM payload changed?)"
+[ -s "$ROOTFS$ZAP_FW" ] || die "missing GPU zap shader $ZAP_FW in the live root"
+as_root mv -f "$DRACUT_DROPIN" "$DRACUT_DROPIN.live-off"
 log "generating live initramfs for $KERNEL_ABI (dracut in chroot)"
 as_root rm -f "$ROOTFS/boot/initramfs-$KERNEL_ABI.img"
 as_root chroot "$ROOTFS" /usr/bin/dracut --force --reproducible --no-hostonly --no-hostonly-cmdline $PROFILE_OPT \
-  --add "dmsquash-live livenet pollcdrom" --omit "multipath fips fips-crypto-policies" \
+  --add "dmsquash-live livenet pollcdrom" --omit "multipath fips fips-crypto-policies" --install "$ZAP_FW" \
   --kver "$KERNEL_ABI" "/boot/initramfs-$KERNEL_ABI.img" >"$W/dracut.log" 2>&1 || { tail -30 "$W/dracut.log" >&2; die "dracut failed"; }
+restore_dropin
+[ -f "$DRACUT_DROPIN" ] || die "failed to restore $DRACUT_DROPIN"
 as_root test -s "$ROOTFS/boot/initramfs-$KERNEL_ABI.img" || die "initramfs not produced"
 as_root install -m 0644 -o "$(id -u)" -g "$(id -g)" "$ROOTFS/boot/initramfs-$KERNEL_ABI.img" "$W/initrd"
 lsinitrd -m "$W/initrd" | grep -x dmsquash-live >/dev/null || die "initramfs lacks dmsquash-live"
 lsinitrd "$W/initrd" | grep "usr/lib/modules/$KERNEL_ABI/kernel/fs/erofs/erofs.ko" >/dev/null || die "initramfs lacks the erofs module for $KERNEL_ABI"
 lsinitrd -m "$W/initrd" | grep -x fips >/dev/null && die "initramfs contains the fips module"
+lsinitrd "$W/initrd" | grep -F "${ZAP_FW#/}" >/dev/null || die "live initramfs lacks the GPU zap shader"
+lsinitrd "$W/initrd" | grep -F 'Denali/qcadsp8380.mbn' >/dev/null && die "live initramfs still carries the ADSP firmware"
 as_root rm -f "$ROOTFS/boot/initramfs-$KERNEL_ABI.img"
 cleanup_mounts; trap - EXIT
+[ -z "$(mounts_under "$ROOTFS")" ] || die "mounts still active under $ROOTFS (they would be packed into the image): $(mounts_under "$ROOTFS" | tr '\n' ' ')"
 as_root install -m 0644 -o "$(id -u)" -g "$(id -g)" "$ROOTFS/boot/vmlinuz-$KERNEL_ABI" "$W/vmlinuz"
 as_root rm -rf "$W/dtb"; as_root install -D -m 0644 -o "$(id -u)" -g "$(id -g)" "$ROOTFS/usr/lib/modules/$KERNEL_ABI/dtb/$SP11_DTB" "$W/dtb/$SP11_DTB"
 [[ $(fdtget -t s "$W/dtb/$SP11_DTB" / compatible) == *microsoft,denali-oled* ]] || die "DTB compatible check failed"

@@ -97,7 +97,10 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   with `/dev` bound but no udev database.
 - Fedora's `20-grub.install` writes `devicetree /dtb-<ver>/$GRUB_DEVICETREE` into the BLS entry and
   copies `/usr/lib/modules/<ver>/dtb` to `/boot/dtb-<ver>`; systemd's `90-loaderentry.install` reads
-  `/etc/kernel/devicetree`. `15-sp11-surface.install` sets both before they run.
+  `/etc/kernel/devicetree`. `15-sp11-surface.install` sets both before they run, via
+  `/usr/libexec/sp11/sp11-grub-defaults` (the single writer of the `/etc/default/grub` policy, also used by
+  `sp11-first-boot` and `50-build-iso.sh`). It filters `/etc/kernel/cmdline` when present, otherwise
+  `/proc/cmdline`, and persists the result only when it contains `root=` (never the live command line).
 - `mkfs.erofs -Ededupe` is single-threaded in erofs-utils 1.9.4 (hours). `-Efragments -C1048576
   --workers=N -zlzma,level=6` takes ~5 min and is only slightly larger. Use `--file-contexts` from the
   root's own SELinux policy.

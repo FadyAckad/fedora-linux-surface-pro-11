@@ -1,0 +1,23 @@
+#!/usr/bin/bash
+# Apply the Surface Pro 11 GRUB policy from /etc/sp11/sp11.env to /etc/default/grub (idempotent):
+# Denali DTB for every BLS entry, low gfxterm resolution, visible menu with the configured timeout.
+# Single source of truth for the kernel-install plugin (also inside Anaconda), sp11-first-boot and the ISO build.
+set -eu
+[ -f /etc/sp11/sp11.env ] || exit 0
+. /etc/sp11/sp11.env
+file=/etc/default/grub
+
+grub_set() {
+  local key=$1 value=$2
+  [ -f "$file" ] || : > "$file"
+  if grep -q "^${key}=" "$file"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
+grub_set GRUB_DEVICETREE "\"$SP11_DTB\""
+grub_set GRUB_GFXMODE "$SP11_GRUB_GFXMODE"
+grub_set GRUB_TERMINAL_OUTPUT "\"gfxterm\""
+grub_set GRUB_TIMEOUT "$SP11_GRUB_TIMEOUT"
+grub_set GRUB_TIMEOUT_STYLE "menu"

@@ -83,6 +83,9 @@ chmod 0600 "$STAGE/etc/sp11/bluetooth-address"
 ## 5. Boot policy: kernel-install plugin, first-boot finalizer, dracut policy, UCM apply helper
 install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
 install -m 0755 "$FILES_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
+install -m 0755 "$FILES_DIR/sp11-grub-defaults" "$STAGE/usr/libexec/sp11/sp11-grub-defaults"
+# The stock kernel packages stay installed but must not come back through `dnf upgrade` on the installed system.
+install -D -m 0644 "$FILES_DIR/90-sp11-dnf.conf" "$STAGE/etc/dnf/libdnf5.conf.d/90-sp11.conf"
 install -D -m 0755 "$FILES_DIR/29_sp11_windows" "$STAGE/etc/grub.d/29_sp11_windows"
 install -m 0755 "$FILES_DIR/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-first-boot"
 install -m 0755 "$FILES_DIR/sp11-bt-import-pairings" "$STAGE/usr/libexec/sp11/sp11-bt-import-pairings"
@@ -110,6 +113,6 @@ sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_window
 ## 6. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
-  STAGE="$STAGE" VERSION="1.5" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
+  STAGE="$STAGE" VERSION="1.6" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"
