@@ -3,9 +3,12 @@
 # Output: build/hardware.env. Re-run with FORCE=1 to re-detect.
 . "$(dirname "$0")/lib.sh"
 
-ps_query() {
-  powershell.exe -NoProfile -NonInteractive -Command "$1" 2>/dev/null | tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d' | head -1
+# ps_lines CMD — every non-empty output line of a PowerShell command. Never fails: an empty result is
+# reported by validate() with a message.
+ps_lines() {
+  powershell.exe -NoProfile -NonInteractive -Command "$1" 2>/dev/null | tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d' || true
 }
+ps_query() { ps_lines "$1" | head -1 || true; }
 
 # Regex self-test against the known SKU strings of this device family. The build never guesses:
 # if a regex stops matching the 5G SKU the build fails here.
@@ -55,9 +58,20 @@ SP11_BOARD_VENDOR=$(ps_query '(Get-CimInstance Win32_BaseBoard).Manufacturer')
 SP11_BOARD_NAME=$(ps_query '(Get-CimInstance Win32_BaseBoard).Product')
 SP11_CPU=$(ps_query '(Get-CimInstance Win32_Processor | Select-Object -First 1).Name')
 SP11_BIOS=$(ps_query '(Get-CimInstance Win32_BIOS).SMBIOSBIOSVersion')
-SP11_PANEL_VENDOR=$(ps_query '[System.Text.Encoding]::ASCII.GetString((Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | Select-Object -First 1).ManufacturerName) -replace "\0",""')
+# Panels as "<vendor> <VideoOutputTechnology>"; 2147483648 (D3DKMDT_VOT_INTERNAL) is the built-in panel, so
+# an external display attached during detection is never mistaken for it.
+PANELS=$(ps_lines '$conn = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorConnectionParams; Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | ForEach-Object { $m = $_; $c = $conn | Where-Object { $_.InstanceName -eq $m.InstanceName } | Select-Object -First 1; ([System.Text.Encoding]::ASCII.GetString($m.ManufacturerName) -replace "\0","") + " " + $c.VideoOutputTechnology }')
+SP11_PANEL_VENDOR=$(printf '%s\n' "$PANELS" | awk '$2 == 2147483648 { print $1; exit }')
+[ -n "$SP11_PANEL_VENDOR" ] || SP11_PANEL_VENDOR=$(printf '%s\n' "$PANELS" | awk 'NR == 1 { print $1 }')
 if [ -z "$SP11_BT_MAC" ]; then
-  SP11_BT_MAC=$(ps_query '(Get-NetAdapter | Where-Object { $_.InterfaceDescription -match "Bluetooth Device \(Personal Area Network\)" } | Select-Object -First 1).MacAddress')
+  # Address of the built-in radio (DEVPKEY_Bluetooth_RadioAddress on the Bluetooth-class device); a USB dongle
+  # would show up as a second radio under USB\ and is skipped. The PAN adapter's MAC is only a fallback.
+  RADIOS=$(ps_lines 'Get-PnpDevice -Class Bluetooth -PresentOnly | ForEach-Object { $p = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName "{a92f26ca-eda7-4b1d-9db2-27b68aa5a2eb} 1" -ErrorAction SilentlyContinue; if ($p -and $p.Data) { "{0:X12} {1}" -f [uint64]$p.Data, $_.InstanceId } }')
+  SP11_BT_MAC=$(printf '%s\n' "$RADIOS" | awk '$2 !~ /^USB\\/ { print $1; exit }' | sed 's/../&:/g; s/:$//')
+  if [ -z "$SP11_BT_MAC" ]; then
+    warn "no built-in Bluetooth radio found via PnP (radios: ${RADIOS:-none}); falling back to the PAN adapter"
+    SP11_BT_MAC=$(ps_query '(Get-NetAdapter | Where-Object { $_.InterfaceDescription -match "Bluetooth Device \(Personal Area Network\)" } | Select-Object -First 1).MacAddress')
+  fi
 fi
 SP11_BT_MAC=$(printf '%s' "$SP11_BT_MAC" | tr 'a-f-' 'A-F:')
 SP11_UCM_DMI_INFO="${SP11_BOARD_VENDOR}-${SP11_FAMILY}-${SP11_BOARD_NAME}"
@@ -83,6 +97,7 @@ chmod 0600 "$HARDWARE_ENV"
 log "product: $SP11_PRODUCT"
 log "SKU:     $SP11_SKU"
 log "SoC:     $SP11_CPU"
+log "panels:  $(printf '%s' "$PANELS" | tr '\n' ';')"
 log "panel:   $SP11_PANEL_VENDOR (OLED) -> DTB $SP11_DTB_SELECTED"
 log "BT MAC:  $SP11_BT_MAC"
 log "wrote $HARDWARE_ENV"

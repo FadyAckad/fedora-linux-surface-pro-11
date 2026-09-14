@@ -45,6 +45,10 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   SKUs and the live Windows values.
 - stubble's `x1e80100-microsoft-denali.json` hardware IDs do not match this SKU (CHIDs computed:
   zero matches), so automatic DTB selection cannot work; the DTB is always loaded explicitly.
+- Windows identity queries (`05-detect-hardware.sh`): the built-in panel is the `WmiMonitorID` instance
+  whose `WmiMonitorConnectionParams.VideoOutputTechnology` is 2147483648 (internal); the controller
+  address is `DEVPKEY_Bluetooth_RadioAddress` (`{a92f26ca-eda7-4b1d-9db2-27b68aa5a2eb} 1`) on the
+  Bluetooth-class device `QCA_SHB\UART_H4_HMT\...`, formatted `{0:X12}`. Radios under `USB\` are skipped.
 
 ## Kernel
 
