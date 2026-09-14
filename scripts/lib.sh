@@ -109,4 +109,5 @@ build_rpm() {
   ls -t "$RPM_DIR/$name"-*.rpm | head -1
 }
 
-rpm_of() { ls -t "$RPM_DIR/$1"-*.rpm 2>/dev/null | head -1; }
+# Newest RPM of a package in $RPM_DIR, or empty. Never fails: callers test the result themselves.
+rpm_of() { ls -t "$RPM_DIR/$1"-[0-9]*.rpm 2>/dev/null | head -1 || true; }

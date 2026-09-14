@@ -99,6 +99,14 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
 - In a chroot without udev, `lsblk` reports empty PARTTYPE/FSTYPE; use `blkid -c /dev/null -o device
   -t TYPE=vfat` and `blkid -p -s PART_ENTRY_TYPE -o value DEV` instead.
 - `grep -q` at the end of a pipeline under `pipefail` fails spuriously (SIGPIPE); use `grep ... >/dev/null`.
+- Under `set -e -o pipefail`, `var=$(ls pattern | head -1)` exits the script silently when the glob does
+  not match (`ls` fails, the assignment inherits the status). Append `|| true` inside the substitution.
+- Never install RPMs into the live root with `--nodeps`. Workstation Live lacks `spdlog`, which
+  `sp11-iptsd` links against; the first ISO shipped a pen daemon that could not load, so udev's
+  `check-device` failed and no `sp11-iptsd@` unit ever started. `LIVE_EXTRA_PKGS` in `sp11.conf` lists
+  packages to download (`10-fetch-sources.sh` → `build/cache/rpm-deps`) and install first;
+  `50-build-iso.sh` runs `rpm -U --test` and `--help` on the iptsd binaries; `60-verify-rootfs.sh`
+  repeats both checks and `ldd`s the shipped binaries.
 
 ## Peripherals and userspace
 

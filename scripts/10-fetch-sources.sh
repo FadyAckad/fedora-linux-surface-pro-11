@@ -48,4 +48,12 @@ if ! ls "$WIFI_DIR"/atheros-firmware-*.rpm >/dev/null 2>&1; then
   log "downloading atheros-firmware"
   ( cd "$WIFI_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" atheros-firmware ) || die "dnf download atheros-firmware failed"
 fi
+## Runtime dependency RPMs for the live root (same repo state as the build host, so sonames match)
+DEPS_DIR="$CACHE_DIR/rpm-deps"; mkdir -p "$DEPS_DIR"
+for pkg in $LIVE_EXTRA_PKGS; do
+  if ! ls "$DEPS_DIR/$pkg"-[0-9]*.rpm >/dev/null 2>&1; then
+    log "downloading $pkg"
+    ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --arch=aarch64 "$pkg" ) || die "dnf download $pkg failed"
+  fi
+done
 log "all sources present under $CACHE_DIR"

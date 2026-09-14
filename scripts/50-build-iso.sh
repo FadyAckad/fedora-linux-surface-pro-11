@@ -55,12 +55,31 @@ as_root fsck.erofs --extract="$ROOTFS" --xattrs --preserve "$W/live.erofs" >"$W/
 STOCK_KVER=$(ls "$ROOTFS/usr/lib/modules" | head -1)
 log "stock kernel in live root: $STOCK_KVER"
 
-## 3. Install the SP11 RPMs (scriptlets skipped; their effects are applied explicitly below)
-log "installing RPMs into the live root"
-as_root rpm --root "$ROOTFS" -Uvh --nodeps --noscripts --replacefiles --replacepkgs "$KRPM" "$SRPM" "$IRPM" >"$W/rpm-install.log" 2>&1 \
+## 3. Install runtime dependencies Workstation Live lacks, then the SP11 RPMs. Dependencies are checked
+##    (no --nodeps): a missing library would leave e.g. iptsd unable to start on the installed system.
+##    Scriptlets are skipped; their effects are applied explicitly below.
+DEP_RPMS=()
+for pkg in $LIVE_EXTRA_PKGS; do
+  if as_root rpm --root "$ROOTFS" -q "$pkg" >/dev/null 2>&1; then continue; fi
+  f=$(ls -t "$CACHE_DIR/rpm-deps/$pkg"-[0-9]*.rpm 2>/dev/null | head -1 || true)
+  [ -n "$f" ] || die "missing dependency RPM for $pkg (run scripts/10-fetch-sources.sh)"
+  DEP_RPMS+=("$f")
+done
+if [ ${#DEP_RPMS[@]} -gt 0 ]; then
+  log "installing runtime dependencies into the live root: $(printf '%s ' "${DEP_RPMS[@]##*/}")"
+  as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacepkgs "${DEP_RPMS[@]}" >"$W/rpm-deps.log" 2>&1 \
+    || { cat "$W/rpm-deps.log" >&2; die "dependency RPM install into live root failed"; }
+fi
+log "installing SP11 RPMs into the live root"
+as_root rpm --root "$ROOTFS" -U --test --replacepkgs "$KRPM" "$SRPM" "$IRPM" >"$W/rpm-test.log" 2>&1 \
+  || { cat "$W/rpm-test.log" >&2; die "SP11 RPMs have unmet dependencies in the live root (add the package to LIVE_EXTRA_PKGS)"; }
+as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacefiles --replacepkgs "$KRPM" "$SRPM" "$IRPM" >"$W/rpm-install.log" 2>&1 \
   || { cat "$W/rpm-install.log" >&2; die "rpm install into live root failed"; }
 as_root rpm --root "$ROOTFS" -q kernel-sp11 sp11-surface-support sp11-iptsd >/dev/null || die "RPMs not registered in the live root database"
 as_root chroot "$ROOTFS" /usr/libexec/sp11/sp11-ucm-apply || die "UCM matcher install failed"
+for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device; do
+  as_root chroot "$ROOTFS" "$bin" --help >/dev/null 2>&1 || die "$bin cannot run in the live root (missing shared library?)"
+done
 as_root depmod -b "$ROOTFS" "$KERNEL_ABI" || die "depmod in live root failed"
 [ -s "$ROOTFS/boot/vmlinuz-$KERNEL_ABI" ] || die "kernel image missing from live root"
 [ -s "$ROOTFS/usr/lib/modules/$KERNEL_ABI/dtb/$SP11_DTB" ] || die "DTB missing from live root"
