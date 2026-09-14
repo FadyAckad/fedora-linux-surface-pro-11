@@ -65,8 +65,14 @@ log "Wi-Fi board.bin: $WIFI_BOARD_ENTRY ($(stat -c %s "$STAGE/usr/lib/firmware/a
 
 ## 4. Bluetooth public address (raw HCI management helper + udev-triggered service)
 verify_sha256 "$CACHE_DIR/sp11-bt-set-addr.c" "$BT_HELPER_SHA256"
+# Upstream copies the printed octets into the MGMT payload in string order, but bdaddr_t is little-endian
+# (byte 0 = last printed octet), so the controller came up with the address reversed (FF:EE:DD:CC:BB:AA).
+# The bonds transferred from Windows are tied to the real address, so store the octets reversed.
+BT_SRC="$SDIR/sp11-bt-set-addr.c"; cp "$CACHE_DIR/sp11-bt-set-addr.c" "$BT_SRC"
+sed -i 's/^\t\tout\[i\] = (uint8_t)val;$/\t\tout[5 - i] = (uint8_t)val; \/* bdaddr_t is little-endian *\//' "$BT_SRC"
+grep -q 'out\[5 - i\] = (uint8_t)val;' "$BT_SRC" || die "bdaddr byte-order patch did not apply to sp11-bt-set-addr.c"
 install -d "$STAGE/usr/libexec/sp11"
-gcc -O2 -Wall -Wextra -o "$STAGE/usr/libexec/sp11/sp11-bt-set-addr" "$CACHE_DIR/sp11-bt-set-addr.c" || die "sp11-bt-set-addr failed to compile"
+gcc -O2 -Wall -Wextra -o "$STAGE/usr/libexec/sp11/sp11-bt-set-addr" "$BT_SRC" || die "sp11-bt-set-addr failed to compile"
 install -m 0755 "$FILES_DIR/sp11-bt-apply" "$STAGE/usr/libexec/sp11/sp11-bt-apply"
 install -D -m 0644 "$FILES_DIR/sp11-bluetooth-address@.service" "$STAGE/usr/lib/systemd/system/sp11-bluetooth-address@.service"
 install -D -m 0644 "$FILES_DIR/99-sp11-bluetooth-address.rules" "$STAGE/usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules"
@@ -102,6 +108,6 @@ sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_window
 ## 6. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
-  STAGE="$STAGE" VERSION="1.3" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
+  STAGE="$STAGE" VERSION="1.4" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"

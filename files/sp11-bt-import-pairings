@@ -33,7 +33,13 @@ for info in "${infos[@]}"; do
   adir="/var/lib/bluetooth/$adapter"
   if [ ! -d "$adir" ]; then
     echo "adapter $adapter is unknown to BlueZ here (have: $(ls /var/lib/bluetooth 2>/dev/null | tr '\n' ' '))." >&2
-    echo "The Linux controller must use the same address as Windows; check sp11-bluetooth-address@hci0.service." >&2
+    reversed=$(printf '%s' "$adapter" | awk -F: '{print $6":"$5":"$4":"$3":"$2":"$1}')
+    if [ -d "/var/lib/bluetooth/$reversed" ]; then
+      echo "The controller address is byte-reversed ($reversed): sp11-surface-support < 1.4 set it wrongly." >&2
+      echo "Upgrade sp11-surface-support to 1.4 or newer, reboot, then re-run this import." >&2
+    else
+      echo "The Linux controller must use the same address as Windows; check sp11-bluetooth-address@hci0.service." >&2
+    fi
     exit 1
   fi
   if [ -d "$adir/$dev" ]; then

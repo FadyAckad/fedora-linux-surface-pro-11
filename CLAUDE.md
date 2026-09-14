@@ -112,7 +112,11 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
 - Wi-Fi: WCN7850, PCI 17cb:1107, `qmi-board-id=255`; no exact `board-2.bin` entry, so the 17cb:3378
   entry is extracted with `ath12k-bdencoder` as `board.bin`. `disable-rfkill` is in the Denali DTS.
 - Bluetooth: the controller enumerates without a public address; `sp11-bt-set-addr.c` (OE commit
-  69f40d5) sets it over raw HCI management before `bluetooth.service`, triggered by udev.
+  69f40d5) sets it over raw HCI management before `bluetooth.service`, triggered by udev. Upstream's
+  `parse_mac` copies the printed octets in order, but the MGMT payload is a little-endian `bdaddr_t`, so
+  the controller came up byte-reversed (`FF:EE:DD:CC:BB:AA`). `30-build-support-rpm.sh` patches
+  `out[i]` to `out[5 - i]` before compiling (support RPM ≥ 1.4). Changing the address moves BlueZ's storage
+  directory; pairings made under the reversed address are orphaned and stay in the old directory.
 - Pen: unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`) on the kernel's
   HIDRAW bridge `001C:045E:0C83`; integration templates from OE `userspace/iptsd-sp11`; needs cmake.
 - Live media boots with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (an ADSP
@@ -145,8 +149,9 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
 
 Boot, install, display/GPU, Wi-Fi, Bluetooth, touch, pen, audio, battery: working. Flatpak: working
 with the sysctl fix (support RPM 1.1). Windows entry in GRUB: working (RPM 1.2); RPM 1.3 only moves it
-before UEFI Firmware Settings. Not yet re-verified: the current `build/out` ISO was built with RPM 1.1,
-so rerun `scripts/50-build-iso.sh` before distributing new media.
+before UEFI Firmware Settings. Bluetooth pairing import (2026-09-14): the import refused because the
+controller address was byte-reversed; RPM 1.4 fixes the helper, hardware result pending. The current
+`build/out` ISO was built with RPM 1.1; rerun `scripts/50-build-iso.sh` before distributing new media.
 
 ## References
 

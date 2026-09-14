@@ -87,7 +87,8 @@ tar -xzf sp11-bt-pairings.tar.gz && sudo ./sp11-bt-import-pairings          # or
 
 Existing Linux pairings for the same devices are backed up under `/var/lib/sp11/`. Re-pairing a device in
 either OS invalidates the other side's bond; re-run the export afterwards. The tarball contains secrets; do
-not share it.
+not share it. Requires `sp11-surface-support` 1.4 or newer on the installed system: earlier versions set
+the controller address byte-reversed, so the Windows bonds did not apply.
 
 ## What the scripts decide for you
 
