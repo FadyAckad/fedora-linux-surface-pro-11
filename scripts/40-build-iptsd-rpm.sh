@@ -3,8 +3,13 @@
 . "$(dirname "$0")/lib.sh"
 require_cmd git rpmbuild meson ninja g++
 
-if [ -n "$(rpm_of sp11-iptsd)" ] && [ "${FORCE:-0}" != 1 ]; then
-  log "iptsd RPM already built: $(rpm_of sp11-iptsd) (FORCE=1 to rebuild)"; exit 0
+CACHED=$(rpm_of sp11-iptsd)
+if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
+  if [ "$(rpm -qp --qf '%{VERSION}-%{RELEASE}' "$CACHED" 2>/dev/null)" = "$IPTSD_VERSION-$IPTSD_RPM_RELEASE.fc$FEDORA_RELEASE" ] \
+     && rpm -qp --qf '%{DESCRIPTION}' "$CACHED" 2>/dev/null | grep -F "$IPTSD_COMMIT" >/dev/null; then
+    log "iptsd RPM already built: $CACHED (FORCE=1 to rebuild)"; exit 0
+  fi
+  log "cached $(basename "$CACHED") is not iptsd $IPTSD_VERSION-$IPTSD_RPM_RELEASE @ ${IPTSD_COMMIT:0:12}; rebuilding"
 fi
 IDIR="$BUILD_DIR/iptsd"; SRC="$IDIR/SOURCES"; rm -rf "$SRC"; mkdir -p "$SRC"
 [ "$(git -C "$CACHE_DIR/iptsd" rev-parse HEAD)" = "$IPTSD_COMMIT" ] || die "iptsd checkout is not at $IPTSD_COMMIT"

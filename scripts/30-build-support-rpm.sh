@@ -6,8 +6,15 @@
 require_cmd gcc python3 xz rpm2cpio cpio rpmbuild
 load_hardware
 
-if [ -n "$(rpm_of sp11-surface-support)" ] && [ "${FORCE:-0}" != 1 ]; then
-  log "support RPM already built: $(rpm_of sp11-surface-support) (FORCE=1 to rebuild)"; exit 0
+# Bump whenever anything under files/ or the generated payload changes, so `dnf upgrade` picks it up.
+VERSION="1.6"
+
+CACHED=$(rpm_of sp11-surface-support)
+if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
+  if [ "$(rpm -qp --qf '%{VERSION}' "$CACHED" 2>/dev/null)" = "$VERSION" ]; then
+    log "support RPM already built: $CACHED (FORCE=1 to rebuild)"; exit 0
+  fi
+  log "cached $(basename "$CACHED") is not version $VERSION; rebuilding"
 fi
 
 SDIR="$BUILD_DIR/support"; STAGE="$SDIR/stage"
@@ -54,9 +61,10 @@ log "UCM matcher validated against '$SP11_UCM_DMI_INFO'"
 
 ## 3. Wi-Fi: WCN7850 board.bin fallback extracted from linux-firmware's board-2.bin
 WIFI_TMP="$SDIR/wifi"; rm -rf "$WIFI_TMP"; mkdir -p "$WIFI_TMP/x"
-RPM_AF=$(ls -t "$CACHE_DIR"/wifi/atheros-firmware-*.rpm 2>/dev/null | head -1); [ -n "$RPM_AF" ] || die "atheros-firmware RPM missing (run scripts/10-fetch-sources.sh)"
+RPM_AF=$(ls -t "$CACHE_DIR/wifi/f$FEDORA_RELEASE"/atheros-firmware-*.rpm 2>/dev/null | head -1 || true)
+[ -n "$RPM_AF" ] || die "atheros-firmware RPM missing (run scripts/10-fetch-sources.sh)"
 ( cd "$WIFI_TMP" && rpm2cpio "$RPM_AF" | cpio -idm --quiet './usr/lib/firmware/ath12k/WCN7850/hw2.0/board-2.bin*' ) || die "cannot extract board-2.bin"
-B2=$(find "$WIFI_TMP/usr" -name 'board-2.bin*' | head -1); [ -n "$B2" ] || die "board-2.bin not in atheros-firmware"
+B2=$(find "$WIFI_TMP/usr" -name 'board-2.bin*' 2>/dev/null | head -1 || true); [ -n "$B2" ] || die "board-2.bin not in atheros-firmware"
 case "$B2" in *.xz) xz -d "$B2"; B2=${B2%.xz} ;; *.zst) zstd -dq --rm "$B2"; B2=${B2%.zst} ;; esac
 ( cd "$WIFI_TMP/x" && python3 "$CACHE_DIR/ath12k-bdencoder" --extract "$B2" >/dev/null 2>&1 ) || die "ath12k-bdencoder extraction failed"
 [ -s "$WIFI_TMP/x/$WIFI_BOARD_ENTRY.bin" ] || die "board entry '$WIFI_BOARD_ENTRY' not found in board-2.bin"
@@ -113,6 +121,6 @@ sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_window
 ## 6. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
-  STAGE="$STAGE" VERSION="1.6" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
+  STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"

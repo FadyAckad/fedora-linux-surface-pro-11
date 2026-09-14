@@ -10,8 +10,12 @@ PAYLOAD="$KDIR/payload"
 MODDIR="$PAYLOAD/usr/lib/modules/$KERNEL_ABI"
 mkdir -p "$KDIR"
 
-if [ -n "$(rpm_of kernel-sp11)" ] && [ "${FORCE:-0}" != 1 ]; then
-  log "kernel RPM already built: $(rpm_of kernel-sp11) (FORCE=1 to rebuild)"; exit 0
+CACHED=$(rpm_of kernel-sp11)
+if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
+  if rpm -qpl "$CACHED" 2>/dev/null | grep -x "/boot/vmlinuz-$KERNEL_ABI" >/dev/null; then
+    log "kernel RPM already built: $CACHED (FORCE=1 to rebuild)"; exit 0
+  fi
+  log "cached $(basename "$CACHED") is not kernel $KERNEL_ABI; rebuilding"
 fi
 
 # Options the ISO depends on. The build fails if the config lost any of them.

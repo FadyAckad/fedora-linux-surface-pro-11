@@ -42,17 +42,20 @@ verify_sha256 "$CACHE_DIR/sp11-bt-set-addr.c" "$BT_HELPER_SHA256"
 fetch "$BDENCODER_URL" "$CACHE_DIR/ath12k-bdencoder"
 python3 -m py_compile "$CACHE_DIR/ath12k-bdencoder" || die "ath12k-bdencoder is not valid Python"
 
-## linux-firmware board-2.bin (WCN7850) from Fedora's atheros-firmware package
-WIFI_DIR="$CACHE_DIR/wifi"; mkdir -p "$WIFI_DIR"
-if ! ls "$WIFI_DIR"/atheros-firmware-*.rpm >/dev/null 2>&1; then
-  log "downloading atheros-firmware"
+## linux-firmware board-2.bin (WCN7850) from Fedora's atheros-firmware package. Unlike the pinned downloads
+## above, the dnf caches float with the repos and carry no checksum: key them by release and honour FORCE=1.
+WIFI_DIR="$CACHE_DIR/wifi/f$FEDORA_RELEASE"; mkdir -p "$WIFI_DIR"
+if [ "${FORCE:-0}" = 1 ] || ! ls "$WIFI_DIR"/atheros-firmware-*.rpm >/dev/null 2>&1; then
+  log "downloading atheros-firmware (Fedora $FEDORA_RELEASE)"
+  rm -f "$WIFI_DIR"/atheros-firmware-*.rpm
   ( cd "$WIFI_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" atheros-firmware ) || die "dnf download atheros-firmware failed"
 fi
 ## Runtime dependency RPMs for the live root (same repo state as the build host, so sonames match)
-DEPS_DIR="$CACHE_DIR/rpm-deps"; mkdir -p "$DEPS_DIR"
+DEPS_DIR="$CACHE_DIR/rpm-deps/f$FEDORA_RELEASE"; mkdir -p "$DEPS_DIR"
 for pkg in $LIVE_EXTRA_PKGS; do
-  if ! ls "$DEPS_DIR/$pkg"-[0-9]*.rpm >/dev/null 2>&1; then
-    log "downloading $pkg"
+  if [ "${FORCE:-0}" = 1 ] || ! ls "$DEPS_DIR/$pkg"-[0-9]*.rpm >/dev/null 2>&1; then
+    log "downloading $pkg (Fedora $FEDORA_RELEASE)"
+    rm -f "$DEPS_DIR/$pkg"-[0-9]*.rpm
     ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --arch=aarch64 "$pkg" ) || die "dnf download $pkg failed"
   fi
 done

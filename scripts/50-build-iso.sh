@@ -60,7 +60,7 @@ log "stock kernel in live root: $STOCK_KVER"
 DEP_RPMS=()
 for pkg in $LIVE_EXTRA_PKGS; do
   if as_root rpm --root "$ROOTFS" -q "$pkg" >/dev/null 2>&1; then continue; fi
-  f=$(ls -t "$CACHE_DIR/rpm-deps/$pkg"-[0-9]*.rpm 2>/dev/null | head -1 || true)
+  f=$(ls -t "$CACHE_DIR/rpm-deps/f$FEDORA_RELEASE/$pkg"-[0-9]*.rpm 2>/dev/null | head -1 || true)
   [ -n "$f" ] || die "missing dependency RPM for $pkg (run scripts/10-fetch-sources.sh)"
   DEP_RPMS+=("$f")
 done
