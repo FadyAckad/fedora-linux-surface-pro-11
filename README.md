@@ -77,8 +77,9 @@ scripts/70-export-bt-pairings.sh
 ```
 
 It exports the registry subtree `BTHPORT\Parameters` (one UAC prompt: the keys are readable only with
-elevation), converts every device paired in Windows into BlueZ `info` files with `scripts/bt-pairings-from-hive.py`
-(LTK, EDIV/ERand, IRK, secure-connections flag, link keys for classic devices, names and USB IDs from PnP) and
+elevation), converts the Flex Keyboard and Slim Pen 2 bonds (selected by USB ID, `BT_PAIRING_USB_IDS` in
+`sp11.conf`) into BlueZ `info` files with `scripts/bt-pairings-from-hive.py` (LTK, EDIV/ERand, IRK, key type,
+names and USB IDs from PnP) and
 writes `build/out/sp11-bt-pairings.tar.gz`. Copy the tarball to Fedora via USB and run:
 
 ```bash

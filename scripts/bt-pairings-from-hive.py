@@ -26,7 +26,6 @@ import hivex
 
 ESP_MAC = re.compile(r"^[0-9a-f]{12}$")
 AUTHREQ_MITM = 0x04
-AUTHREQ_SC = 0x08
 
 
 def fmt_mac(raw):
@@ -85,46 +84,48 @@ def address_type(win_type, mac):
     return "static" if (first & 0xC0) == 0xC0 else "public"
 
 
-def le_device(h, node, mac, meta):
-    ltk = value(h, node, "LTK")
-    if ltk is None:
+def device_info(h, node, link_key, mac, meta):
+    """Build one BlueZ info file from an optional LE bond subkey and an optional classic link key."""
+    ltk = value(h, node, "LTK") if node is not None else None
+    if ltk is None and (link_key is None or len(link_key[1]) != 16):
         return None
-    authreq = as_int(value(h, node, "AuthReq")) or 0
-    sc = bool(authreq & AUTHREQ_SC)
-    mitm = bool(authreq & AUTHREQ_MITM)
-    key_type = (2 if sc else 0) + (1 if mitm else 0)
-    ediv = as_int(value(h, node, "EDIV")) or 0
-    rand = as_int(value(h, node, "ERand")) or 0
-    enc = as_int(value(h, node, "KeyLength")) or 16
-    irk = value(h, node, "IRK")
-    win_type = as_int(value(h, node, "AddressType"))
+    techs, desc = [], []
     lines = ["[General]"]
     if meta.get("name"):
         lines.append("Name=%s" % meta["name"])
-    lines += ["AddressType=%s" % address_type(win_type, mac),
-              "SupportedTechnologies=LE;", "Trusted=true", "Blocked=false", ""]
+    if ltk is not None:
+        win_type = as_int(value(h, node, "AddressType"))
+        lines.append("AddressType=%s" % address_type(win_type, mac))
+        techs.append("LE")
+    if link_key is not None:
+        techs.append("BR/EDR")
+    lines += ["SupportedTechnologies=%s;" % ";".join(sorted(techs)), "Trusted=true", "Blocked=false", ""]
     if meta.get("vid") is not None:
         lines += ["[DeviceID]", "Source=2", "Vendor=%d" % meta["vid"],
                   "Product=%d" % meta["pid"], "Version=%d" % meta.get("rev", 0), ""]
-    if irk is not None and any(irk[1]):
-        lines += ["[IdentityResolvingKey]", "Key=%s" % as_hex(irk), ""]
-    lines += ["[LongTermKey]", "Key=%s" % as_hex(ltk), "Authenticated=%d" % key_type,
-              "EncSize=%d" % enc, "EDiv=%d" % ediv, "Rand=%d" % rand, ""]
-    desc = "LE, %s, %s%s" % ("Secure Connections" if sc else "legacy pairing",
-                            "authenticated" if mitm else "unauthenticated",
-                            ", IRK" if irk is not None else "")
-    return "\n".join(lines), desc
-
-
-def classic_device(tb, mac, meta):
-    if tb is None or len(tb[1]) != 16:
-        return None
-    lines = ["[General]"]
-    if meta.get("name"):
-        lines.append("Name=%s" % meta["name"])
-    lines += ["SupportedTechnologies=BR/EDR;", "Trusted=true", "Blocked=false", ""]
-    lines += ["[LinkKey]", "Key=%s" % as_hex(tb), "Type=4", "PINLength=0", ""]
-    return "\n".join(lines), "BR/EDR link key"
+    if link_key is not None:
+        # Windows does not record the HCI key type; 4 = unauthenticated combination key (P-192).
+        lines += ["[LinkKey]", "Key=%s" % as_hex(link_key), "Type=4", "PINLength=0", ""]
+        desc.append("BR/EDR link key")
+    if ltk is not None:
+        authreq = as_int(value(h, node, "AuthReq")) or 0
+        ediv = as_int(value(h, node, "EDIV")) or 0
+        rand = as_int(value(h, node, "ERand")) or 0
+        enc = as_int(value(h, node, "KeyLength")) or 16
+        irk = value(h, node, "IRK")
+        # Windows stores the *requested* AuthReq, so its SC bit does not prove the negotiated method.
+        # Secure Connections always yields EDIV = Rand = 0; legacy pairing never does.
+        sc = ediv == 0 and rand == 0
+        mitm = bool(authreq & AUTHREQ_MITM)
+        key_type = (2 if sc else 0) + (1 if mitm else 0)  # BlueZ Authenticated = MGMT LTK type
+        if irk is not None and any(irk[1]):
+            lines += ["[IdentityResolvingKey]", "Key=%s" % as_hex(irk), ""]
+        lines += ["[LongTermKey]", "Key=%s" % as_hex(ltk), "Authenticated=%d" % key_type,
+                  "EncSize=%d" % enc, "EDiv=%d" % ediv, "Rand=%d" % rand, ""]
+        desc.append("LE %s, %s%s" % ("Secure Connections" if sc else "legacy pairing",
+                                     "authenticated" if mitm else "unauthenticated",
+                                     ", IRK" if irk is not None else ""))
+    return "\n".join(lines), "; ".join(desc)
 
 
 def load_meta(path):
@@ -159,9 +160,19 @@ def main():
     ap.add_argument("--meta", help="JSON from Get-PnpDevice (FriendlyName, InstanceId, HardwareIds)")
     ap.add_argument("--adapter", help="only this adapter address (AA:BB:CC:DD:EE:FF)")
     ap.add_argument("--only", action="append", default=[], help="only this device address (repeatable)")
+    ap.add_argument("--only-usb", action="append", default=[],
+                    help="only devices with this USB VID:PID from --meta, e.g. 045E:0C7A (repeatable)")
     args = ap.parse_args()
     meta = load_meta(args.meta)
     only = {m.upper().replace("-", ":") for m in args.only}
+    for want in args.only_usb:
+        vid, pid = (int(x, 16) for x in want.split(":"))
+        matches = [mac for mac, m in meta.items() if m.get("vid") == vid and m.get("pid") == pid]
+        if not matches:
+            print("no Windows device with USB ID %s found" % want.upper(), file=sys.stderr)
+        only.update(matches)
+    if (args.only or args.only_usb) and not only:
+        sys.exit("device filter matched nothing")
     h = hivex.Hivex(args.hive)
     keys = find_keys_node(h)
     written = []
@@ -172,28 +183,15 @@ def main():
         adapter = fmt_mac(aname)
         if args.adapter and adapter != args.adapter.upper():
             continue
-        # LE bonds: subkeys named by device address
-        for dnode in h.node_children(anode):
-            dname = h.node_name(dnode).lower()
-            if not ESP_MAC.match(dname):
-                continue
+        link_keys = {h.value_key(v).lower(): h.value_value(v) for v in h.node_values(anode)
+                     if ESP_MAC.match(h.value_key(v).lower())}
+        le_nodes = {h.node_name(d).lower(): d for d in h.node_children(anode)
+                    if ESP_MAC.match(h.node_name(d).lower())}
+        for dname in sorted(set(link_keys) | set(le_nodes)):
             mac = fmt_mac(dname)
             if only and mac not in only:
                 continue
-            res = le_device(h, dnode, mac, meta.get(mac, {}))
-            if res:
-                written.append((adapter, mac, res))
-        # classic link keys: values named by device address
-        for v in h.node_values(anode):
-            vname = h.value_key(v).lower()
-            if not ESP_MAC.match(vname):
-                continue
-            mac = fmt_mac(vname)
-            if only and mac not in only:
-                continue
-            if any(w[1] == mac and w[0] == adapter for w in written):
-                continue  # dual-mode device already covered by its LE bond
-            res = classic_device(h.value_value(v), mac, meta.get(mac, {}))
+            res = device_info(h, le_nodes.get(dname), link_keys.get(dname), mac, meta.get(mac, {}))
             if res:
                 written.append((adapter, mac, res))
     if not written:

@@ -1,6 +1,6 @@
 #!/usr/bin/bash
-# Export this machine's Windows Bluetooth pairings (Surface Pro Flex Keyboard, Slim Pen 2, anything else
-# paired in Windows) as BlueZ info files plus an import script, bundled for transfer to the installed Fedora.
+# Export this machine's Windows Bluetooth pairings for the Surface Pro Flex Keyboard and Slim Pen 2
+# (selected by USB ID, BT_PAIRING_USB_IDS in sp11.conf) as BlueZ info files plus an import script, bundled for transfer to the installed Fedora.
 # Runs in WSL. Triggers ONE Windows UAC prompt: the pairing keys are readable only with elevation.
 # Idempotent: re-uses the exported hive from the same day unless FORCE=1.
 . "$(dirname "$0")/lib.sh"
@@ -49,9 +49,10 @@ for d in devs:
 json.dump(devs, open(sys.argv[3], "w"), indent=1)
 PY
 
-log "converting pairing keys for adapter $SP11_BT_MAC"
+log "converting pairing keys for adapter $SP11_BT_MAC (devices: $BT_PAIRING_USB_IDS)"
+usb_args=(); for id in $BT_PAIRING_USB_IDS; do usb_args+=(--only-usb "$id"); done
 python3 "$SP11_ROOT/scripts/bt-pairings-from-hive.py" --adapter "$SP11_BT_MAC" --meta "$OUT/meta.json" \
-  "$OUT/bthport-parameters.hiv" "$OUT" | tee "$OUT/devices.txt"
+  "${usb_args[@]}" "$OUT/bthport-parameters.hiv" "$OUT" | tee "$OUT/devices.txt"
 install -m 0755 "$FILES_DIR/sp11-bt-import-pairings" "$OUT/sp11-bt-import-pairings"
 rm -f "$BUNDLE"
 ( cd "$OUT" && tar -czf "$BUNDLE" --owner=0 --group=0 sp11-bt-import-pairings devices.txt ./*:* )

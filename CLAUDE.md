@@ -137,6 +137,11 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
 - BlueZ 5.86 `info` fields: `[LongTermKey] Key/Authenticated/EncSize/EDiv/Rand` where `Authenticated` is the
   MGMT LTK type (0 legacy, 1 legacy+MITM, 2 SC, 3 SC+MITM); `[IdentityResolvingKey] Key`; `[LinkKey]
   Key/Type/PINLength`; `[General] AddressType=static|public`. Static random addresses need the `0xC0` bits.
+  Windows' `AuthReq` is the requested value (the keyboard shows the SC bit yet has non-zero EDIV/Rand), so
+  the converter decides Secure Connections from `EDIV == ERand == 0` and takes MITM from AuthReq bit 0x04.
+  Dual-mode devices (earbuds) have both a link key value and an LE subkey; they merge into one info with
+  `SupportedTechnologies=BR/EDR;LE;`. Windows' own IRK (`CentralIRK`) is not imported: BlueZ runs with
+  Privacy off, so peripherals see the public adapter address the bond already identifies.
 - Both Surface devices are BLE with static addresses: keyboard `11:22:33:44:55:66` (USB IDs 045E:0C7A),
   pen `11:22:33:44:55:77` (045E:0C0F). Adapter `AA:BB:CC:DD:EE:FF` on both OSes (set by
   `sp11-bluetooth-address@.service`), which is what makes key transfer possible.
