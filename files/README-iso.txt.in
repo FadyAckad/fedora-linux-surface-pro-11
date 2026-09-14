@@ -13,3 +13,9 @@ Installation:  run "Install to Hard Drive". The installed system boots this kern
                a one-shot service (sp11-first-boot) removes the live-only DSP blacklist on the first boot.
 
 RPMs used to build this media are under /sp11/rpms.
+
+Redistribution: this media and the RPMs under /sp11/rpms contain proprietary Qualcomm firmware copied
+               from the Windows installation of the machine that built it. Do not pass them on; build
+               your own from the source repository instead.
+Credits:       kernel ooaklee/linux_ms_dev_kit-sp11 (GPL-2.0); audio topology, UCM and pen integration
+               from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd; Fedora Workstation Live.

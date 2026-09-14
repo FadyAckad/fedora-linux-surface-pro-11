@@ -1,15 +1,8 @@
 # CLAUDE.md — Fedora live ISO for Surface Pro 11 (5G, X1E80100, OLED)
 
-Working notes for future sessions. Everything below was verified in September 2026 on this machine.
+Working notes for future sessions. Everything below was verified in September 2026 on the tested unit
+listed under Target hardware.
 Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee release.
-
-## Ground rules from the owner
-
-Never commit, push or create branches. Short, professional communication; no compliments. Validate
-instead of guessing. Revisit the owner's requirement list at the end of a task. Keep `README.md` and
-this file limited to what concretely works. Do not rebuild or change the ISO on your own initiative:
-deliver improvements as support-RPM/script changes and ask the owner whether each one should also go
-into the ISO.
 
 ## Repository
 
@@ -18,7 +11,17 @@ into the ISO.
   `60-verify-rootfs.sh` checks the remastered root; `70-export-bt-pairings.sh` is a separate tool.
 - `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
 - `files/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`,
-  `/usr/lib/...`) plus the live GRUB menu template.
+  `/usr/lib/...`), the live GRUB menu template and `README-iso.txt.in` (the note inside the ISO; it
+  carries the redistribution warning and credits).
+- The repo is public under GPL-3.0-or-later (`LICENSE`; the support RPM's `License:` tag must agree).
+  Tracked files carry no per-unit identifiers: Bluetooth/Wi-Fi/peripheral addresses, firmware versions,
+  local paths and the owner's name stay out of `CLAUDE.md`, `README.md`, `files/` and `scripts/`.
+  Per-unit values live in `build/hardware.env`, `build/bt-pairings/` and, inside the built RPM,
+  `/etc/sp11/bluetooth-address`. Check before staging:
+  `git grep -nE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}'` must show only the `AA:BB:CC:DD:EE:FF` placeholders.
+- `CLAUDE.local.md` (git-ignored, loaded by Claude Code after this file) holds the owner's private working
+  rules and hand-off notes. `.gitattributes` forces LF. `.gitignore` also blocks `hardware.env`, `*.hiv`,
+  `*.iso`, `*.rpm` and the pairing tarball anywhere in the tree.
 - `build/` (git-ignored): `cache/` (downloads, pinned checkouts, `rpm-deps/`), `kernel/` (source tree and
   payload), `work/iso/` (extracted live root, root-owned), `rpms/`, `out/` (ISO, `.sha256`, pairing
   tarball), `bt-pairings/` (exported hive; secret), `hardware.env`.
@@ -28,20 +31,20 @@ into the ISO.
   commit), so a bump alone triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec.
 - Step 10 honours `FORCE=1` only for the two dnf-downloaded caches (`build/cache/wifi/f<release>`,
   `build/cache/rpm-deps/f<release>`); checksum-pinned downloads are never re-fetched.
-- Hand RPMs and tarballs to the owner via `C:\Users\<user>\Desktop`; they carry them to Fedora on USB.
 
 ## Host
 
-WSL2 Fedora 44 aarch64 on the Surface itself; 12 cores, 11 GiB RAM, passwordless sudo, Windows at
+WSL2 Fedora 44 aarch64 on the Surface itself (tested with 12 cores, 11 GiB RAM), passwordless sudo, Windows at
 `/mnt/c`, `powershell.exe` interop (SMBIOS, panel and Bluetooth detection; one UAC prompt for the
 registry export). No Docker. `00-setup-host.sh` installs everything, including gawk, xz, openssl, cmake,
 dosfstools and python3-hivex, which the stock WSL image lacks.
 
-## Target hardware (this machine)
+## Target hardware (tested unit)
 
 - Product `Microsoft Surface Pro with 5G, 11th Edition`, SKU `Surface_Pro_with_5G_11th_Edition_2077`,
-  X1E80100, Samsung (SDC) OLED 2880x1920, UEFI <firmware version>, two ESPs on the NVMe (Windows and Fedora).
-- Bluetooth `AA:BB:CC:DD:EE:FF`, Wi-Fi `AA:BB:CC:DD:EE:FE`.
+  X1E80100, Samsung (SDC) OLED 2880x1920.
+- Bluetooth and Wi-Fi addresses are per unit. `05-detect-hardware.sh` reads the Bluetooth address into
+  `build/hardware.env`; the support RPM carries it in `/etc/sp11/bluetooth-address`.
 - Device tree `qcom/x1e80100-microsoft-denali-oled.dtb`; the X1P LCD variant
   (`x1p64100-microsoft-denali.dtb`) is a different machine.
 - Upstream regexes are written for the non-5G SKU (`Microsoft Surface Pro, 11th Edition`, SKU `_2076`)
@@ -147,7 +150,7 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - Bluetooth address: the controller enumerates without a public address; `sp11-bt-set-addr.c` (OE
   commit 69f40d5) sets it over raw HCI management before `bluetooth.service`, triggered by udev.
   Upstream's `parse_mac` copies the printed octets in order, but the MGMT payload is a little-endian
-  `bdaddr_t`, so the unpatched helper sets `FF:EE:DD:CC:BB:AA`; `30-build-support-rpm.sh` patches
+  `bdaddr_t`, so the unpatched helper sets the byte-reversed address; `30-build-support-rpm.sh` patches
   `out[i]` to `out[5 - i]` before compiling. `sp11-bt-import-pairings` detects a byte-reversed adapter
   directory under `/var/lib/bluetooth` and says so.
 - Pen: unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`) on the kernel's
@@ -160,7 +163,7 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   system drops those arguments via the kernel-install plugin and `sp11-first-boot.service`.
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` + `/usr/libexec/sp11/sp11-grub-modules` (copies
   `chain.mod` and its dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi`, re-run by an
-  RPM trigger on `grub2-efi-aa64-modules`). Booting Windows through this entry works on this machine.
+  RPM trigger on `grub2-efi-aa64-modules`). Booting Windows through this entry works on the tested unit.
 
 ## Bluetooth dual-boot pairings
 
@@ -173,22 +176,23 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `[General] AddressType=static|public`. Windows' `AuthReq` is the requested value (the keyboard shows
   the SC bit yet has non-zero EDIV/Rand), so the converter decides Secure Connections from
   `EDIV == ERand == 0` and MITM from AuthReq bit 0x04. Both Surface devices: legacy pairing, authenticated,
-  static addresses. Keyboard `11:22:33:44:55:66` (USB 045E:0C7A), pen `11:22:33:44:55:77` (045E:0C0F).
+  static addresses. Keyboard USB ID 045E:0C7A, pen 045E:0C0F.
 - `scripts/70-export-bt-pairings.sh` (WSL, one UAC prompt, always exports afresh because a re-pairing
   rewrites the keys in place) → `build/out/sp11-bt-pairings.tar.gz`;
   converter `scripts/bt-pairings-from-hive.py` (python3-hivex, LE only, filtered by `BT_PAIRING_USB_IDS`);
   importer `/usr/libexec/sp11/sp11-bt-import-pairings` (also inside the tarball). Verified: keyboard
   connects over BLE with battery reporting after import.
 
-## Hardware-verified status (owner reports, 2026-09-13/14, support RPM 1.5)
+## Hardware-verified status (2026-09-13/14, support RPM 1.7)
 
 Working: boot, install, display/GPU, Wi-Fi, Bluetooth with the correct address, touch, pen inking,
 audio, battery, Flatpak, Windows entry in GRUB before UEFI Firmware Settings, shared Windows pairings
 for keyboard and pen, `sp11-bt-import-pairings` and `sp11-diag` under `/usr/libexec/sp11`.
 
-Support RPM 1.6 and `sp11-iptsd` 3.1.0-2.sp11 (built 2026-09-14, in `build/rpms/` and on the Windows
-desktop) are not hardware-verified. The ISO in `build/out/` (sha256 `29eff1be…9e0e3`, 2026-09-14) contains
-them; `60-verify-rootfs.sh` passes on its root.
+Support RPM 1.7 (`sp11-diag` enumerates paired devices instead of fixed addresses; otherwise identical
+to 1.6, which added `sp11-grub-defaults` and the dnf kernel exclusion) was confirmed working on the
+installed system on 2026-09-14. `sp11-iptsd` 3.1.0-2.sp11 restarts the running pen daemon on upgrade.
+The ISO in `build/out/` (sha256 `eb62a087…7fee`, 2026-09-14 evening) contains both.
 
 ## References
 
