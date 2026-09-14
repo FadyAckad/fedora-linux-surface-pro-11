@@ -1,14 +1,16 @@
 #!/usr/bin/bash
 # Import Bluetooth pairings exported from Windows into BlueZ on this Fedora system.
-# Usage: sudo ./sp11-bt-import-pairings [--only AA:BB:CC:DD:EE:FF ...]
-# Expects <ADAPTER>/<DEVICE>/info directories next to this script (as produced by
-# scripts/70-export-bt-pairings.sh on the WSL side). Existing device directories are backed up.
+# Usage: sudo sp11-bt-import-pairings [--from DIR] [--only AA:BB:CC:DD:EE:FF ...]
+# DIR holds <ADAPTER>/<DEVICE>/info directories as produced by scripts/70-export-bt-pairings.sh
+# (default: the current directory, e.g. where sp11-bt-pairings.tar.gz was extracted).
+# Existing device directories are backed up under /var/lib/sp11/.
 set -euo pipefail
-here=$(cd "$(dirname "$0")" && pwd)
+here=$PWD
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 only=()
 while [ $# -gt 0 ]; do
   case "$1" in
+    --from) here=$(cd "$2" && pwd); shift 2 ;;
     --only) only+=("$(printf '%s' "$2" | tr 'a-f-' 'A-F:')"); shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -17,7 +19,7 @@ wanted() { [ ${#only[@]} -eq 0 ] && return 0; local m; for m in "${only[@]}"; do
 
 shopt -s nullglob
 infos=("$here"/*:*:*:*:*:*/*:*:*:*:*:*/info)
-[ ${#infos[@]} -gt 0 ] || { echo "no <ADAPTER>/<DEVICE>/info files next to $0" >&2; exit 1; }
+[ ${#infos[@]} -gt 0 ] || { echo "no <ADAPTER>/<DEVICE>/info files under $here (use --from DIR)" >&2; exit 1; }
 
 stamp=$(date +%Y%m%d-%H%M%S)
 backup=/var/lib/sp11/bluetooth-backup-$stamp

@@ -1,0 +1,44 @@
+#!/usr/bin/bash
+# Collect Surface Pro 11 pen/touch/Bluetooth diagnostics into one file for offline review.
+# Usage: sudo sp11-diag [output-file]   (default: ./sp11-diag-<date>.txt in the current directory)
+set -u
+out=${1:-"$PWD/sp11-diag-$(date +%Y%m%d-%H%M%S).txt"}
+[ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
+exec >"$out" 2>&1
+sec() { printf '\n===== %s =====\n' "$*"; }
+run() { printf '\n$ %s\n' "$*"; "$@" 2>&1 | head -n "${LINES_MAX:-200}"; }
+
+sec "system"; run uname -r; run uptime; run rpm -q kernel-sp11 sp11-surface-support sp11-iptsd bluez
+run cat /proc/cmdline
+sec "sysctl / secure boot"; run sysctl kernel.apparmor_restrict_unprivileged_userns; run mokutil --sb-state
+
+sec "touchscreen kernel driver (mshw0485)"; run lsmod; run dmesg | grep -iE 'mshw0485|g6ts|hid-generic|hidraw|spi|qspi|iptsd' | tail -n 80
+run ls -l /sys/bus/spi/drivers/mshw0485_touch/ /sys/bus/spi/devices/
+sec "hidraw nodes and their HID parents"
+for h in /sys/class/hidraw/hidraw*; do [ -e "$h" ] || continue; printf '%s -> %s\n' "$(basename "$h")" "$(readlink -f "$h/device")"; done
+for h in /sys/class/hidraw/hidraw*; do [ -e "$h" ] || continue
+  case "$(readlink -f "$h/device")" in */001C:045E:0C83.*|*/001C:045E:0C80.*)
+    dev=/dev/$(basename "$h"); sec "SP11 digitizer bridge $dev"
+    run udevadm info "$dev"; printf '\n$ %s\n' "/usr/libexec/sp11-iptsd-check-device $dev"
+    /usr/libexec/sp11-iptsd-check-device "$dev"; echo "check-device exit: $?"; run ldd /usr/libexec/sp11-iptsd
+    LINES_MAX=60 run udevadm test "$(udevadm info -q path "$dev")" 2>&1 | grep -iE 'sp11|SYSTEMD_WANTS|hidraw' ;;
+  esac
+done
+sec "iptsd service"; run systemctl list-units 'sp11-iptsd@*' --all --no-pager
+for u in $(systemctl list-units 'sp11-iptsd@*' --all --plain --no-legend 2>/dev/null | awk '{print $1}'); do run systemctl status "$u" --no-pager -l; done
+run journalctl -b --no-pager -u 'sp11-iptsd@*' -n 80
+run ls -l /etc/udev/rules.d/ /usr/lib/udev/rules.d/70-sp11-iptsd.rules /usr/lib/systemd/system/sp11-iptsd@.service /usr/lib/systemd/system-sleep/
+run pgrep -af iptsd
+sec "input devices"; run cat /proc/bus/input/devices
+run sh -c 'command -v libinput >/dev/null && libinput list-devices'
+sec "suspend/resume history this boot"; run journalctl -b --no-pager -g 'sp11-iptsd-sleep|Suspending|Resumed|PM: suspend' -n 40
+
+sec "bluetooth controller"; run bluetoothctl show; run bluetoothctl devices; run rfkill list
+run systemctl status 'sp11-bluetooth-address@*' --no-pager -l
+run ls -la /var/lib/bluetooth/ /var/lib/bluetooth/*/
+for d in 11:22:33:44:55:77 11:22:33:44:55:66; do run bluetoothctl info "$d"; done
+run journalctl -b --no-pager -u bluetooth -n 60
+sec "recent journal errors"; run journalctl -b --no-pager -p err -n 60
+sec "done"; echo "written $(date -u +%FT%TZ)"
+exec >/dev/tty 2>&1 || true
+echo "diagnostics written to $out"

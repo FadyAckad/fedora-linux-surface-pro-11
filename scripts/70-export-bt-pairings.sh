@@ -58,4 +58,4 @@ rm -f "$BUNDLE"
 ( cd "$OUT" && tar -czf "$BUNDLE" --owner=0 --group=0 sp11-bt-import-pairings devices.txt ./*:* )
 chmod 0600 "$BUNDLE"
 log "bundle: $BUNDLE"
-log "on Fedora: tar -xzf sp11-bt-pairings.tar.gz && sudo ./sp11-bt-import-pairings"
+log "on Fedora: tar -xzf sp11-bt-pairings.tar.gz && sudo /usr/libexec/sp11/sp11-bt-import-pairings   (or sudo ./sp11-bt-import-pairings)"
