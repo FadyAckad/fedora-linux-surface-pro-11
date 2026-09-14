@@ -1,34 +1,37 @@
 # CLAUDE.md — Fedora live ISO for Surface Pro 11 (5G, X1E80100, OLED)
 
-Working notes for future sessions. Everything below was verified during the September 2026 build.
+Working notes for future sessions. Everything below was verified in September 2026 on this machine.
 Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee release.
 
 ## Ground rules from the owner
 
 Never commit, push or create branches. Short, professional communication; no compliments. Validate
-instead of guessing. Revisit the owner's requirement list at the end of a task. `README.md` is the
-user-facing guide; keep it concise and current when behaviour changes. Do not rebuild or change the
-ISO on your own initiative: deliver improvements as support-RPM/script changes and ask the owner
-whether each one should also go into the ISO.
+instead of guessing. Revisit the owner's requirement list at the end of a task. Keep `README.md` and
+this file limited to what concretely works. Do not rebuild or change the ISO on your own initiative:
+deliver improvements as support-RPM/script changes and ask the owner whether each one should also go
+into the ISO.
 
 ## Repository
 
 - `sp11.conf`: every version, URL, regex and boot-policy string; scripts source it via `scripts/lib.sh`.
-- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs all;
-  `60-verify-rootfs.sh` checks the remastered root, simulates Anaconda's kernel-install in a chroot,
-  and tests the Windows generator against a fake ESP on a loop device.
+- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00–50;
+  `60-verify-rootfs.sh` checks the remastered root; `70-export-bt-pairings.sh` is a separate tool.
 - `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
-- `files/`: payload of `sp11-surface-support` plus the live GRUB menu template.
-- `build/` (git-ignored): `cache/`, `kernel/` (source tree and payload), `work/iso/` (extracted live
-  root, root-owned), `rpms/`, `out/` (ISO and `.sha256`), `hardware.env`.
+- `files/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`,
+  `/usr/lib/...`) plus the live GRUB menu template.
+- `build/` (git-ignored): `cache/` (downloads, pinned checkouts, `rpm-deps/`), `kernel/` (source tree and
+  payload), `work/iso/` (extracted live root, root-owned), `rpms/`, `out/` (ISO, `.sha256`, pairing
+  tarball), `bt-pairings/` (exported hive; secret), `hardware.env`.
 - Bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the support payload changes, so
-  `dnf upgrade` works on the installed system. The RPM's `%posttrans` regenerates `grub.cfg`.
+  `dnf upgrade` works on the installed system. Its `%posttrans` regenerates `grub.cfg`.
+- Hand RPMs and tarballs to the owner via `C:\Users\<user>\Desktop`; they carry them to Fedora on USB.
 
 ## Host
 
 WSL2 Fedora 44 aarch64 on the Surface itself; 12 cores, 11 GiB RAM, passwordless sudo, Windows at
-`/mnt/c`, `powershell.exe` interop (used for SMBIOS, panel and Bluetooth detection). No Docker.
-Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cmake, dosfstools.
+`/mnt/c`, `powershell.exe` interop (SMBIOS, panel and Bluetooth detection; one UAC prompt for the
+registry export). No Docker. `00-setup-host.sh` installs everything, including gawk, xz, openssl, cmake,
+dosfstools and python3-hivex, which the stock WSL image lacks.
 
 ## Target hardware (this machine)
 
@@ -67,16 +70,16 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
   live root `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does `search --file
   --set=root /boot/0x503d6c7e` then `configfile ($root)/boot/grub2/grub.cfg`. Kernel
-  `/boot/aarch64/loader/linux` (stubble PE, 21 `.dtbauto` sections), initrd `/boot/aarch64/loader/initrd`,
-  font `/boot/aarch64/loader/grub2/fonts/unicode.pf2`. `xorriso ... -boot_image any replay -map ...`
+  `/boot/aarch64/loader/linux`, initrd `/boot/aarch64/loader/initrd`, font
+  `/boot/aarch64/loader/grub2/fonts/unicode.pf2`. `xorriso ... -boot_image any replay -map ...`
   reproduces the layout; `50-build-iso.sh` reads these paths from the ISO instead of assuming them.
 - Fedora's aarch64 GRUB image has `devicetree`, `gfxterm`, `loadfont`, `blscfg`, `fat`, `efi_gop`,
   `all_video`, `search_fs_uuid`, `part_gpt`, `fwsetup`, `efinet`, `net`, `boot`. It lacks `efi_uga`,
   `video_bochs`, `video_cirrus` and `chain` (Fedora builds `chain` into x86 images only).
 - `insmod NAME` resolves `$prefix/arm64-efi/NAME.mod`; on installed Fedora `$prefix` is `/boot/grub2`
-  (set by `gen_grub_cfgstub`, which Anaconda calls to write the ESP stub). Module loading is refused only
-  under lockdown, which is tied to Secure Boot being enabled. `grub2-efi-aa64-modules` (installed by
-  default) provides the version-matched `/usr/lib/grub/arm64-efi/*.mod`.
+  (set by `gen_grub_cfgstub`, which Anaconda calls to write the ESP stub). Module loading works with
+  Secure Boot disabled. `grub2-efi-aa64-modules` (installed by default) provides the version-matched
+  `/usr/lib/grub/arm64-efi/*.mod`.
 - Fedora's os-prober has no EFI Windows probe on aarch64 (`os-probes/mounted/efi/` holds only
   `05shell`), so `GRUB_DISABLE_OS_PROBER=false` never finds Windows.
 - GRUB menu order follows `/etc/grub.d/` filename order; `30_uefi-firmware` emits UEFI Firmware
@@ -121,55 +124,50 @@ Tools that were missing and are now in `00-setup-host.sh`: gawk, xz, openssl, cm
   the support RPM replaces it and re-applies on an `alsa-ucm` trigger.
 - Wi-Fi: WCN7850, PCI 17cb:1107, `qmi-board-id=255`; no exact `board-2.bin` entry, so the 17cb:3378
   entry is extracted with `ath12k-bdencoder` as `board.bin`. `disable-rfkill` is in the Denali DTS.
-- Bluetooth: the controller enumerates without a public address; `sp11-bt-set-addr.c` (OE commit
-  69f40d5) sets it over raw HCI management before `bluetooth.service`, triggered by udev. Upstream's
-  `parse_mac` copies the printed octets in order, but the MGMT payload is a little-endian `bdaddr_t`, so
-  the controller came up byte-reversed (`FF:EE:DD:CC:BB:AA`). `30-build-support-rpm.sh` patches
-  `out[i]` to `out[5 - i]` before compiling (support RPM ≥ 1.4). Changing the address moves BlueZ's storage
-  directory; pairings made under the reversed address are orphaned and stay in the old directory.
+- Bluetooth address: the controller enumerates without a public address; `sp11-bt-set-addr.c` (OE
+  commit 69f40d5) sets it over raw HCI management before `bluetooth.service`, triggered by udev.
+  Upstream's `parse_mac` copies the printed octets in order, but the MGMT payload is a little-endian
+  `bdaddr_t`, so the controller came up as `FF:EE:DD:CC:BB:AA`. `30-build-support-rpm.sh` patches
+  `out[i]` to `out[5 - i]` before compiling (support RPM ≥ 1.4). Pairings made under the reversed address
+  stay orphaned in `/var/lib/bluetooth/FF:EE:DD:CC:BB:AA/`.
 - Pen: unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`) on the kernel's
-  HIDRAW bridge `001C:045E:0C83`; integration templates from OE `userspace/iptsd-sp11`; needs cmake.
+  HIDRAW bridge (`hidraw` parent `001C:045E:0C83.*`, created by `mshw0485_touch` with `ipts_hid_bridge`
+  defaulting to on); integration templates from OE `userspace/iptsd-sp11`; the build needs cmake for
+  meson to find Microsoft.GSL. The kernel's own "Microsoft Surface G6 Pen" input device is silent by
+  design; inking comes from the `sp11-iptsd@dev-hidrawN.service` started by the udev rule.
 - Live media boots with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (an ADSP
   restart resets USB-C while rooted on USB), so no audio or battery in the live session; the installed
   system drops those arguments via the kernel-install plugin and `sp11-first-boot.service`.
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` + `/usr/libexec/sp11/sp11-grub-modules` (copies
-  `chain.mod` and its dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi`, re-run by an RPM
-  trigger on `grub2-efi-aa64-modules`). Chainloading through GRUB changes the measured boot path; a
-  BitLocker recovery prompt on the first Windows boot is possible.
+  `chain.mod` and its dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi`, re-run by an
+  RPM trigger on `grub2-efi-aa64-modules`). Booting Windows through this entry works on this machine.
 
 ## Bluetooth dual-boot pairings
 
-- Windows keeps bonds in `HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys\<adapter>`:
-  LE devices as subkeys `<device>` with `LTK` (16 B), `KeyLength`, `ERand` (QWORD, little-endian → BlueZ
-  `Rand` decimal), `EDIV`, `IRK`, `AddressType` (1 = random), `AuthReq` (0x04 MITM, 0x08 Secure
-  Connections); classic devices as 16-byte values named by address. The `Keys` key is SYSTEM-only, but
-  `reg save` of the parent `Parameters` key works from an elevated prompt (backup semantics).
-- BlueZ 5.86 `info` fields: `[LongTermKey] Key/Authenticated/EncSize/EDiv/Rand` where `Authenticated` is the
-  MGMT LTK type (0 legacy, 1 legacy+MITM, 2 SC, 3 SC+MITM); `[IdentityResolvingKey] Key`; `[LinkKey]
-  Key/Type/PINLength`; `[General] AddressType=static|public`. Static random addresses need the `0xC0` bits.
-  Windows' `AuthReq` is the requested value (the keyboard shows the SC bit yet has non-zero EDIV/Rand), so
-  the converter decides Secure Connections from `EDIV == ERand == 0` and takes MITM from AuthReq bit 0x04.
-  Dual-mode devices (earbuds) have both a link key value and an LE subkey; they merge into one info with
-  `SupportedTechnologies=BR/EDR;LE;`. Windows' own IRK (`CentralIRK`) is not imported: BlueZ runs with
-  Privacy off, so peripherals see the public adapter address the bond already identifies.
-- Both Surface devices are BLE with static addresses: keyboard `11:22:33:44:55:66` (USB IDs 045E:0C7A),
-  pen `11:22:33:44:55:77` (045E:0C0F). Adapter `AA:BB:CC:DD:EE:FF` on both OSes (set by
-  `sp11-bluetooth-address@.service`), which is what makes key transfer possible.
-- `scripts/70-export-bt-pairings.sh` (WSL, one UAC prompt) → `build/out/sp11-bt-pairings.tar.gz` with
-  `files/sp11-bt-import-pairings`; converter `scripts/bt-pairings-from-hive.py` (python3-hivex). Tested with
-  a synthetic hive built from `C:\Users\Default\NTUSER.DAT` and an overlay chroot of the live root.
-  BitLocker state of `C:` is unknown (needs elevation), so nothing reads the NTFS partition from Linux.
+- Windows keeps LE bonds in `HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys\<adapter>\
+  <device>`: `LTK` (16 B), `KeyLength`, `ERand` (QWORD, little-endian → BlueZ `Rand` decimal), `EDIV`,
+  `IRK`, `AddressType` (1 = random), `AuthReq` (0x04 MITM). The `Keys` key is SYSTEM-only, but
+  `reg save` of the parent `Parameters` key works from an elevated prompt.
+- BlueZ `info` fields: `[LongTermKey] Key/Authenticated/EncSize/EDiv/Rand` where `Authenticated` is the
+  MGMT LTK type (0 legacy, 1 legacy+MITM, 2 SC, 3 SC+MITM); `[IdentityResolvingKey] Key`;
+  `[General] AddressType=static|public`. Windows' `AuthReq` is the requested value (the keyboard shows
+  the SC bit yet has non-zero EDIV/Rand), so the converter decides Secure Connections from
+  `EDIV == ERand == 0` and MITM from AuthReq bit 0x04. Both Surface devices: legacy pairing, authenticated,
+  static addresses. Keyboard `11:22:33:44:55:66` (USB 045E:0C7A), pen `11:22:33:44:55:77` (045E:0C0F).
+- `scripts/70-export-bt-pairings.sh` (WSL, one UAC prompt) → `build/out/sp11-bt-pairings.tar.gz`;
+  converter `scripts/bt-pairings-from-hive.py` (python3-hivex, LE only, filtered by `BT_PAIRING_USB_IDS`);
+  importer `/usr/libexec/sp11/sp11-bt-import-pairings` (also inside the tarball). Verified: keyboard
+  connects over BLE with battery reporting after import.
 
-## Hardware-verified status (owner reports, 2026-09-13)
+## Hardware-verified status (owner reports, 2026-09-13/14)
 
-Boot, install, display/GPU, Wi-Fi, Bluetooth, touch, pen, audio, battery: working. Flatpak: working
-with the sysctl fix (support RPM 1.1). Windows entry in GRUB: working (RPM 1.2); RPM 1.3 only moves it
-before UEFI Firmware Settings. Bluetooth pairing import (2026-09-14): the import refused because the
-controller address was byte-reversed; RPM 1.4 fixes the helper, hardware result pending. The current
-`build/out` ISO was built with RPM 1.1; rerun `scripts/50-build-iso.sh` before distributing new media.
+Working: boot, install, display/GPU, Wi-Fi, Bluetooth, touch, pen inking (with `spdlog` present),
+audio, battery, Flatpak (support RPM ≥ 1.1), Windows entry in GRUB before UEFI Firmware Settings
+(≥ 1.3), correct Bluetooth address (≥ 1.4), shared Windows pairings for keyboard and pen.
+Support RPM 1.5 adds `sp11-bt-import-pairings` and `sp11-diag` under `/usr/libexec/sp11`.
 
 ## References
 
 rjindael/fedora-surface-pro-11 (Fedora bring-up notes); ooaklee/linux-surface-pro-11-oe (kernel, audio,
-iptsd releases, ADRs); ooaklee/lexr.sh `internal/image/fedora/*.go` (remaster design reference, never
-hardware-qualified, issue #17); Fedora wiki "Snapdragon WoA Laptop Install".
+iptsd releases, ADRs); ooaklee/lexr.sh `internal/image/fedora/*.go` (remaster design reference);
+Fedora wiki "Snapdragon WoA Laptop Install"; Arch wiki "Bluetooth" (dual-boot pairing).
