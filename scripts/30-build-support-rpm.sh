@@ -7,7 +7,7 @@ require_cmd gcc python3 xz rpm2cpio cpio rpmbuild
 load_hardware
 
 # Bump whenever anything under files/ or the generated payload changes, so `dnf upgrade` picks it up.
-VERSION="1.7"
+VERSION="1.9"
 
 CACHED=$(rpm_of sp11-surface-support)
 if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then

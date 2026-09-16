@@ -121,7 +121,13 @@ Support RPM history:
 - 1.6: `sp11-grub-defaults` as the single writer of the `/etc/default/grub` policy; dnf exclusion of the
   stock kernel packages.
 - 1.7: `sp11-diag` reports every Bluetooth device BlueZ knows instead of two fixed addresses; license
-  tag GPL-3.0-or-later. Confirmed on hardware 2026-09-14; the current ISO carries it.
+  tag GPL-3.0-or-later. Confirmed on hardware 2026-09-14.
+- 1.8: the stock-kernel dnf exclusion also covers `kernel-uki-*`. On aarch64 the boot kernel is owned by
+  `kernel-uki-dtbloader`, not `kernel-core`, so on Fedora 45 an upgrade could still add a stock kernel
+  boot entry. Found on an installed system 2026-09-16.
+- 1.9: corrected the override hint in the exclusion file. dnf5 has no `--disableexcludes`; use
+  `dnf --setopt=disable_excludes='*' ...`, which is also needed to *remove* an excluded stock kernel.
+  The current ISO carries it.
 
 ## Bluetooth pairings from Windows (Flex Keyboard, Slim Pen 2)
 

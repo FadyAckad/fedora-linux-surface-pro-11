@@ -30,6 +30,7 @@ check r grep -q "^kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
 stock=$(r find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' ! -name "vmlinuz-$KERNEL_ABI" | wc -l); check test "$stock" -eq 0
+check r grep -q 'kernel-uki-\*' "$ROOTFS/etc/dnf/libdnf5.conf.d/90-sp11.conf"
 check r rpm --root "$ROOTFS" -q kernel-sp11 sp11-surface-support sp11-iptsd
 for rpmf in "$(rpm_of kernel-sp11)" "$(rpm_of sp11-surface-support)" "$(rpm_of sp11-iptsd)"; do
   check r rpm --root "$ROOTFS" -U --test --replacepkgs "$rpmf"
