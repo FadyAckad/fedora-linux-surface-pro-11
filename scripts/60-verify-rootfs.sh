@@ -28,6 +28,8 @@ check r test -x "$ROOTFS/etc/grub.d/29_sp11_windows"
 check r test -f "$ROOTFS/usr/lib/grub/arm64-efi/chain.mod"
 check r grep -q "^kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
+check r test -x "$ROOTFS/usr/libexec/sp11/sp11-remove-stock-kernels"
+check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-remove-stock-kernels.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
 stock=$(r find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' ! -name "vmlinuz-$KERNEL_ABI" | wc -l); check test "$stock" -eq 0
 bls=$(r find "$ROOTFS/boot/loader/entries" -name '*.conf' 2>/dev/null | wc -l); check test "$bls" -eq 0

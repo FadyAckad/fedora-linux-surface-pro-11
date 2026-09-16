@@ -73,6 +73,8 @@ fi
 /usr/lib/systemd/system/sp11-bluetooth-address@.service
 /usr/lib/systemd/system/sp11-first-boot.service
 /usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service
+/usr/lib/systemd/system/sp11-remove-stock-kernels.service
+/usr/lib/systemd/system/multi-user.target.wants/sp11-remove-stock-kernels.service
 /usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules
 /usr/lib/kernel/install.d/15-sp11-surface.install
 /etc/grub.d/29_sp11_windows

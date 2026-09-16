@@ -138,7 +138,12 @@ Support RPM history:
   boot entry. Found on an installed system 2026-09-16.
 - 1.9: corrected the override hint in the exclusion file. dnf5 has no `--disableexcludes`; use
   `dnf --setopt=disable_excludes='*' ...`, which is also needed to *remove* an excluded stock kernel.
-  The current ISO carries it.
+- 2.0: the Adreno microcode (`gen70500_sqe.fw`, `gen70500_gmu.bin`) goes into the initramfs, so early boot
+  no longer logs `failed to load gen70500_sqe.fw`; the package now requires `qcom-firmware`.
+- 2.1: `sp11-remove-stock-kernels.service` erases the hidden stock kernel once — also on systems installed
+  earlier, at the next boot after upgrading. That stops `dracut --regenerate-all` failing with
+  `Can't write to /boot/efi/...`, and removes boot entries whose kernel image is missing. Tested against
+  the Fedora 45 root; not yet run on hardware. The current ISO carries it.
 
 ## Bluetooth pairings from Windows (Flex Keyboard, Slim Pen 2)
 

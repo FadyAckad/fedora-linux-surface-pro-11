@@ -185,6 +185,19 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   ships `qcom/gen70500_sqe.fw.xz` and `qcom/gen70500_gmu.bin.xz`; `files/90-sp11.conf` installs both and the
   support RPM now `Requires: qcom-firmware`.
 
+- The live root keeps the stock kernel packages for Anaconda with their `/boot` images deleted, which
+  leaves every installed system a half-removed kernel. dracut 111 without an output path writes
+  `/boot/initramfs-<ver>.img` only when `/boot/vmlinuz-<ver>` exists; otherwise, with `/boot/efi` mounted,
+  it falls back to `/boot/efi/<machine-id>/<ver>/initrd`. `dracut --regenerate-all` therefore fails with
+  `Can't write to ...` for the stock kernel, then carries on to the next kernel and exits non-zero.
+  `sp11-remove-stock-kernels.service` (one shot with its own stamp, `/var/lib/sp11/stock-kernels-removed.done`,
+  so it also runs on systems whose first boot already happened) erases the stock set with plain `rpm -e`,
+  removes module trees no package owns, and deletes BLS entries whose kernel image is missing. The entry
+  cleanup is keyed on the image because `rpm -e` has usually already removed the module tree the version
+  could have been read from. It refuses unless the SP11 kernel is running and never touches the SP11 entry.
+  Nothing outside the kernel family requires those packages on 45 (`rpm -e --test` is clean). Tested in an
+  overlay of the 45 root, including the refusal path and a second idempotent run; not yet run on hardware.
+
 ## Peripherals and userspace
 
 - Firmware: ADSP/CDSP/GPU blobs come from this device's Windows DriverStore (`surfacepro_ext_adsp8380*`,

@@ -1,0 +1,93 @@
+#!/usr/bin/bash
+# Remove the stock Fedora kernel from an installed Surface Pro 11 system (one shot, idempotent).
+#
+# The live root keeps the stock kernel packages installed for Anaconda but deletes their /boot images, so the
+# SP11 kernel is the only one Anaconda installs. On the installed system that leaves a half-removed kernel,
+# modules under /usr/lib/modules and no /boot/vmlinuz, and three things go wrong:
+#   - `dracut --regenerate-all` finds its modules.dep, finds no /boot/vmlinuz-<ver>, falls back to
+#     /boot/efi/<machine-id>/<ver>/initrd and fails with "Can't write to ...";
+#   - dnf can install a newer stock kernel alongside it and give that a boot entry;
+#   - removing either by hand needs `dnf --setopt=disable_excludes='*'`.
+# Erasing the set once fixes all three. Plain `rpm -e` of the whole set: offline, untouched by dnf's
+# excludes, and the family's dependencies on each other resolve without --nodeps. This is a one-time
+# cleanup, not an enforcer: once the stamp exists, a stock kernel installed deliberately later is left alone.
+set -eu
+shopt -s nullglob
+. /etc/sp11/sp11.env
+state=/var/lib/sp11/stock-kernels-removed.done
+
+[ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
+if grep -qw rd.live.image /proc/cmdline; then echo "live session, nothing to do"; exit 0; fi
+# Never remove kernels from a system that booted something other than the SP11 kernel.
+running=$(uname -r)
+if [ "$running" != "$SP11_KERNEL_ABI" ]; then
+  echo "running $running, not the SP11 kernel $SP11_KERNEL_ABI; leaving the stock kernel alone" >&2
+  exit 1
+fi
+
+# The package names 90-sp11-dnf.conf excludes. kernel-tools*, kernel-headers and kernel-devel stay: they own
+# nothing in /boot, and glibc-devel requires kernel-headers.
+stock() {
+  rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel kernel-core kernel-modules \
+    kernel-modules-core kernel-modules-extra kernel-modules-internal 'kernel-uki-*' | sort -u
+}
+# Versions to clean up afterwards: those of the packages about to go (read now, while rpm still knows them),
+# plus any module tree no package owns, e.g. from an interrupted run or a kernel removed by hand.
+declare -A gone=()
+mapfile -t pkgs < <(stock)
+if [ ${#pkgs[@]} -gt 0 ]; then
+  # A kernel package's uname -r is VERSION-RELEASE.ARCH.
+  while read -r v; do gone[$v]=1; done < <(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' "${pkgs[@]}")
+  echo "removing stock kernel packages: ${pkgs[*]}"
+  rpm -e "${pkgs[@]}" || echo "rpm -e reported errors; checking what is left" >&2
+  mapfile -t left < <(stock)
+  if [ ${#left[@]} -gt 0 ]; then echo "still installed: ${left[*]}" >&2; exit 1; fi
+fi
+for d in /usr/lib/modules/*/; do
+  d=${d%/}; v=${d##*/}
+  [ "$v" != "$SP11_KERNEL_ABI" ] && [ ! -e "/boot/vmlinuz-$v" ] || continue
+  if rpm -qf "$d" >/dev/null 2>&1; then continue; fi
+  gone[$v]=1
+done
+
+# True if any installed package owns a file below DIR. rpm -e leaves only generated files (modules.dep and
+# friends) behind, so this is a handful of queries; a kernel-devel build symlink would stop the removal.
+owned_inside() {
+  local f
+  while IFS= read -r -d '' f; do
+    if rpm -qf "$f" >/dev/null 2>&1; then return 0; fi
+  done < <(find "$1" \( -type f -o -type l \) -print0 2>/dev/null)
+  return 1
+}
+# A surviving modules.dep alone keeps a version a --regenerate-all target, so the whole tree goes.
+for v in "${!gone[@]}"; do
+  [ -n "$v" ] && [ "$v" != "$SP11_KERNEL_ABI" ] || continue
+  d=/usr/lib/modules/$v
+  if [ -d "$d" ]; then
+    if owned_inside "$d"; then echo "keeping $d: a package still owns files in it" >&2
+    else echo "removing $d"; rm -rf --one-file-system "$d"; fi
+  fi
+  rm -rf "/boot/dtb-$v"
+  rm -f "/boot/initramfs-$v.img" "/boot/config-$v" "/boot/System.map-$v" "/boot/.vmlinuz-$v.hmac"
+done
+
+# Boot entries whose kernel image no longer exists: the removed stock kernel's, and on installs from images
+# built before the root-side BLS cleanup in 50-build-iso.sh, the source media's stock and rescue entries.
+# Keyed on the image, not the version, because rpm -e has usually already taken the module tree the version
+# could have been read from. BLS paths are relative to the partition holding them. The SP11 entry is never
+# touched, even if /boot were to look empty.
+for e in /boot/loader/entries/*.conf; do
+  case "$e" in *"$SP11_KERNEL_ABI"*) continue ;; esac
+  img=$(sed -n 's/^linux[[:space:]]\+//p' "$e" | head -n1)
+  [ -n "$img" ] || continue
+  case "$img" in *"$SP11_KERNEL_ABI"*) continue ;; esac
+  if [ ! -e "/boot$img" ] && [ ! -e "$img" ]; then echo "removing $e (no $img)"; rm -f "$e"; fi
+done
+
+if command -v grub2-mkconfig >/dev/null 2>&1; then
+  cfg=$(readlink -f /etc/grub2-efi.cfg 2>/dev/null || echo /boot/grub2/grub.cfg)
+  grub2-mkconfig -o "$cfg" >/dev/null 2>&1 || :
+fi
+
+install -d /var/lib/sp11
+date -u +%FT%TZ > "$state"
