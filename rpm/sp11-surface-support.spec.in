@@ -16,6 +16,8 @@ AutoReqProv:    no
 Requires:       bluez
 Requires:       alsa-ucm
 Requires:       dracut
+# The dracut policy in 90-sp11.conf installs this package's Adreno microcode into the initramfs.
+Requires:       qcom-firmware
 Requires:       systemd
 Requires:       systemd-udev
 Requires:       grub2-tools-minimal
