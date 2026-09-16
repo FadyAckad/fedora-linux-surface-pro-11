@@ -7,7 +7,8 @@ Builds a Fedora Workstation Live ISO (aarch64) that boots and installs on a Micr
 OLED device tree loaded explicitly by GRUB. The scripts read your unit's identity, Bluetooth address
 and device firmware from its Windows installation, so the media they produce is tailored to that unit.
 
-Verified on the tested unit (5G SKU `Surface_Pro_with_5G_11th_Edition_2077`): display with GPU acceleration, Wi-Fi, Bluetooth, touchscreen, pen, speakers,
+Verified on the tested unit (5G SKU `Surface_Pro_with_5G_11th_Edition_2077`), on Fedora 44 and on a
+Fedora 45 Beta build: display with GPU acceleration, Wi-Fi, Bluetooth, touchscreen, pen, speakers,
 microphone, keyboard/touchpad, battery, Flatpak, Windows in the GRUB menu, and Bluetooth pairings of
 the Flex Keyboard and Slim Pen 2 shared with Windows. Not covered: 5G modem, cameras. In the *live*
 session only, audio and battery status are unavailable because the audio DSP stays off while running
@@ -36,6 +37,16 @@ Requirements: WSL Fedora 44 aarch64 on the Surface, `sudo` (step 7 and the verif
 root with ownership and xattrs preserved and chroot into it; make it passwordless if `build-all.sh`
 should run unattended), Windows on `C:`, 40 GiB free, internet. Every step is idempotent and skips
 finished work; `FORCE=1` rebuilds a step.
+
+`FEDORA_TARGET` in `sp11.conf` selects the source media: `ga` (the default, a released Fedora), `beta`
+(`releases/test/<n>_Beta/`) or `nightly` (`development/<n>/`, needs `FEDORA_COMPOSE=<stamp>`). Building
+against a release other than the host's is supported: `sp11-iptsd` links against fmt and spdlog, whose
+sonames change between releases, so it is rebuilt in a `mock` buildroot for the target
+(`IPTSD_BUILD_MODE=auto`). A pre-release build is therefore just:
+
+```bash
+FEDORA_TARGET=beta scripts/build-all.sh
+```
 
 1. `scripts/00-setup-host.sh` installs build dependencies and checks the host.
 2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, validates
@@ -106,7 +117,7 @@ Windows at `\\wsl.localhost\<distro>\<path to this clone>\build\rpms\`) to a USB
 Fedora:
 
 ```bash
-sudo dnf upgrade ./sp11-surface-support-<version>.fc44.aarch64.rpm
+sudo dnf upgrade ./sp11-surface-support-<version>.fc<release>.aarch64.rpm
 ```
 
 The package regenerates `/boot/grub2/grub.cfg` itself. Rebuild the ISO afterwards so new installs

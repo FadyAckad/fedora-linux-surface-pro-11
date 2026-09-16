@@ -150,6 +150,41 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `50-build-iso.sh` runs `rpm -U --test` and `--help` on the iptsd binaries; `60-verify-rootfs.sh`
   repeats both checks and `ldd`s the shipped binaries.
 
+## Fedora 45 differences (verified 2026-09-16 against 45 Beta 1.3)
+
+- fmt 11.2.0 → 12.1.0 and spdlog 1.15.3 → 1.17.0 break the sonames `sp11-iptsd` links against
+  (`libfmt.so.11` → `.12`, `libspdlog.so.1.15` → `.1.17`), so a host-built RPM cannot install into an F45
+  root and step 50's `rpm -U --test` refuses it. `IPTSD_BUILD_MODE=auto` builds iptsd in a `mock`
+  buildroot for the target whenever `FEDORA_RELEASE` differs from `rpm -E %{fedora}`; `mock_rebuild` in
+  `lib.sh` passes `--no-bootstrap-image` (no container pull, so podman stays out of the dependency set) and
+  retries once with `--isolation=simple` for WSL. `sp11-bt-set-addr` is libc-only and `kernel-sp11` is
+  `AutoReqProv: no`, so iptsd is the only cross-release package.
+- `rpm/sp11-iptsd.spec.in` must carry `BuildRequires: cmake`: meson locates Microsoft.GSL only through its
+  CMake config. The host build masked this because `00-setup-host.sh` installs cmake for other reasons.
+- The boot kernel on aarch64 is owned by `kernel-uki-dtbloader`, not `kernel-core` (Workstation Live
+  installs no `kernel-core` at all). It provides `installonlypkg(kernel)` and `kernel-core-uname-r`, so dnf
+  adds it *alongside* rather than upgrading in place, and its `/usr/bin/kernel-install` dependency writes
+  the BLS entry. `files/90-sp11-dnf.conf` therefore excludes `kernel-uki-*` as well; the glob deliberately
+  does not match `kernel-sp11`, which must stay installable from a local RPM. `kernel-tools` and
+  `kernel-tools-libs` track the kernel version too but own nothing in `/boot` and cannot create entries.
+- dnf5 has no `--disableexcludes` (that is the DNF4 spelling and it errors out); `disable_excludes` is a
+  config option only, so the override is `dnf --setopt=disable_excludes='*' ...`. The exclusion hides
+  packages from `remove` as well as install, so taking a stock kernel off the system needs it.
+- Two new aarch64 dracut modules defeat the live-media policy, and `LIVE_DRACUT_OMIT` in `50-build-iso.sh`
+  omits both: `devicetree-firmware`'s generic (`--no-hostonly`) path globs
+  `$fw_dir/qcom/x1e80100/*/*/*.mbn|elf`, which is exactly the Denali set, and `qcom-adsp` modprobes
+  `qcom_q6v5_pas` from a pre-udev hook. dracut ignores omit names it does not know, so the GA path is
+  unaffected. `qcom-adsp` exists to solve the very USB-C reset that forces the live-only DSP blacklist, so
+  adopting it could give the live session audio and battery — untested on this unit.
+- `/boot/loader/entries` is `0700 root`, so an unprivileged shell cannot expand a glob inside it: the BLS
+  cleanup in step 50 must run root-side (`as_root find ... -delete`). The earlier
+  `as_root rm -rf "$ROOTFS"/boot/loader/entries/*.conf` was a silent no-op and shipped the source media's
+  rescue and stock-kernel entries inside the image.
+- The GPU probes in the initramfs (plymouth) and needs the Adreno microcode there, or early boot logs
+  `failed to load gen70500_sqe.fw` until switch-root makes `/usr/lib/firmware` reachable. `qcom-firmware`
+  ships `qcom/gen70500_sqe.fw.xz` and `qcom/gen70500_gmu.bin.xz`; `files/90-sp11.conf` installs both and the
+  support RPM now `Requires: qcom-firmware`.
+
 ## Peripherals and userspace
 
 - Firmware: ADSP/CDSP/GPU blobs come from this device's Windows DriverStore (`surfacepro_ext_adsp8380*`,
@@ -197,7 +232,9 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   importer `/usr/libexec/sp11/sp11-bt-import-pairings` (also inside the tarball). Verified: keyboard
   connects over BLE with battery reporting after import.
 
-## Hardware-verified status (2026-09-13/14, support RPM 1.7)
+## Hardware-verified status
+
+### Fedora 44 GA (2026-09-13/14, support RPM 1.7)
 
 Working: boot, install, display/GPU, Wi-Fi, Bluetooth with the correct address, touch, pen inking,
 audio, battery, Flatpak, Windows entry in GRUB before UEFI Firmware Settings, shared Windows pairings
@@ -207,6 +244,27 @@ Support RPM 1.7 (`sp11-diag` enumerates paired devices instead of fixed addresse
 to 1.6, which added `sp11-grub-defaults` and the dnf kernel exclusion) was confirmed working on the
 installed system on 2026-09-14. `sp11-iptsd` 3.1.0-2.sp11 restarts the running pen daemon on upgrade.
 The ISO in `build/out/` (sha256 `eb62a087…7fee`, 2026-09-14 evening) contains both.
+
+### Fedora 45 Beta 1.3 (2026-09-16)
+
+Built with `FEDORA_TARGET=beta` and installed on the tested unit, onto a LUKS-encrypted root. Confirmed:
+the media boots and installs, the installed system runs (dnf, desktop applications), and the SP11 kernel is
+the booted one. `qcom_q6v5_pas` loads on the installed system, so the live-only blacklist is being dropped
+as intended.
+
+`dnf upgrade --refresh` on the fresh install added a stock `kernel-uki-dtbloader-7.2.5-300.fc45` boot entry,
+because the exclusion list predated that package; support RPM 1.8 adds `kernel-uki-*`, 1.9 corrects the
+dnf5 override hint and 2.0 adds the Adreno microcode to the initramfs. Removing the stray kernel needed
+`dnf --setopt=disable_excludes='*' remove`.
+
+Benign boot-time messages on this unit: `qcom_q6v5_pas … Handover signaled, but it already happened`;
+`qcom_pmic_glink … Failed to create device link (0x180) with supplier …` for the PD and USB nodes (probe
+deferral, retried); `surface_hid … unexpected descriptor length: got 0, expected 9` then `error -71` for one
+Surface Aggregator HID endpoint that nothing depends on.
+
+Confirmed working on the installed system by the owner on 2026-09-16: Bluetooth, audio, pen, Wi-Fi,
+battery, Flatpak and the Windows GRUB entry — so the 44 GA list above carries over to 45 Beta. The
+Bluetooth pairing import from Windows was not part of that check and is still only verified on 44.
 
 ## References
 
