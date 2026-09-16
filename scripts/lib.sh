@@ -31,13 +31,29 @@ require_cmd() {
 
 as_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
 
-# fetch URL DEST — idempotent download.
+# fetch URL DEST — idempotent, resumable download.
+# The partial file is kept as DEST.part between attempts and curl resumes into it (-C -). curl's own
+# --retry restarts from byte zero, which never gets a multi-GB ISO through a mirror that drops the
+# connection mid-transfer (curl error 18). Every caller verifies a checksum afterwards.
 fetch() {
-  local url=$1 dest=$2
+  local url=$1 dest=$2 try rc size=0 prev
   if [ -s "$dest" ]; then log "cached: $(basename "$dest")"; return 0; fi
   log "downloading $(basename "$dest")"
-  curl -fsSL --retry 5 --retry-delay 3 -o "$dest.part" "$url" || die "download failed: $url"
-  mv -f "$dest.part" "$dest"
+  for try in $(seq 1 10); do
+    rc=0
+    curl -fsSL --retry 3 --retry-delay 3 --retry-all-errors -C - -o "$dest.part" "$url" || rc=$?
+    if [ "$rc" -eq 0 ]; then mv -f "$dest.part" "$dest"; return 0; fi
+    prev=$size
+    size=$(stat -c %s "$dest.part" 2>/dev/null || echo 0)
+    # 33/36: the server refused the range because .part is already complete. Hand it to the caller's
+    # checksum check rather than starting the whole transfer again.
+    if [ "$rc" -eq 33 ] || [ "$rc" -eq 36 ]; then
+      if [ "$size" -gt 0 ] && [ "$size" = "$prev" ]; then mv -f "$dest.part" "$dest"; return 0; fi
+    fi
+    warn "$(basename "$dest"): interrupted (curl $rc) at $size bytes, retry $try/10"
+    sleep 5
+  done
+  die "download failed after 10 attempts: $url"
 }
 
 sha256_of() { sha256sum "$1" | cut -d' ' -f1; }

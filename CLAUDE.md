@@ -34,6 +34,8 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
 - `50-build-iso.sh` caches the extracted live image as `build/work/iso/live.erofs` and keys it to the ISO it
   came from with a `live.erofs.source` stamp. An unkeyed cache silently remasters the *previous* media on a
   release or compose change; it also asserts the extracted root's `VERSION_ID` equals `FEDORA_RELEASE`.
+- `fetch()` in `lib.sh` resumes into `DEST.part` across attempts. curl's own `--retry` restarts from byte
+  zero, which never gets a multi-GB ISO through a mirror that drops the transfer (curl error 18).
 
 ## Host
 
