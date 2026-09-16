@@ -38,6 +38,6 @@ esac
 
 FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
 [ -d "$FR" ] || warn "Windows DriverStore not found at $FR; firmware extraction (scripts/30) will fail"
-command -v powershell.exe >/dev/null 2>&1 || warn "powershell.exe not reachable; hardware detection (scripts/05) needs a hand-written $HARDWARE_ENV"
+command -v powershell.exe >/dev/null 2>&1 || warn "powershell.exe not reachable; hardware detection (scripts/05) needs WSL interop with Windows"
 
 log "host ready: $(nproc) CPUs, ${free_gib} GiB free, gcc $(gcc -dumpversion), rpm $(rpm --version | awk '{print $3}')"

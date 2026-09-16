@@ -48,7 +48,7 @@ if [ -f "$HARDWARE_ENV" ] && [ "${FORCE:-0}" != 1 ]; then
 fi
 
 command -v powershell.exe >/dev/null 2>&1 \
-  || die "powershell.exe unavailable. Create $HARDWARE_ENV by hand (see README) or run inside WSL with interop enabled."
+  || die "powershell.exe unavailable; run this step inside WSL with Windows interop enabled."
 
 log "querying Windows for SMBIOS, panel and Bluetooth identity"
 SP11_PRODUCT=$(ps_query '(Get-CimInstance Win32_ComputerSystem).Model')

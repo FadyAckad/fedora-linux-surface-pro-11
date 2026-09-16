@@ -122,7 +122,9 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `all_video`, `search_fs_uuid`, `part_gpt`, `fwsetup`, `efinet`, `net`, `boot`. It lacks `efi_uga`,
   `video_bochs`, `video_cirrus` and `chain` (Fedora builds `chain` into x86 images only).
 - `insmod NAME` resolves `$prefix/arm64-efi/NAME.mod`; on installed Fedora `$prefix` is `/boot/grub2`
-  (set by `gen_grub_cfgstub`, which Anaconda calls to write the ESP stub). Module loading works with
+  (set by `gen_grub_cfgstub`, which Anaconda calls to write the ESP stub `EFI/fedora/grub.cfg`:
+  `search --fs-uuid <boot uuid>`, then `configfile $prefix/grub.cfg`). The stub names a single /boot, so a
+  second Fedora installed on the same ESP takes the menu over and hides the first. Module loading works with
   Secure Boot disabled. `grub2-efi-aa64-modules` (installed by default) provides the version-matched
   `/usr/lib/grub/arm64-efi/*.mod`.
 - Fedora's os-prober has no EFI Windows probe on aarch64 (`os-probes/mounted/efi/` holds only
@@ -136,7 +138,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   live menu has no media-check entry.
 - Anaconda 44.30 discovers kernels from `/boot/vmlinuz-*` and runs `kernel-install add <ver>
   /lib/modules/<ver>/vmlinuz`. Deleting stock `/boot/vmlinuz-*` makes the SP11 kernel the only
-  candidate while `kernel-core` stays installed. Anaconda rewrites `/etc/default/grub`, persists
+  candidate while the stock kernel packages stay installed (the 44 1.7 and 45 Beta media carry no
+  `kernel-core`; see `kernel-uki-dtbloader` below). Anaconda rewrites `/etc/default/grub`, persists
   `modprobe.blacklist=` into `/etc/modprobe.d/anaconda-denylist.conf`, preserves `clk_ignore_unused
   pd_ignore_unused arm64.nopauth` but not `systemd.tpm2_wait=0`. Its grub2-mkconfig runs in a chroot
   with `/dev` bound but no udev database.
@@ -182,7 +185,9 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - `rpm/sp11-iptsd.spec.in` must carry `BuildRequires: cmake`: meson locates Microsoft.GSL only through its
   CMake config. The host build masked this because `00-setup-host.sh` installs cmake for other reasons.
 - The boot kernel on aarch64 is owned by `kernel-uki-dtbloader`, not `kernel-core` (Workstation Live
-  installs no `kernel-core` at all). It provides `installonlypkg(kernel)` and `kernel-core-uname-r`, so dnf
+  installs no `kernel-core` at all). Not new in 45: Koji's package lists of the 44 1.7 Workstation and
+  COSMIC images show the same set (`kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`, no
+  `kernel-core`). It provides `installonlypkg(kernel)` and `kernel-core-uname-r`, so dnf
   adds it *alongside* rather than upgrading in place, and its `/usr/bin/kernel-install` dependency writes
   the BLS entry. `files/90-sp11-dnf.conf` therefore excludes `kernel-uki-*` as well; the glob deliberately
   does not match `kernel-sp11`, which must stay installable from a local RPM. `kernel-tools` and
@@ -203,7 +208,9 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - The GPU probes in the initramfs (plymouth) and needs the Adreno microcode there, or early boot logs
   `failed to load gen70500_sqe.fw` until switch-root makes `/usr/lib/firmware` reachable. `qcom-firmware`
   ships `qcom/gen70500_sqe.fw.xz` and `qcom/gen70500_gmu.bin.xz`; `files/90-sp11.conf` installs both and the
-  support RPM now `Requires: qcom-firmware`.
+  support RPM now `Requires: qcom-firmware`. With 2.0 or later the error is gone on the installed 45 Beta
+  Workstation and 44 COSMIC systems. The live initramfs still carries only the zap shader (step 50 parks
+  the drop-in).
 
 - The live root keeps the stock kernel packages for Anaconda with their `/boot` images deleted, which
   leaves every installed system a half-removed kernel. dracut 111 without an output path writes
@@ -215,8 +222,14 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   removes module trees no package owns, and deletes BLS entries whose kernel image is missing. The entry
   cleanup is keyed on the image because `rpm -e` has usually already removed the module tree the version
   could have been read from. It refuses unless the SP11 kernel is running and never touches the SP11 entry.
-  Nothing outside the kernel family requires those packages on 45 (`rpm -e --test` is clean). Tested in an
-  overlay of the 45 root, including the refusal path and a second idempotent run; not yet run on hardware.
+  Nothing outside the kernel family requires those packages on 45 (`rpm -e --test` is clean);
+  `60-verify-rootfs.sh` runs that erase test on every root it checks. `kernel-sp11`'s unversioned
+  `kernel-uname-r`, `kernel-core-uname-r` and `kernel-modules-core-uname-r` provides satisfy the stock
+  packages' versioned requires, so even a partial erase of the set passes; erasing `glibc` is a working
+  negative control. Tested in an overlay of the 45 root, including the refusal path and a second
+  idempotent run. Confirmed on hardware on 2026-09-16 both on the first boot of a fresh Fedora 44 COSMIC
+  install (only `kernel-sp11` and the `kernel-tools` packages left) and as an upgrade to 2.1 on the
+  Fedora 45 Beta install; `dracut --regenerate-all -f` succeeds on both afterwards.
 
 ## Peripherals and userspace
 
@@ -262,12 +275,13 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - `scripts/70-export-bt-pairings.sh` (WSL, one UAC prompt, always exports afresh because a re-pairing
   rewrites the keys in place) → `build/out/sp11-bt-pairings.tar.gz`;
   converter `scripts/bt-pairings-from-hive.py` (python3-hivex, LE only, filtered by `BT_PAIRING_USB_IDS`);
-  importer `/usr/libexec/sp11/sp11-bt-import-pairings` (also inside the tarball). Verified: keyboard
-  connects over BLE with battery reporting after import.
+  importer `/usr/libexec/sp11/sp11-bt-import-pairings` (also inside the tarball). Verified on 44
+  Workstation (keyboard connects over BLE with battery reporting), 45 Beta Workstation and 44 COSMIC
+  (keyboard and pen connect without pairing again).
 
 ## Hardware-verified status
 
-### Fedora 44 GA (2026-09-13/14, support RPM 1.7)
+### Fedora 44 GA Workstation (2026-09-13/14, support RPM 1.7)
 
 Working: boot, install, display/GPU, Wi-Fi, Bluetooth with the correct address, touch, pen inking,
 audio, battery, Flatpak, Windows entry in GRUB before UEFI Firmware Settings, shared Windows pairings
@@ -278,7 +292,7 @@ to 1.6, which added `sp11-grub-defaults` and the dnf kernel exclusion) was confi
 installed system on 2026-09-14. `sp11-iptsd` 3.1.0-2.sp11 restarts the running pen daemon on upgrade.
 The ISO in `build/out/` (sha256 `eb62a087…7fee`, 2026-09-14 evening) contains both.
 
-### Fedora 45 Beta 1.3 (2026-09-16)
+### Fedora 45 Beta 1.3 Workstation (2026-09-16)
 
 Built with `FEDORA_TARGET=beta` and installed on the tested unit, onto a LUKS-encrypted root. Confirmed:
 the media boots and installs, the installed system runs (dnf, desktop applications), and the SP11 kernel is
@@ -296,8 +310,19 @@ deferral, retried); `surface_hid … unexpected descriptor length: got 0, expect
 Surface Aggregator HID endpoint that nothing depends on.
 
 Confirmed working on the installed system by the owner on 2026-09-16: Bluetooth, audio, pen, Wi-Fi,
-battery, Flatpak and the Windows GRUB entry — so the 44 GA list above carries over to 45 Beta. The
-Bluetooth pairing import from Windows was not part of that check and is still only verified on 44.
+battery, Flatpak and the Windows GRUB entry; in a second round the same day, keyboard/touchpad, GPU
+acceleration, the Bluetooth pairing import, no early-boot Adreno error with support RPM 2.0, a clean
+`dnf upgrade --refresh` after the `kernel-uki-*` exclusion, and support RPM 2.1 as an upgrade (stock kernel
+removed, `dracut --regenerate-all -f` clean). The 44 GA list above carries over to 45 Beta.
+
+### Fedora 44 GA COSMIC (2026-09-16, support RPM 2.1)
+
+Built with `FEDORA_EDITION=COSMIC` (ISO sha256 `eafe3df5…935b`) and installed on the tested unit.
+Confirmed working by the owner on 2026-09-16: Wi-Fi, Bluetooth, touch, pen inking under COSMIC, audio,
+battery, Flatpak, the Windows GRUB entry, keyboard/touchpad, GPU acceleration (`glxinfo -B` from
+`glx-utils` shows the Adreno GPU, not llvmpipe), the Bluetooth pairing import, no early-boot Adreno error,
+`dracut --regenerate-all -f` and `sp11-diag`. On the first boot `sp11-remove-stock-kernels` left only
+`kernel-sp11` and the `kernel-tools` packages, and `dnf upgrade --refresh` added no stock kernel entry.
 
 ## References
 
