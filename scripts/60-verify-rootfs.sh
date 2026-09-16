@@ -43,6 +43,15 @@ for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device /usr/lib
 done
 check r chroot "$ROOTFS" /usr/libexec/sp11-iptsd-check-device --help
 check r rpm --root "$ROOTFS" -q kernel
+# Both depend on the edition's package set: the media must carry the installer, and the stock kernel set that
+# sp11-remove-stock-kernels erases on the installed system (same query as its stock()) must go without
+# breaking another package's dependencies.
+check r test -x "$ROOTFS/usr/bin/liveinst"
+mapfile -t stock_pkgs < <(r rpm --root "$ROOTFS" -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel kernel-core \
+  kernel-modules kernel-modules-core kernel-modules-extra kernel-modules-internal 'kernel-uki-*' | sort -u)
+log "stock kernel set: ${stock_pkgs[*]:-none}"
+check test "${#stock_pkgs[@]}" -gt 0
+check r rpm --root "$ROOTFS" -e --test "${stock_pkgs[@]}"
 
 log "--- kernel-install hand-off simulation (chroot, Anaconda-like inputs)"
 T="$WORK_DIR/iso/handoff-test"

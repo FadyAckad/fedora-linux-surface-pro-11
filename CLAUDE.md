@@ -91,8 +91,25 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `Fedora-Workstation-iso-<n>-<arch>-<stamp>-CHECKSUM` — so each branch spells its own out rather than
   deriving one from another. The file body is the same clearsigned BSD digest in all three, so the
   `sha256sum -c --ignore-missing` check is unchanged.
+- `FEDORA_EDITION` (default `Workstation`) picks the desktop; any other value is a spin, named as in its ISO
+  file name. Every spin of a compose sits under `Spins/` and shares one CHECKSUM whose product is `Spins`
+  (`Fedora-Spins-44-1.7-aarch64-CHECKSUM`), hence the separate `FEDORA_PRODUCT`. Workstation names
+  resolve exactly as before the switch existed. KDE is its own product (`KDE/`,
+  `Fedora-KDE-44-1.7-aarch64-CHECKSUM`, `Fedora-KDE-Desktop-Live-...`) and is not covered.
 - `Fedora-Workstation-Live-44-1.7.aarch64.iso`, volume id `Fedora-WS-Live-44`, built by kiwi. The
   live root `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB.
+- `Fedora-COSMIC-Live-44-1.7.aarch64.iso` (2 899 554 304 B), volume id `Fedora-CSMC-Live-44`, marker
+  `/boot/0x0beaaabc`, same loader paths as Workstation. The per-image package lists on Koji
+  (`kojipkgs.fedoraproject.org/packages/Fedora-<Edition>-Live/44/1.7/images/*.packages`) show the same
+  Anaconda (44.30) and stock kernel set as Workstation 44. COSMIC already ships `spdlog`, `fmt` and `inih`,
+  so `LIVE_EXTRA_PKGS` adds nothing. It lacks the `linux-firmware` main package, which holds no qcom, qca or
+  ath12k files: this unit's firmware comes from `atheros-firmware` (`qca/hmtbtfw20.tlv`, `qca/hmtnv20.*`,
+  `ath12k/WCN7850`), `qcom-firmware` (`gen70500_*`) and the support RPM (DTS `firmware-name` entries).
+  Session `cosmic.desktop` behind `cosmic-greeter` (greetd), `livesys_session="cosmic"`, installer
+  "Install to Hard Drive" (`liveinst`, anaconda-webui 68), no `iio-sensor-proxy`. cosmic-comp 1.0.9 carries
+  smithay's tablet-v2 (`zwp_tablet_seat_v2`), and pen inking through iptsd works under COSMIC. Remastered
+  2026-09-16 (ISO sha256 `eafe3df5…935b`): step 60 passes (56 checks), and dracut with the support RPM's
+  drop-in active succeeds in an overlay of the root. Hardware status below.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does `search --file
   --set=root /boot/0x503d6c7e` then `configfile ($root)/boot/grub2/grub.cfg`. Kernel
   `/boot/aarch64/loader/linux`, initrd `/boot/aarch64/loader/initrd`, font

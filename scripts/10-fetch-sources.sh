@@ -3,7 +3,7 @@
 . "$(dirname "$0")/lib.sh"
 require_cmd curl sha256sum git python3 ar tar xz cpio rpm2cpio dnf
 
-## Fedora Workstation Live ISO + upstream CHECKSUM
+## Fedora live ISO (FEDORA_EDITION) + upstream CHECKSUM (all spins of a compose share one)
 fetch "$FEDORA_ISO_BASEURL/$FEDORA_CHECKSUM_NAME" "$CACHE_DIR/$FEDORA_CHECKSUM_NAME"
 fetch "$FEDORA_ISO_BASEURL/$FEDORA_ISO_NAME" "$CACHE_DIR/$FEDORA_ISO_NAME"
 ( cd "$CACHE_DIR" && sha256sum -c --ignore-missing "$FEDORA_CHECKSUM_NAME" 2>/dev/null | grep -x "$FEDORA_ISO_NAME: OK" >/dev/null ) \

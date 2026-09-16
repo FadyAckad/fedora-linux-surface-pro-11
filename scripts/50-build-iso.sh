@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# Step 6: remaster the Fedora Workstation Live ISO for the Surface Pro 11.
+# Step 6: remaster the Fedora live ISO (FEDORA_EDITION: Workstation or a spin) for the Surface Pro 11.
 #   - extract the LZMA EROFS live root, install the kernel-sp11 / sp11-surface-support / sp11-iptsd RPMs
 #   - hide the stock kernel from Anaconda, generate a dracut-live initramfs for the SP11 kernel
 #   - repack the root as LZMA EROFS with SELinux labels, write a GRUB menu that loads the Denali OLED DTB
@@ -16,12 +16,19 @@ IRPM=$(rpm_of sp11-iptsd);           [ -n "$IRPM" ] || die "sp11-iptsd RPM missi
 [ "$SP11_DTB_SELECTED" = "$SP11_DTB" ] || die "hardware.env selects DTB $SP11_DTB_SELECTED, config expects $SP11_DTB"
 
 W="$WORK_DIR/iso"; ROOTFS="$W/rootfs"; OUT="$OUT_DIR/$OUTPUT_ISO_NAME"
-# User-visible name of the base media: pre-release composes carry an underscore (45_Beta) that reads badly
-# in a boot menu, and the ISO's README says plainly when the media is not a supported Fedora release.
-MEDIA_LABEL="${FEDORA_MEDIA_VERSION/_/ }"
+# User-visible name of the base media ("COSMIC 44", "Workstation 45 Beta"): pre-release composes carry an
+# underscore (45_Beta) that reads badly in a boot menu, and the ISO's README says plainly when the media is
+# not a supported Fedora release.
+MEDIA_LABEL="$FEDORA_EDITION ${FEDORA_MEDIA_VERSION/_/ }"
 case "$FEDORA_TARGET" in
   ga) MEDIA_NOTE="Fedora $MEDIA_LABEL, compose $FEDORA_COMPOSE" ;;
   *)  MEDIA_NOTE="Fedora $MEDIA_LABEL, compose $FEDORA_COMPOSE - PRE-RELEASE media, not a supported Fedora release" ;;
+esac
+# The hardware notes in the ISO's README were verified with the Workstation image; a spin shares the kernel,
+# firmware and RPMs but not that test history, and its README says so.
+case "$FEDORA_EDITION" in
+  Workstation) EDITION_NOTE="Fedora Workstation (GNOME)" ;;
+  *)           EDITION_NOTE="Fedora $FEDORA_EDITION spin; the hardware notes below were verified with the Workstation image" ;;
 esac
 mkdir -p "$W"
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(date -u +%s)}"
@@ -75,7 +82,7 @@ ROOT_RELEASE=$(as_root sed -n 's/^VERSION_ID=//p' "$ROOTFS/etc/os-release" | tr 
   || die "live root is Fedora $ROOT_RELEASE but this build targets Fedora $FEDORA_RELEASE (stale $W/live.erofs?)"
 log "stock kernel in live root: $STOCK_KVER (Fedora $ROOT_RELEASE)"
 
-## 3. Install runtime dependencies Workstation Live lacks, then the SP11 RPMs. Dependencies are checked
+## 3. Install runtime dependencies the live media lacks, then the SP11 RPMs. Dependencies are checked
 ##    (no --nodeps): a missing library would leave e.g. iptsd unable to start on the installed system.
 ##    Scriptlets are skipped; their effects are applied explicitly below.
 DEP_RPMS=()
@@ -194,7 +201,8 @@ render "$FILES_DIR/grub-live.cfg.in" "$W/grub.cfg" RELEASE="$MEDIA_LABEL" ABI="$
 grep -q 'fips=1' "$W/grub.cfg" && die "grub.cfg enables FIPS"
 rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "$KRPM" "$SRPM" "$IRPM" "$W/sp11/rpms/"
 render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" COMMIT="${KERNEL_SOURCE_COMMIT:0:12}" \
-  MODE="$KERNEL_MODE" DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE"
+  MODE="$KERNEL_MODE" DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE" \
+  EDITION="$FEDORA_EDITION" EDITION_NOTE="$EDITION_NOTE"
 
 ## 8. Assemble the ISO by replaying the source boot layout (GPT, El Torito, appended ESP)
 log "writing $OUT"

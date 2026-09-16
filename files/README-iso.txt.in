@@ -1,9 +1,10 @@
-Fedora Workstation Live @RELEASE@ for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED, incl. 5G SKU)
+Fedora @RELEASE@ Live for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED, incl. 5G SKU)
 
 Kernel:        @ABI@ (ooaklee/linux_ms_dev_kit-sp11 @COMMIT@, mode: @MODE@); the stock Fedora kernel is not offered.
 Device tree:   @DTB@ (loaded explicitly by GRUB; installed system uses GRUB_DEVICETREE in BLS entries)
 Built:         @DATE@ for SKU @SKU@
 Base media:    @MEDIA@
+Edition:       @EDITION_NOTE@
 Secure Boot:   must be DISABLED (unsigned kernel).
 
 Live session:  Wi-Fi, Bluetooth, GPU acceleration, touch and pen work. Audio and battery status are
@@ -19,4 +20,4 @@ Redistribution: this media and the RPMs under /sp11/rpms contain proprietary Qua
                from the Windows installation of the machine that built it. Do not pass them on; build
                your own from the source repository instead.
 Credits:       kernel ooaklee/linux_ms_dev_kit-sp11 (GPL-2.0); audio topology, UCM and pen integration
-               from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd; Fedora Workstation Live.
+               from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd; Fedora @EDITION@ Live.

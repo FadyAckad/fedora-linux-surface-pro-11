@@ -1,4 +1,4 @@
-# Fedora Workstation Live @RELEASE@ remastered for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED).
+# Fedora @RELEASE@ Live remastered for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED).
 # Kernel @ABI@ with the Denali OLED device tree loaded explicitly by GRUB.
 set default="0"
 set timeout=@TIMEOUT@
