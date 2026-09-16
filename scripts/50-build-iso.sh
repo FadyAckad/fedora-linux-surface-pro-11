@@ -16,6 +16,13 @@ IRPM=$(rpm_of sp11-iptsd);           [ -n "$IRPM" ] || die "sp11-iptsd RPM missi
 [ "$SP11_DTB_SELECTED" = "$SP11_DTB" ] || die "hardware.env selects DTB $SP11_DTB_SELECTED, config expects $SP11_DTB"
 
 W="$WORK_DIR/iso"; ROOTFS="$W/rootfs"; OUT="$OUT_DIR/$OUTPUT_ISO_NAME"
+# User-visible name of the base media: pre-release composes carry an underscore (45_Beta) that reads badly
+# in a boot menu, and the ISO's README says plainly when the media is not a supported Fedora release.
+MEDIA_LABEL="${FEDORA_MEDIA_VERSION/_/ }"
+case "$FEDORA_TARGET" in
+  ga) MEDIA_NOTE="Fedora $MEDIA_LABEL, compose $FEDORA_COMPOSE" ;;
+  *)  MEDIA_NOTE="Fedora $MEDIA_LABEL, compose $FEDORA_COMPOSE - PRE-RELEASE media, not a supported Fedora release" ;;
+esac
 mkdir -p "$W"
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(date -u +%s)}"
 
@@ -157,13 +164,13 @@ log "remastered root: $(du -h "$W/remastered.erofs" | cut -f1)"
 
 ## 7. GRUB menu and /sp11 payload
 if [ -n "$FONT_ISO" ]; then FONT_LINE="$FONT_ISO"; else FONT_LINE="/nonexistent-font.pf2"; fi
-render "$FILES_DIR/grub-live.cfg.in" "$W/grub.cfg" RELEASE="$FEDORA_RELEASE" ABI="$KERNEL_ABI" TIMEOUT="$GRUB_TIMEOUT_VALUE" \
+render "$FILES_DIR/grub-live.cfg.in" "$W/grub.cfg" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" TIMEOUT="$GRUB_TIMEOUT_VALUE" \
   MARKER="$MARKER" FONT="$FONT_LINE" GFXMODE="$GRUB_GFXMODE_VALUE" VOLID="$VOLID" ARGS_INSTALLED="$SP11_ARGS_INSTALLED" \
   ARGS_LIVE="$SP11_ARGS_LIVE_ONLY" DTB="$DTB_ISO" KERNEL="$KERNEL_ISO" INITRD="$INITRD_ISO"
 grep -q 'fips=1' "$W/grub.cfg" && die "grub.cfg enables FIPS"
 rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "$KRPM" "$SRPM" "$IRPM" "$W/sp11/rpms/"
-render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$FEDORA_RELEASE" ABI="$KERNEL_ABI" COMMIT="${KERNEL_SOURCE_COMMIT:0:12}" \
-  MODE="$KERNEL_MODE" DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU"
+render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" COMMIT="${KERNEL_SOURCE_COMMIT:0:12}" \
+  MODE="$KERNEL_MODE" DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE"
 
 ## 8. Assemble the ISO by replaying the source boot layout (GPT, El Torito, appended ESP)
 log "writing $OUT"

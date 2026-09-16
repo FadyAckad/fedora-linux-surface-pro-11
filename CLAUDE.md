@@ -75,8 +75,17 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - Fedora's `depmod -b BASE` expects `BASE/lib/modules`; the payload uses `/usr/lib/modules`, so
   `20-build-kernel.sh` uses a temporary `lib -> usr/lib` symlink.
 
-## Fedora 44 live media
+## Fedora live media
 
+- `FEDORA_TARGET` in `sp11.conf` picks the compose family: `ga` (`releases/<n>/`), `beta`
+  (`releases/test/<n>_Beta/`) or `nightly` (`development/<n>/`, needs `FEDORA_COMPOSE=<stamp>`).
+  `FEDORA_RELEASE` stays the numeric release (dnf `--releasever`, `%{dist}`, cache keys);
+  `FEDORA_MEDIA_VERSION` is the version string inside the ISO name (`45_Beta`). The three families name
+  their CHECKSUM file differently — GA `Fedora-Workstation-<v>-<c>-<arch>-CHECKSUM`, Beta
+  `Fedora-Workstation-iso-<v>-<c>-<arch>-CHECKSUM`, nightly
+  `Fedora-Workstation-iso-<n>-<arch>-<stamp>-CHECKSUM` — so each branch spells its own out rather than
+  deriving one from another. The file body is the same clearsigned BSD digest in all three, so the
+  `sha256sum -c --ignore-missing` check is unchanged.
 - `Fedora-Workstation-Live-44-1.7.aarch64.iso`, volume id `Fedora-WS-Live-44`, built by kiwi. The
   live root `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does `search --file
