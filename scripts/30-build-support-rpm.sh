@@ -11,10 +11,12 @@ VERSION="2.1"
 
 CACHED=$(rpm_of sp11-surface-support)
 if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
-  if [ "$(rpm -qp --qf '%{VERSION}' "$CACHED" 2>/dev/null)" = "$VERSION" ]; then
-    log "support RPM already built: $CACHED (FORCE=1 to rebuild)"; exit 0
-  fi
-  log "cached $(basename "$CACHED") is not version $VERSION; rebuilding"
+  # The dist tag counts as well: switching FEDORA_RELEASE must not reuse the other release's package, whose
+  # board.bin comes from that release's atheros-firmware and whose %{dist} names the wrong Fedora.
+  case "$(rpm -qp --qf '%{VERSION} %{RELEASE}' "$CACHED" 2>/dev/null)" in
+    "$VERSION "*".fc$FEDORA_RELEASE") log "support RPM already built: $CACHED (FORCE=1 to rebuild)"; exit 0 ;;
+  esac
+  log "cached $(basename "$CACHED") is not version $VERSION for Fedora $FEDORA_RELEASE; rebuilding"
 fi
 
 SDIR="$BUILD_DIR/support"; STAGE="$SDIR/stage"

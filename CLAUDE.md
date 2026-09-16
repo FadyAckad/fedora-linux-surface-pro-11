@@ -27,8 +27,11 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
   tarball), `bt-pairings/` (exported hive; secret), `hardware.env`.
 - Bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the support payload changes, so
   `dnf upgrade` works on the installed system. Its `%posttrans` regenerates `grub.cfg`. Steps 20/30/40
-  skip only when the cached RPM matches (kernel ABI file list, `%{VERSION}`, iptsd version-release and
-  commit), so a bump alone triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec.
+  skip only when the cached RPM matches (kernel ABI file list; support `%{VERSION}` and the
+  `.fc<release>` dist tag; iptsd version-release and commit), so a bump or a `FEDORA_RELEASE` switch
+  triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec. `build_rpm` and
+  `mock_rebuild` delete every older RPM of the same name, so `build/rpms/` holds one release's set; copy it
+  aside (`build/rpms-fc<release>/`) before switching.
 - Step 10 honours `FORCE=1` only for the two dnf-downloaded caches (`build/cache/wifi/f<release>`,
   `build/cache/rpm-deps/f<release>`); checksum-pinned downloads are never re-fetched.
 - `50-build-iso.sh` caches the extracted live image as `build/work/iso/live.erofs` and keys it to the ISO it
