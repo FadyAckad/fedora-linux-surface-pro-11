@@ -107,7 +107,16 @@ as_root depmod -b "$ROOTFS" "$KERNEL_ABI" || die "depmod in live root failed"
 ## 4. Boot policy inside the root: only the SP11 kernel is visible to Anaconda; no stale BLS/rescue state
 as_root find "$ROOTFS/boot" -maxdepth 1 \( -name 'vmlinuz-*' -o -name 'initramfs-*' -o -name 'System.map-*' -o -name 'config-*' -o -name 'symvers-*' -o -name '.vmlinuz-*.hmac' \) \
   ! -name "vmlinuz-$KERNEL_ABI" ! -name "System.map-$KERNEL_ABI" ! -name "config-$KERNEL_ABI" -exec rm -f {} +
-as_root rm -rf "$ROOTFS/boot/dtb" "$ROOTFS"/boot/dtb-* "$ROOTFS"/boot/loader/entries/*.conf
+as_root rm -rf "$ROOTFS/boot/dtb"
+# These globs have to be expanded by root. /boot/loader/entries is 0700 root-owned, so an unprivileged glob
+# matches nothing, leaving the source ISO's BLS entries (its rescue entry and one for the stock kernel) in
+# the image while the removal appears to succeed.
+as_root find "$ROOTFS/boot" -mindepth 1 -maxdepth 1 -name 'dtb-*' -exec rm -rf {} +
+if as_root test -d "$ROOTFS/boot/loader/entries"; then
+  as_root find "$ROOTFS/boot/loader/entries" -mindepth 1 -name '*.conf' -delete
+  [ -z "$(as_root find "$ROOTFS/boot/loader/entries" -name '*.conf' -print -quit)" ] \
+    || die "stale BLS entries left in the live root"
+fi
 [ "$(as_root find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' -printf '%f\n')" = "vmlinuz-$KERNEL_ABI" ] || die "unexpected kernels left in /boot"
 as_root rm -f "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
 [ -e "$ROOTFS/etc/system-fips" ] && die "live root has /etc/system-fips"
