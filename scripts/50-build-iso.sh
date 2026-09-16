@@ -118,6 +118,11 @@ grep -q "^GRUB_DEVICETREE=\"$SP11_DTB\"" "$ROOTFS/etc/default/grub" || die "GRUB
 ##    The support RPM's dracut drop-in pulls the whole Denali firmware set into every initramfs. The installed
 ##    system needs that (host-only initramfs starts the DSP early); the live media does not (the ADSP driver is
 ##    blacklisted there), so park the drop-in for this run and install only the GPU zap shader.
+# Fedora 45 added two aarch64 dracut modules that both defeat the live-media policy above:
+# devicetree-firmware's generic path globs $fw_dir/qcom/x1e80100/*/*/*.mbn|elf, which is exactly the Denali
+# set, and qcom-adsp modprobes qcom_q6v5_pas from a pre-udev hook. Omitting them is what keeps the live
+# image free of the DSP firmware; on releases without these modules dracut ignores the extra omit names.
+LIVE_DRACUT_OMIT="multipath fips fips-crypto-policies devicetree-firmware qcom-adsp"
 DRACUT_DROPIN="$ROOTFS/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
 ZAP_FW="/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn"
 restore_dropin() { [ -e "$DRACUT_DROPIN.live-off" ] && as_root mv -f "$DRACUT_DROPIN.live-off" "$DRACUT_DROPIN" || true; }
@@ -131,7 +136,7 @@ as_root mv -f "$DRACUT_DROPIN" "$DRACUT_DROPIN.live-off"
 log "generating live initramfs for $KERNEL_ABI (dracut in chroot)"
 as_root rm -f "$ROOTFS/boot/initramfs-$KERNEL_ABI.img"
 as_root chroot "$ROOTFS" /usr/bin/dracut --force --reproducible --no-hostonly --no-hostonly-cmdline $PROFILE_OPT \
-  --add "dmsquash-live livenet pollcdrom" --omit "multipath fips fips-crypto-policies" --install "$ZAP_FW" \
+  --add "dmsquash-live livenet pollcdrom" --omit "$LIVE_DRACUT_OMIT" --install "$ZAP_FW" \
   --kver "$KERNEL_ABI" "/boot/initramfs-$KERNEL_ABI.img" >"$W/dracut.log" 2>&1 || { tail -30 "$W/dracut.log" >&2; die "dracut failed"; }
 restore_dropin
 [ -f "$DRACUT_DROPIN" ] || die "failed to restore $DRACUT_DROPIN"
