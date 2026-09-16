@@ -22,9 +22,19 @@ PKGS=(
   xorriso erofs-utils erofs-fuse dracut dracut-live cpio curl git dosfstools
   # Windows Bluetooth pairing export
   python3-hivex hivex
+  # cross-release RPM builds (sp11-iptsd against the target Fedora's fmt/spdlog)
+  mock
 )
 log "installing build dependencies"
 as_root dnf install -y -q "${PKGS[@]}"
+
+# mock refuses to build as an ordinary user outside the 'mock' group. Group changes only take effect in a
+# new login session, so this is a warning, not a failure: lib.sh falls back to `sudo mock` meanwhile.
+case " $(id -nG) " in
+  *" mock "*) ;;
+  *) as_root usermod -aG mock "$USER" \
+       && warn "added $USER to the 'mock' group; it applies in a new WSL session (wsl.exe --shutdown, or newgrp mock). Until then mock runs through sudo." ;;
+esac
 
 FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
 [ -d "$FR" ] || warn "Windows DriverStore not found at $FR; firmware extraction (scripts/30) will fail"

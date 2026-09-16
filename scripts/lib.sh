@@ -109,6 +109,66 @@ build_rpm() {
   ls -t "$RPM_DIR/$name"-*.rpm | head -1
 }
 
+# build_srpm SPEC_IN NAME SOURCEDIR [KEY=VALUE...] — renders the spec and builds one source RPM.
+# Prints the resulting SRPM path. Used when the binary RPM has to be built elsewhere (see mock_rebuild).
+build_srpm() {
+  local spec_in=$1 name=$2 sourcedir=$3; shift 3
+  local top="$WORK_DIR/rpmbuild-$name"
+  rm -rf "$top"; mkdir -p "$top"/{BUILD,BUILDROOT,RPMS,SPECS,SRPMS}
+  render "$spec_in" "$top/SPECS/$name.spec" "$@"
+  rpmbuild -bs \
+    --define "_topdir $top" --define "_sourcedir $sourcedir" --define "_srcrpmdir $top/SRPMS" \
+    --define "dist .fc${FEDORA_RELEASE}" \
+    "$top/SPECS/$name.spec" >"$top/rpmbuild-srpm.log" 2>&1 \
+    || { tail -40 "$top/rpmbuild-srpm.log" >&2; die "rpmbuild -bs failed for $name (log: $top/rpmbuild-srpm.log)"; }
+  local srpm; srpm=$(ls -t "$top/SRPMS/$name"-*.src.rpm 2>/dev/null | head -1 || true)
+  [ -n "$srpm" ] || die "rpmbuild -bs produced no SRPM for $name"
+  printf '%s\n' "$srpm"
+}
+
+# mock_tail RESULTDIR — print the most informative log tail mock left behind.
+mock_tail() {
+  local f
+  for f in "$1/build.log" "$1/mock-simple.out" "$1/mock.out"; do
+    if [ -s "$f" ]; then tail -40 "$f" >&2; return 0; fi
+  done
+  return 0
+}
+
+# mock_rebuild SRPM NAME — rebuild SRPM in the $MOCK_CONFIG buildroot, move the binary RPM into $RPM_DIR
+# and print its path. This is how a package links against the *target* release's libraries instead of the
+# build host's: sp11-iptsd needs the fmt/spdlog sonames of the Fedora that the live media carries, and
+# those change between releases (F44 libfmt.so.11/libspdlog.so.1.15, F45 libfmt.so.12/libspdlog.so.1.17).
+mock_rebuild() {
+  local srpm=$1 name=$2
+  local cfg="/etc/mock/$MOCK_CONFIG.cfg"
+  [ -f "$cfg" ] || die "no mock config $cfg (install mock-core-configs, or set MOCK_CONFIG)"
+  local resultdir="$WORK_DIR/mock-$name"
+  # A previous run under sudo leaves root-owned files here.
+  as_root rm -rf "$resultdir"; mkdir -p "$resultdir"
+  # mock refuses to build for a user outside the 'mock' group. 00-setup-host.sh adds the membership, but it
+  # only takes effect in a new login session, so fall back to sudo in the session that ran the setup.
+  local -a mock=(mock)
+  case " $(id -nG) " in *" mock "*) ;; *) mock=(sudo mock) ;; esac
+  # --no-bootstrap-image: build the bootstrap chroot with dnf rather than pulling
+  # registry.fedoraproject.org/fedora:<n> through podman. dnf --releasever against the target repos is all
+  # this needs, and it keeps the build off the container registry.
+  local -a args=(-r "$MOCK_CONFIG" --resultdir="$resultdir" --no-bootstrap-image --rebuild "$srpm")
+  log "rebuilding $(basename "$srpm") in the $MOCK_CONFIG buildroot (several minutes on the first run)"
+  if ! "${mock[@]}" "${args[@]}" >"$resultdir/mock.out" 2>&1; then
+    # nspawn is mock's default where systemd is pid 1; under WSL it can fail for reasons that have nothing
+    # to do with the build, and the plain chroot backend works. Retry once before giving up.
+    warn "mock failed with the default isolation; retrying with --isolation=simple"
+    "${mock[@]}" --isolation=simple "${args[@]}" >"$resultdir/mock-simple.out" 2>&1 \
+      || { mock_tail "$resultdir"; die "mock rebuild failed for $name (logs in $resultdir)"; }
+  fi
+  local built; built=$(ls -t "$resultdir/$name"-[0-9]*."$FEDORA_ARCH".rpm 2>/dev/null | head -1 || true)
+  [ -n "$built" ] || { mock_tail "$resultdir"; die "mock produced no $name binary RPM (logs in $resultdir)"; }
+  rm -f "$RPM_DIR/$name"-*.rpm
+  install -m 0644 "$built" "$RPM_DIR/$(basename "$built")"
+  printf '%s\n' "$RPM_DIR/$(basename "$built")"
+}
+
 # Newest RPM of a package in $RPM_DIR, or empty. Never fails: callers test the result themselves.
 rpm_of() { ls -t "$RPM_DIR/$1"-[0-9]*.rpm 2>/dev/null | head -1 || true; }
 

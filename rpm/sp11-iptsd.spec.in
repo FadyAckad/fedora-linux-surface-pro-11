@@ -19,6 +19,8 @@ ExclusiveArch:  aarch64
 BuildRequires:  gcc-c++
 BuildRequires:  meson
 BuildRequires:  ninja-build
+# meson locates Microsoft.GSL through its CMake config only; it ships no pkg-config file.
+BuildRequires:  cmake
 BuildRequires:  pkgconf-pkg-config
 BuildRequires:  cli11-devel
 BuildRequires:  eigen3-devel
@@ -95,7 +97,10 @@ fi
 %{_prefix}/lib/systemd/system-sleep/sp11-iptsd-restart
 
 %changelog
-* Mon Sep 14 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+* Wed Sep 16 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+- Declare the cmake build dependency, without which meson cannot find Microsoft.GSL in a clean buildroot
+
+* Mon Sep 14 2026 SP11 build <sp11@localhost> - 3.1.0-2.sp11
 - Restart the running sp11-iptsd@ instances on upgrade, stop them on erase
 
 * Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1.sp11
