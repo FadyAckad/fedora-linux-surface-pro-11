@@ -44,10 +44,15 @@ log "source: volid=$VOLID marker=$MARKER kernel=$KERNEL_ISO initrd=$INITRD_ISO l
 LOADER_DIR=$(dirname "$KERNEL_ISO")
 DTB_ISO="$LOADER_DIR/dtb/$SP11_DTB"
 
-if [ ! -s "$W/live.erofs" ] || [ "${FORCE:-0}" = 1 ]; then
-  log "extracting the live root image from the ISO"
-  rm -f "$W/live.erofs"
+# The extracted live image is cached between runs, so the cache has to be keyed to the ISO it came from:
+# on a release or compose change an unkeyed cache silently remasters the *previous* media. The stamp
+# records which ISO produced the file.
+LIVE_STAMP="$W/live.erofs.source"
+if [ ! -s "$W/live.erofs" ] || [ "${FORCE:-0}" = 1 ] || [ "$(cat "$LIVE_STAMP" 2>/dev/null || true)" != "$FEDORA_ISO_NAME" ]; then
+  log "extracting the live root image from $FEDORA_ISO_NAME"
+  rm -f "$W/live.erofs" "$LIVE_STAMP"
   xorriso -osirrox on -indev "$ISO" -extract "$LIVEOS_ISO" "$W/live.erofs" >/dev/null 2>&1 || die "xorriso extraction failed"
+  printf '%s\n' "$FEDORA_ISO_NAME" > "$LIVE_STAMP"
 fi
 [ "$(as_root blkid -p -s TYPE -o value "$W/live.erofs")" = erofs ] || die "$LIVEOS_ISO is not an EROFS image"
 GRUBEFI="$W/grubaa64.efi"
@@ -63,7 +68,12 @@ as_root rm -rf --one-file-system "$ROOTFS"
 as_root fsck.erofs --extract="$ROOTFS" --xattrs --preserve "$W/live.erofs" >"$W/fsck-erofs.log" 2>&1 || { tail -5 "$W/fsck-erofs.log" >&2; die "fsck.erofs extraction failed"; }
 [ -d "$ROOTFS/usr/lib/modules" ] || die "extracted root looks wrong"
 STOCK_KVER=$(ls "$ROOTFS/usr/lib/modules" | head -1)
-log "stock kernel in live root: $STOCK_KVER"
+# Defence in depth behind the stamp above: an extracted root from the wrong release would otherwise only
+# surface later as a confusing dependency failure while installing the runtime RPMs.
+ROOT_RELEASE=$(as_root sed -n 's/^VERSION_ID=//p' "$ROOTFS/etc/os-release" | tr -d '"' || true)
+[ "$ROOT_RELEASE" = "$FEDORA_RELEASE" ] \
+  || die "live root is Fedora $ROOT_RELEASE but this build targets Fedora $FEDORA_RELEASE (stale $W/live.erofs?)"
+log "stock kernel in live root: $STOCK_KVER (Fedora $ROOT_RELEASE)"
 
 ## 3. Install runtime dependencies Workstation Live lacks, then the SP11 RPMs. Dependencies are checked
 ##    (no --nodeps): a missing library would leave e.g. iptsd unable to start on the installed system.

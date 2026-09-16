@@ -31,6 +31,9 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
   commit), so a bump alone triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec.
 - Step 10 honours `FORCE=1` only for the two dnf-downloaded caches (`build/cache/wifi/f<release>`,
   `build/cache/rpm-deps/f<release>`); checksum-pinned downloads are never re-fetched.
+- `50-build-iso.sh` caches the extracted live image as `build/work/iso/live.erofs` and keys it to the ISO it
+  came from with a `live.erofs.source` stamp. An unkeyed cache silently remasters the *previous* media on a
+  release or compose change; it also asserts the extracted root's `VERSION_ID` equals `FEDORA_RELEASE`.
 
 ## Host
 
