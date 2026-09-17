@@ -12,7 +12,7 @@ free_gib=$(df -Pk "$BUILD_DIR" | awk 'NR==2{print int($4/1024/1024)}')
 PKGS=(
   # kernel build
   gcc make flex bison bc openssl openssl-devel elfutils-libelf-devel dwarves perl-interpreter perl-Getopt-Long
-  python3 rsync zstd xz dtc kmod binutils gawk file diffutils findutils which util-linux
+  python3 rsync zstd xz dtc kmod binutils gawk file diffutils findutils which util-linux patch
   # RPM packaging
   rpm-build rpmdevtools
   # iptsd build

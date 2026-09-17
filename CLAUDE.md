@@ -22,9 +22,9 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
 - `CLAUDE.local.md` (git-ignored, loaded by Claude Code after this file) holds the owner's private working
   rules and hand-off notes. `.gitattributes` forces LF. `.gitignore` also blocks `hardware.env`, `*.hiv`,
   `*.iso`, `*.rpm` and the pairing tarball anywhere in the tree.
-- `build/` (git-ignored): `cache/` (downloads, pinned checkouts, `rpm-deps/`), `kernel/` (source tree and
-  payload), `work/iso/` (extracted live root, root-owned), `rpms/`, `out/` (ISO, `.sha256`, pairing
-  tarball), `bt-pairings/` (exported hive; secret), `hardware.env`.
+- `build/` (git-ignored): `cache/` (downloads, pinned checkouts, `rpm-deps/`, `patch-<v>.xz`), `kernel/`
+  (one source tree per stable version, payload, logs), `work/iso/` (extracted live root, root-owned),
+  `rpms/`, `out/` (ISO, `.sha256`, pairing tarball), `bt-pairings/` (exported hive; secret), `hardware.env`.
 - Bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the support payload changes, so
   `dnf upgrade` works on the installed system. Its `%posttrans` regenerates `grub.cfg`. Steps 20/30/40
   skip only when the cached RPM matches (kernel ABI file list; support `%{VERSION}` and the
@@ -69,11 +69,14 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 
 - ooaklee/linux_ms_dev_kit-sp11, release `sp11-qcom-x1e-7.2.0-jg-0sp11v23`, commit
   `ce78e6ebc3d70c4a316b5721a62478ca87d6cb46`, ABI `7.2.0-jg-0sp11v23-qcom-x1e`. Source tarball and
-  debs with SHA256SUMS are on the OE release page.
+  debs with SHA256SUMS are on the OE release page. Since 2026-09-17 the default build adds the kernel.org
+  7.2.5 stable update (ABI `7.2.5-jg-0sp11v23-qcom-x1e`, see `KERNEL_STABLE_VERSION` below).
 - `python3 debian/scripts/misc/annotations --file debian.qcom-x1e/config/annotations --arch arm64
   --flavour qcom-x1e --export` reproduces the released config exactly except `CONFIG_VERSION_SIGNATURE`.
-  The ABI is injected with `CONFIG_LOCALVERSION="-jg-0sp11v23-qcom-x1e"`. Native build: ~15 min,
-  7816 modules, same set as ooaklee's deb. Image is `arch/arm64/boot/vmlinuz.efi` (EFI zboot PE).
+  The ABI is injected with `CONFIG_LOCALVERSION="-jg-0sp11v23-qcom-x1e"`. Native build of a fresh tree:
+  ~45 min on 12 cores, 7816 modules, same set as ooaklee's deb. A stopped build resumes where it left off
+  (the background task dies with the Claude session or WSL); `FORCE=1` on a built tree takes ~5 min.
+  Image is `arch/arm64/boot/vmlinuz.efi` (EFI zboot PE).
 - Relevant config: EROFS with LZMA and xattrs as module; `CONFIG_LSM="landlock,lockdown,yama,integrity,
   apparmor"` (AppArmor active, SELinux inactive, Fedora runs without MAC);
   `CONFIG_SECURITY_APPARMOR_RESTRICT_USERNS=y` (denies unprivileged user namespaces without a profile;
@@ -82,6 +85,46 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `MODULE_SIG=y` with an ephemeral key; zstd modules; `FW_LOADER_COMPRESS_XZ=y`.
 - Fedora's `depmod -b BASE` expects `BASE/lib/modules`; the payload uses `/usr/lib/modules`, so
   `20-build-kernel.sh` uses a temporary `lib -> usr/lib` symlink.
+- `KERNEL_STABLE_VERSION` (default `7.2.5` in build mode; `KERNEL_STABLE_VERSION=` builds the release as
+  published) applies kernel.org's cumulative `patch-<v>.xz` (sha256 pinned in the `sp11.conf` case table) to
+  ooaklee's source in a tree of its own, `build/kernel/src/linux-<commit>-stable-<v>`, stamped
+  `.sp11-stable-<v>` only after `patch --batch --forward --fuzz=1` applied without a reject.
+  `KERNEL_UPSTREAM_VERSION` stays ooaklee's base; `KERNEL_BUILD_VERSION`, the ABI
+  (`7.2.5-jg-0sp11v23-qcom-x1e`) and the RPM version follow the patch (`kernel-sp11-7.2.5-sp11v23`).
+  `KERNEL_MODE=prebuilt` ignores the default and refuses an explicit value. `sp11.conf` also refuses a
+  stable version whose `X.Y.0` base is not `KERNEL_UPSTREAM_VERSION`, so a new ooaklee release on another
+  base fails early until the default is revisited.
+- 7.2.5 applies to v23 without a reject (one fuzz-1 hunk in `nvme/host/tcp.c`) and touches none of the
+  drivers the SP11 patches change (GPI DMA, spi-geni, Denali DTS, `sound/soc/qcom`, soundwire,
+  `drivers/input`, `platform/surface`). Against the 7.2.0 build: the same 7816 module names,
+  byte-identical Denali DTBs, and a config that differs only in `VERSION_SIGNATURE` and the Allwinner
+  `CRYPTO_DEV_SUN8I_{CE,SS}_PRNG` symbols 7.2.5 removes.
+- 7.2.6 does not apply to v23. Of the 26 files with rejected hunks, 19 hold changes v23 already has (the
+  X1 "Fix swapped USB QMP PHY vdda-phy/vdda-pll supplies" series, including `x1-microsoft-denali.dtsi`, and
+  msm DP/DSI fixes). 7 are real conflicts with non-upstream code in v23: `remoteproc/qcom_q6v5.c` and
+  `remoteproc_core.c` (v23's ADSP attach and `RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE` series, absent from
+  mainline 7.3-rc3, so there is no reference merge; 7.2.6's `!was_running` stop condition taken as-is would
+  skip the SMP2P stop when the firmware-started ADSP is restarted), `spi/spi-geni-qcom.c` (SP11 QSPI branch
+  in `spi_geni_init`), `qdsp6/q6apm.c` (SP11 audio, which already fixes the same start-count bug its own
+  way), Ubuntu AppArmor `domain.c` (different `aa_audit_file()` arguments), `glymur-crd.dts` and
+  `sc8280xp.dtsi`. Skipping the rejected hunk breaks the build in four of them, because other hunks of the
+  same commit apply (`rproc_attach_work`, the `out_pm` label, `stack_msg`, a second `pil_gpu_mem` node). A
+  successful `patch -R --dry-run` does not prove a pure-deletion hunk is already applied: the AppArmor hunk
+  passed it although the block is still there.
+- Upstream 7.2.5 builds `x1e80100-microsoft-denali-oled.dtb` too, but has no `mshw0485` driver and none of
+  ooaklee's Denali DTS additions (QSPI touch controller, speaker feedback and TX DMIC links, CPU idle
+  domains, IMX681, DSP/GPU firmware paths), so Fedora's own kernel with a DTB is no substitute.
+- `kernel-sp11` provides `installonlypkg(kernel)`, so dnf installs a new version next to the existing ones.
+  Fedora's `20-grub.install` makes the added kernel the saved default when `/etc/sysconfig/kernel` has
+  `UPDATEDEFAULT=yes` and `DEFAULTKERNEL=kernel-core` (the ABI contains none of `64k|auto|rt|uki`).
+  `kernel-install remove` leaves `saved_entry` naming the removed entry; GRUB then boots the first one.
+  The spec's `%preun` runs `kernel-install remove` unconditionally since 2026-09-17: the earlier
+  `if [ "$1" -eq 0 ]` guard skipped it whenever another `kernel-sp11` stayed installed and left the BLS
+  entry and `/boot/dtb-<ver>` behind. RPMs built before that (the 7.2.0 package on existing installs) keep
+  the guard: removing one next to a newer SP11 kernel needs `kernel-install remove <abi>` first.
+- A chroot test of that path needs a real filesystem at `/boot` (an ext4 loop image; `mkfs.ext4` from the
+  root, since the host has no e2fsprogs): on an overlay root `grub2-editenv` fails with `failed to get
+  canonical path of overlay`, so `saved_entry` never changes. The step 60 simulation does not check it.
 
 ## Fedora live media
 

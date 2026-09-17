@@ -200,7 +200,8 @@ render "$FILES_DIR/grub-live.cfg.in" "$W/grub.cfg" RELEASE="$MEDIA_LABEL" ABI="$
   ARGS_LIVE="$SP11_ARGS_LIVE_ONLY" DTB="$DTB_ISO" KERNEL="$KERNEL_ISO" INITRD="$INITRD_ISO"
 grep -q 'fips=1' "$W/grub.cfg" && die "grub.cfg enables FIPS"
 rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "$KRPM" "$SRPM" "$IRPM" "$W/sp11/rpms/"
-render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" COMMIT="${KERNEL_SOURCE_COMMIT:0:12}" \
+render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" \
+  COMMIT="${KERNEL_SOURCE_COMMIT:0:12}${KERNEL_STABLE_VERSION:+ + kernel.org stable $KERNEL_STABLE_VERSION}" \
   MODE="$KERNEL_MODE" DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE" \
   EDITION="$FEDORA_EDITION" EDITION_NOTE="$EDITION_NOTE"
 

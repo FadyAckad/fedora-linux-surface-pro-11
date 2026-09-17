@@ -1,22 +1,41 @@
 # Fedora Live ISO for Surface Pro 11 (Snapdragon X Elite, OLED, incl. the 5G SKU)
 
 Builds a Fedora live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition
-with the Samsung OLED panel (Snapdragon X Elite X1E80100). The ISO uses kernel
-`7.2.0-jg-0sp11v23-qcom-x1e` from
-[ooaklee/linux_ms_dev_kit-sp11](https://github.com/ooaklee/linux_ms_dev_kit-sp11), and GRUB loads the
-Denali OLED device tree explicitly. The build runs on the Surface itself, in WSL (Fedora aarch64): the
-kernel compiles natively, and the unit's identity, Bluetooth address and device firmware come from its
-Windows installation, so every ISO is tailored to the unit that built it.
+with the Samsung OLED panel (Snapdragon X Elite X1E80100). The ISO uses the Surface Pro 11 kernel from
+[ooaklee/linux_ms_dev_kit-sp11](https://github.com/ooaklee/linux_ms_dev_kit-sp11) (release v23, based on
+Linux 7.2.0) with the kernel.org 7.2.5 stable update applied, `7.2.5-jg-0sp11v23-qcom-x1e`, and GRUB
+loads the Denali OLED device tree explicitly. The build runs on the Surface itself, in WSL (Fedora
+aarch64): the kernel compiles natively, and the unit's identity, Bluetooth address and device firmware
+come from its Windows installation, so every ISO is tailored to the unit that built it.
 
 ## Verified
 
-Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`) with three installs: Fedora 44
-Workstation, Fedora 45 Beta Workstation and Fedora 44 COSMIC. All three work: display with GPU
-acceleration, Wi-Fi, Bluetooth, touchscreen, pen, speakers, microphone, keyboard/touchpad, battery,
-Flatpak, Windows in the GRUB menu, and Flex Keyboard and Slim Pen 2 pairings shared with Windows.
+Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). The first three columns are
+installations from ISOs with ooaklee's unmodified 7.2.0 kernel. The last column is the Fedora 45 Beta
+installation after its kernel was updated to the current default, 7.2.5.
 
-Not covered: 5G modem, cameras. In the live session, audio and battery status are unavailable because
-the audio DSP stays off while running from USB-C; both work once installed.
+| Feature | Fedora 44 Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.0 | Fedora 44 COSMIC, 7.2.0 | Fedora 45 Beta Workstation, 7.2.5 |
+|---|:-:|:-:|:-:|:-:|
+| Display with GPU acceleration | yes | yes | yes | yes |
+| Wi-Fi | yes | yes | yes | yes |
+| Bluetooth | yes | yes | yes | yes |
+| Touchscreen | yes | yes | yes | yes |
+| Pen | yes | yes | yes | yes |
+| Speakers | yes | yes | yes | yes |
+| Microphone | yes | yes | yes | yes |
+| Keyboard and touchpad | yes | yes | yes | yes |
+| Battery status | yes | yes | yes | yes |
+| Suspend and resume | yes | yes | yes | yes |
+| Flatpak | yes | yes | yes | yes |
+| Windows in the GRUB menu | yes | yes | yes | yes |
+| Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes | yes | yes | yes |
+| 5G modem | no | no | no | no |
+| Cameras | no | no | no | no |
+
+*yes*: confirmed on the tested unit. *no*: not covered by this project.
+
+In the live session, audio and battery status are unavailable because the audio DSP stays off while
+running from USB-C; both work once installed.
 
 ## Status and scope
 
@@ -64,9 +83,10 @@ Steps:
 3. `scripts/10-fetch-sources.sh` downloads and checksum-verifies the Fedora ISO, the kernel source, the
    audio files, the pinned iptsd and OE checkouts, helper sources and the runtime packages the live
    image lacks.
-4. `scripts/20-build-kernel.sh` compiles the kernel with ooaklee's exact config (about 15 min) into the
-   `kernel-sp11` RPM. `KERNEL_MODE=prebuilt` repackages ooaklee's released `.deb` payload instead
-   (1 min); both give the same 7816 modules.
+4. `scripts/20-build-kernel.sh` applies the stable update to ooaklee's source and compiles it with
+   ooaklee's exact config (about 45 min) into the `kernel-sp11` RPM. `KERNEL_MODE=prebuilt` repackages
+   ooaklee's released 7.2.0 `.deb` payload instead (1 min, without the stable update); both give the same
+   7816 modules.
 5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: firmware from the Windows
    DriverStore, audio topology and UCM, Wi-Fi board data, Bluetooth address service, boot policy
    (kernel-install plugin, dracut, sysctl and dnf settings), the Windows GRUB entry, the first-boot and
@@ -76,10 +96,11 @@ Steps:
    Pro 11 integration.
 7. `scripts/50-build-iso.sh` installs the RPMs into the live root, builds the live initramfs, writes the
    GRUB menu and assembles the ISO, for example
-   `build/out/Fedora-Workstation-Live-44-1.7-SP11-7.2.0-jg-0sp11v23-qcom-x1e.aarch64.iso`, plus
+   `build/out/Fedora-Workstation-Live-44-1.7-SP11-7.2.5-jg-0sp11v23-qcom-x1e.aarch64.iso`, plus
    `.sha256`. The file name carries the edition, so images of different editions coexist.
 
-`build-all.sh` runs these steps (about 45 min after the downloads). `scripts/60-verify-rootfs.sh` then
+`build-all.sh` runs these steps (about an hour after the downloads, most of it the kernel; WSL has to keep
+running, or the kernel build stops and resumes on the next run). `scripts/60-verify-rootfs.sh` then
 checks the root that step 7 left behind: RPM dependencies, loadable binaries, the installer, the
 stock-kernel cleanup, the boot entry an installation would get (Denali DTB, kernel arguments) and the
 Windows GRUB entry.
@@ -160,10 +181,11 @@ device BlueZ knows. It changes nothing.
 
 ## What the scripts decide for you
 
-- Kernel: ooaklee's `7.2.0-jg-0sp11v23` source with the config exported from
-  `debian.qcom-x1e/config/annotations`, identical to the released config except `CONFIG_LOCALVERSION`
-  (carries the ABI) and `CONFIG_VERSION_SIGNATURE`. FIPS is not compiled in, and the initramfs omits the
-  dracut `fips` modules.
+- Kernel: ooaklee's `7.2.0-jg-0sp11v23` source plus the kernel.org 7.2.5 stable update
+  (`KERNEL_STABLE_VERSION`), with the config exported from `debian.qcom-x1e/config/annotations`. Compared
+  with ooaklee's released 7.2.0 config, only `CONFIG_LOCALVERSION` (carries the ABI),
+  `CONFIG_VERSION_SIGNATURE` and two Allwinner crypto options that 7.2.5 removes differ. FIPS is not
+  compiled in, and the initramfs omits the dracut `fips` modules.
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb`, loaded explicitly everywhere: GRUB
   `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry through
   `/usr/lib/kernel/install.d/15-sp11-surface.install`. Fedora's stubble hardware-ID database does not
@@ -211,6 +233,21 @@ downloaded with dnf (`atheros-firmware`, the live-root dependencies) are cached 
 fetched again with `FORCE=1`. The ISO layout (volume id, marker file, kernel and initrd paths, font) is
 read from each ISO. The UCM matcher patch in `scripts/30-build-support-rpm.sh` expects ooaklee's v19c
 `x1e80100.conf` and stops the build if that file changes.
+
+`KERNEL_STABLE_VERSION` (default 7.2.5) applies a kernel.org stable update on top of ooaklee's release in
+source builds; `sp11.conf` pins the checksum of each accepted version. The patched source gets a tree of
+its own, and the result is `kernel-sp11-7.2.5-sp11v23` with the kernel version
+`7.2.5-jg-0sp11v23-qcom-x1e`. To build ooaklee's release unchanged (`7.2.0-jg-0sp11v23-qcom-x1e`):
+
+```bash
+KERNEL_STABLE_VERSION= scripts/build-all.sh
+```
+
+The 7.2.5 update applies to ooaklee's v23 source unchanged. 7.2.6 does not: it changes the same lines as
+v23's own audio DSP, touch controller, audio and AppArmor code and would need a manual merge. A stable
+update only fits the `X.Y.0` release it was made for, so a new ooaklee release on another base stops the
+build until you set a matching `KERNEL_STABLE_VERSION` default in `sp11.conf` (with its checksum from
+kernel.org's `sha256sums.asc`) or clear it.
 
 ## Layout
 

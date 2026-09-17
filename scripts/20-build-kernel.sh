@@ -1,9 +1,10 @@
 #!/usr/bin/bash
 # Step 3: produce the kernel-sp11 RPM (kernel image, modules, Denali DTBs).
-#   KERNEL_MODE=build    compile natively from ooaklee's source tarball with ooaklee's annotations config
+#   KERNEL_MODE=build    compile natively from ooaklee's source tarball with ooaklee's annotations config,
+#                        plus the kernel.org stable patch KERNEL_STABLE_VERSION when that is set
 #   KERNEL_MODE=prebuilt repackage ooaklee's released .deb payload
 . "$(dirname "$0")/lib.sh"
-require_cmd make gcc python3 depmod tar ar rpmbuild zstd
+require_cmd make gcc python3 depmod tar ar rpmbuild zstd xz patch
 
 KDIR="$BUILD_DIR/kernel"
 PAYLOAD="$KDIR/payload"
@@ -50,12 +51,30 @@ stage_common() {
 build_from_source() {
   local tarball="$CACHE_DIR/$KERNEL_SOURCE_TARBALL" src="$KDIR/src/linux-$KERNEL_SOURCE_COMMIT"
   [ -s "$tarball" ] || die "missing $tarball (run scripts/10-fetch-sources.sh)"
-  if [ ! -f "$src/Makefile" ]; then
+  if [ -n "$KERNEL_STABLE_VERSION" ]; then
+    # A tree of its own, so the published source and its build stay untouched. The stamp is written only after the
+    # whole patch applied; a tree without it is extracted again.
+    local patchf="$CACHE_DIR/patch-$KERNEL_STABLE_VERSION.xz" plog="$KDIR/stable-patch.log"
+    src="$src-stable-$KERNEL_STABLE_VERSION"
+    if [ ! -f "$src/.sp11-stable-$KERNEL_STABLE_VERSION" ]; then
+      [ -s "$patchf" ] || die "missing $patchf (run scripts/10-fetch-sources.sh)"
+      verify_sha256 "$patchf" "$KERNEL_STABLE_SHA256"
+      log "extracting kernel source and applying kernel.org stable patch-$KERNEL_STABLE_VERSION"
+      rm -rf "$src"; mkdir -p "$src"
+      tar -xzf "$tarball" -C "$src" --strip-components=1
+      # --batch: never prompt (a prompt would read the patch stream); --forward: an already applied hunk is an error.
+      xz -dc "$patchf" | patch -d "$src" -p1 --batch --forward --fuzz=1 --no-backup-if-mismatch >"$plog" 2>&1 \
+        || { grep -E 'FAILED|Reversed|can.t find|malformed' "$plog" | head -20 >&2 || true
+             die "patch-$KERNEL_STABLE_VERSION does not apply to $KERNEL_RELEASE_TAG (log: $plog)"; }
+      log "patch-$KERNEL_STABLE_VERSION applied: $(grep -c '^patching file' "$plog") files, $(grep -c 'with fuzz' "$plog") hunk(s) with fuzz (log: $plog)"
+      touch "$src/.sp11-stable-$KERNEL_STABLE_VERSION"
+    fi
+  elif [ ! -f "$src/Makefile" ]; then
     log "extracting kernel source"; mkdir -p "$KDIR/src"; tar -xzf "$tarball" -C "$KDIR/src"
   fi
   [ -f "$src/debian.$KERNEL_FLAVOUR/config/annotations" ] || die "no debian.$KERNEL_FLAVOUR/config/annotations in source"
   cd "$src"
-  local localversion="${KERNEL_ABI#"$KERNEL_UPSTREAM_VERSION"}"   # e.g. -jg-0sp11v23-qcom-x1e
+  local localversion="${KERNEL_ABI#"$KERNEL_BUILD_VERSION"}"   # e.g. -jg-0sp11v23-qcom-x1e
 
   log "generating .config from ooaklee's annotations (arch arm64, flavour $KERNEL_FLAVOUR)"
   python3 debian/scripts/misc/annotations --file "debian.$KERNEL_FLAVOUR/config/annotations" \
@@ -63,7 +82,7 @@ build_from_source() {
   # Identity: Ubuntu's packaging injects the ABI at build time; reproduce it through LOCALVERSION.
   scripts/config --set-str LOCALVERSION "$localversion"
   scripts/config --disable LOCALVERSION_AUTO
-  scripts/config --set-str VERSION_SIGNATURE "SP11 $KERNEL_ABI (ooaklee ${KERNEL_SOURCE_COMMIT:0:12}, built on Fedora $FEDORA_RELEASE)"
+  scripts/config --set-str VERSION_SIGNATURE "SP11 $KERNEL_ABI (ooaklee ${KERNEL_SOURCE_COMMIT:0:12}${KERNEL_STABLE_VERSION:+ + stable $KERNEL_STABLE_VERSION}, built on Fedora $(rpm -E %{fedora}))"
   scripts/config --disable CRYPTO_FIPS
   make -s olddefconfig
   [ "$(make -s kernelrelease)" = "$KERNEL_ABI" ] || die "kernelrelease '$(make -s kernelrelease)' != '$KERNEL_ABI'"
@@ -120,8 +139,9 @@ esac
 
 log "building kernel-sp11 RPM"
 RPM=$(build_rpm "$SPEC_DIR/kernel-sp11.spec.in" kernel-sp11 "$KDIR" \
-  ABI="$KERNEL_ABI" KVER="$KERNEL_UPSTREAM_VERSION" KREL="$KERNEL_RPM_RELEASE" PAYLOAD="$PAYLOAD" \
-  MODE="$KERNEL_MODE" COMMIT="$KERNEL_SOURCE_COMMIT" RELEASE_TAG="$KERNEL_RELEASE_TAG")
+  ABI="$KERNEL_ABI" KVER="$KERNEL_BUILD_VERSION" KREL="$KERNEL_RPM_RELEASE" PAYLOAD="$PAYLOAD" \
+  MODE="$KERNEL_MODE" COMMIT="$KERNEL_SOURCE_COMMIT" RELEASE_TAG="$KERNEL_RELEASE_TAG" \
+  STABLE="${KERNEL_STABLE_VERSION:+, kernel.org stable patch-$KERNEL_STABLE_VERSION}")
 rpm -qp --provides "$RPM" | grep -x 'kernel-uname-r' >/dev/null || die "RPM lacks kernel-uname-r provide"
 rpm -qpl "$RPM" | grep -x "/boot/vmlinuz-$KERNEL_ABI" >/dev/null || die "RPM lacks /boot/vmlinuz-$KERNEL_ABI"
 log "kernel RPM: $RPM ($(du -h "$RPM" | cut -f1))"

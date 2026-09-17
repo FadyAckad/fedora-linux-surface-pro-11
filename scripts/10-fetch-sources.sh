@@ -10,13 +10,17 @@ fetch "$FEDORA_ISO_BASEURL/$FEDORA_ISO_NAME" "$CACHE_DIR/$FEDORA_ISO_NAME"
   || die "Fedora ISO failed checksum verification"
 log "verified $FEDORA_ISO_NAME"
 
-## Kernel release (ooaklee)
+## Kernel release (ooaklee), plus the optional kernel.org stable patch (checksum pinned in sp11.conf)
 KSUMS="$CACHE_DIR/$KERNEL_RELEASE_TAG.SHA256SUMS"
 fetch "$KERNEL_RELEASE_BASEURL/SHA256SUMS" "$KSUMS"
 case "$KERNEL_MODE" in
   build)
     fetch "$KERNEL_RELEASE_BASEURL/$KERNEL_SOURCE_TARBALL" "$CACHE_DIR/$KERNEL_SOURCE_TARBALL"
     verify_in_sums "$KSUMS" "$CACHE_DIR/$KERNEL_SOURCE_TARBALL"
+    if [ -n "$KERNEL_STABLE_VERSION" ]; then
+      fetch "$KERNEL_STABLE_URL" "$CACHE_DIR/patch-$KERNEL_STABLE_VERSION.xz"
+      verify_sha256 "$CACHE_DIR/patch-$KERNEL_STABLE_VERSION.xz" "$KERNEL_STABLE_SHA256"
+    fi
     ;;
   prebuilt)
     for f in "$KERNEL_IMAGE_DEB" "$KERNEL_MODULES_DEB"; do
