@@ -49,9 +49,9 @@ cp -a %{payload}/. %{buildroot}/
 /usr/bin/kernel-install add %{abi} /usr/lib/modules/%{abi}/vmlinuz || :
 
 %preun
-if [ "$1" -eq 0 ]; then
-  /usr/bin/kernel-install remove %{abi} || :
-fi
+# Install-only package: when one version is erased while another stays, $1 is not 0, so remove the boot entry
+# unconditionally, as Fedora's kernel packages do. A reinstall of the same version re-adds it in posttrans.
+/usr/bin/kernel-install remove %{abi} || :
 
 %changelog
 * Sun Sep 13 2026 SP11 build <sp11@localhost> - @KVER@-@KREL@

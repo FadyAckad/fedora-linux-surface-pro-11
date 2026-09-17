@@ -132,7 +132,18 @@ The package regenerates the GRUB menu itself; upgrading `sp11-iptsd` restarts th
 the ISO afterwards so new installations get the same version. `build/rpms/` holds the RPMs of one Fedora
 release at a time: copy them elsewhere before building for another release.
 
-Support RPM history (all versions confirmed on the tested unit):
+A new `kernel-sp11` installs next to the current one, like Fedora's own kernels:
+
+```bash
+sudo dnf install ./kernel-sp11-<version>.fc<release>.aarch64.rpm
+```
+
+It gets its own boot entry with the Denali DTB and the kernel arguments and becomes the default; the
+previous kernel stays in the GRUB menu. Kernel RPMs built before 2026-09-17, such as the 7.2.0 one on
+existing installations, leave their boot entry behind when removed while another SP11 kernel stays, so run
+`sudo kernel-install remove 7.2.0-jg-0sp11v23-qcom-x1e` before `sudo dnf remove kernel-sp11-7.2.0`.
+
+Support RPM history (1.1 to 2.1 confirmed on the tested unit):
 
 - 1.1: Flatpak works (`kernel.apparmor_restrict_unprivileged_userns=0`).
 - 1.3: Windows Boot Manager entry in GRUB, before UEFI Firmware Settings.
