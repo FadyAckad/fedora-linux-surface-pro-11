@@ -161,6 +161,9 @@ Support RPM history (1.1 to 2.1 confirmed on the tested unit):
 - 2.1: `sp11-remove-stock-kernels.service` removes the hidden stock kernel once, on new installations
   and on systems upgraded from an earlier version. `dracut --regenerate-all` no longer fails with
   `Can't write to /boot/efi/...`, and boot entries whose kernel image is missing are removed.
+- 2.2: the stock-kernel cleanup accepts every installed `kernel-sp11` version as the running SP11 kernel,
+  so it also works with several SP11 kernels installed side by side. Tested in a chroot, not yet on the
+  device; systems where the cleanup already ran gain nothing from it.
 
 ## Bluetooth pairings shared with Windows (Flex Keyboard, Slim Pen 2)
 

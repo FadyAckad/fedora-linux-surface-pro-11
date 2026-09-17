@@ -13,15 +13,25 @@
 # cleanup, not an enforcer: once the stamp exists, a stock kernel installed deliberately later is left alone.
 set -eu
 shopt -s nullglob
-. /etc/sp11/sp11.env
 state=/var/lib/sp11/stock-kernels-removed.done
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 if grep -qw rd.live.image /proc/cmdline; then echo "live session, nothing to do"; exit 0; fi
-# Never remove kernels from a system that booted something other than the SP11 kernel.
+# SP11 kernels by uname -r: every version an installed kernel-sp11 owns (several can be installed side by side).
+declare -A sp11=()
+while read -r v; do sp11[$v]=1; done < <(rpm -q --qf '[%{FILENAMES}\n]' kernel-sp11 2>/dev/null \
+  | sed -n 's|^/usr/lib/modules/\([^/]*\)/vmlinuz$|\1|p')
+is_sp11() { [ -n "${sp11[$1]:-}" ]; }
+# True if the text names any SP11 kernel version (boot entry file names and image paths carry it).
+names_sp11() {
+  local s
+  for s in "${!sp11[@]}"; do case "$1" in *"$s"*) return 0 ;; esac; done
+  return 1
+}
+# Never remove kernels from a system that booted something other than an SP11 kernel.
 running=$(uname -r)
-if [ "$running" != "$SP11_KERNEL_ABI" ]; then
-  echo "running $running, not the SP11 kernel $SP11_KERNEL_ABI; leaving the stock kernel alone" >&2
+if ! is_sp11 "$running"; then
+  echo "running $running, which no installed kernel-sp11 provides; leaving the stock kernel alone" >&2
   exit 1
 fi
 
@@ -45,7 +55,7 @@ if [ ${#pkgs[@]} -gt 0 ]; then
 fi
 for d in /usr/lib/modules/*/; do
   d=${d%/}; v=${d##*/}
-  [ "$v" != "$SP11_KERNEL_ABI" ] && [ ! -e "/boot/vmlinuz-$v" ] || continue
+  ! is_sp11 "$v" && [ ! -e "/boot/vmlinuz-$v" ] || continue
   if rpm -qf "$d" >/dev/null 2>&1; then continue; fi
   gone[$v]=1
 done
@@ -61,7 +71,7 @@ owned_inside() {
 }
 # A surviving modules.dep alone keeps a version a --regenerate-all target, so the whole tree goes.
 for v in "${!gone[@]}"; do
-  [ -n "$v" ] && [ "$v" != "$SP11_KERNEL_ABI" ] || continue
+  [ -n "$v" ] && ! is_sp11 "$v" || continue
   d=/usr/lib/modules/$v
   if [ -d "$d" ]; then
     if owned_inside "$d"; then echo "keeping $d: a package still owns files in it" >&2
@@ -74,13 +84,13 @@ done
 # Boot entries whose kernel image no longer exists: the removed stock kernel's, and on installs from images
 # built before the root-side BLS cleanup in 50-build-iso.sh, the source media's stock and rescue entries.
 # Keyed on the image, not the version, because rpm -e has usually already taken the module tree the version
-# could have been read from. BLS paths are relative to the partition holding them. The SP11 entry is never
-# touched, even if /boot were to look empty.
+# could have been read from. BLS paths are relative to the partition holding them. Entries of installed SP11
+# kernels are never touched, even if /boot were to look empty; one left behind by a removed SP11 kernel goes.
 for e in /boot/loader/entries/*.conf; do
-  case "$e" in *"$SP11_KERNEL_ABI"*) continue ;; esac
+  if names_sp11 "$e"; then continue; fi
   img=$(sed -n 's/^linux[[:space:]]\+//p' "$e" | head -n1)
   [ -n "$img" ] || continue
-  case "$img" in *"$SP11_KERNEL_ABI"*) continue ;; esac
+  if names_sp11 "$img"; then continue; fi
   if [ ! -e "/boot$img" ] && [ ! -e "$img" ]; then echo "removing $e (no $img)"; rm -f "$e"; fi
 done
 

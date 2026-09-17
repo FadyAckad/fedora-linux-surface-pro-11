@@ -264,7 +264,15 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   so it also runs on systems whose first boot already happened) erases the stock set with plain `rpm -e`,
   removes module trees no package owns, and deletes BLS entries whose kernel image is missing. The entry
   cleanup is keyed on the image because `rpm -e` has usually already removed the module tree the version
-  could have been read from. It refuses unless the SP11 kernel is running and never touches the SP11 entry.
+  could have been read from. Since support RPM 2.2 an SP11 kernel is any version an installed `kernel-sp11`
+  owns (`/usr/lib/modules/<ver>/vmlinuz` in its file list): the script refuses unless one of them is running,
+  never touches their entries (even with the image missing), and also removes the entries and unowned
+  module trees of SP11 kernels removed earlier. 2.1 compared `uname -r` with a fixed `SP11_KERNEL_ABI` from
+  `/etc/sp11/sp11.env` (now dropped) and refused on any other SP11 kernel. Tested in an overlay of the 44
+  COSMIC root with 7.2.0 and 7.2.5 installed and a faked `uname -r`: 2.1 refuses under 7.2.5; 2.2 refuses
+  under the stock kernel, cleans up under 7.2.5, and a rerun under 7.2.0 changes nothing. In such a chroot,
+  install the support RPM with `--noscripts --notriggers`: its `%post` runs `systemd-sysctl`, which writes
+  through the bound `/proc` into the host kernel.
   Nothing outside the kernel family requires those packages on 45 (`rpm -e --test` is clean);
   `60-verify-rootfs.sh` runs that erase test on every root it checks. `kernel-sp11`'s unversioned
   `kernel-uname-r`, `kernel-core-uname-r` and `kernel-modules-core-uname-r` provides satisfy the stock
