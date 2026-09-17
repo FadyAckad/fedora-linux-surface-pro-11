@@ -336,7 +336,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 
 Working: boot, install, display/GPU, Wi-Fi, Bluetooth with the correct address, touch, pen inking,
 audio, battery, Flatpak, Windows entry in GRUB before UEFI Firmware Settings, shared Windows pairings
-for keyboard and pen, `sp11-bt-import-pairings` and `sp11-diag` under `/usr/libexec/sp11`.
+for keyboard and pen, `sp11-bt-import-pairings` and `sp11-diag` under `/usr/libexec/sp11`. Suspend and
+resume confirmed on 2026-09-17.
 
 Support RPM 1.7 (`sp11-diag` enumerates paired devices instead of fixed addresses; otherwise identical
 to 1.6, which added `sp11-grub-defaults` and the dnf kernel exclusion) was confirmed working on the
@@ -364,7 +365,8 @@ Confirmed working on the installed system by the owner on 2026-09-16: Bluetooth,
 battery, Flatpak and the Windows GRUB entry; in a second round the same day, keyboard/touchpad, GPU
 acceleration, the Bluetooth pairing import, no early-boot Adreno error with support RPM 2.0, a clean
 `dnf upgrade --refresh` after the `kernel-uki-*` exclusion, and support RPM 2.1 as an upgrade (stock kernel
-removed, `dracut --regenerate-all -f` clean). The 44 GA list above carries over to 45 Beta.
+removed, `dracut --regenerate-all -f` clean). The 44 GA list above carries over to 45 Beta. Suspend and
+resume confirmed on 2026-09-17.
 
 ### Fedora 44 GA COSMIC (2026-09-16, support RPM 2.1)
 
@@ -374,6 +376,15 @@ battery, Flatpak, the Windows GRUB entry, keyboard/touchpad, GPU acceleration (`
 `glx-utils` shows the Adreno GPU, not llvmpipe), the Bluetooth pairing import, no early-boot Adreno error,
 `dracut --regenerate-all -f` and `sp11-diag`. On the first boot `sp11-remove-stock-kernels` left only
 `kernel-sp11` and the `kernel-tools` packages, and `dnf upgrade --refresh` added no stock kernel entry.
+Suspend and resume confirmed on 2026-09-17.
+
+### Kernel 7.2.5 on Fedora 45 Beta Workstation (2026-09-17)
+
+`kernel-sp11-7.2.5-sp11v23` (`KERNEL_STABLE_VERSION=7.2.5`, built with `FEDORA_TARGET=beta`) installed next
+to 7.2.0 on the 45 Beta install. Confirmed working by the owner: Bluetooth, touchscreen, Wi-Fi, pen,
+suspend and resume, speakers, microphone, GPU acceleration, keyboard/touchpad, battery, Flatpak, the
+Windows GRUB entry and the keyboard and pen pairings shared with Windows. 7.2.5 is the build default since
+then; no ISO with it has been built yet.
 
 ## References
 
