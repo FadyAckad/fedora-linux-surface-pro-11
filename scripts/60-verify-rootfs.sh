@@ -31,6 +31,10 @@ check r grep -q "SP11_BT_MAC=\"$SP11_BT_MAC\"" "$ROOTFS/etc/sp11/bluetooth-addre
 check r test -x "$ROOTFS/usr/lib/kernel/install.d/15-sp11-surface.install"
 check r test -x "$ROOTFS/etc/grub.d/29_sp11_windows"
 check r test -f "$ROOTFS/usr/lib/grub/arm64-efi/chain.mod"
+check r test -s "$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE"
+# GRUB cannot read the font from /usr on a LUKS install; Anaconda rsyncs /boot/grub2 to the target.
+check r test -s "$ROOTFS/boot/grub2/fonts/$GRUB_FONT_FILE"
+check r sh -c "[ \"\$(dd if='$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE' bs=1 count=4 skip=8 status=none)\" = PFF2 ]"
 check r grep -q "^kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
@@ -100,6 +104,8 @@ for a in $SP11_ARGS_LIVE_ONLY; do check r sh -c "! grep -q '^options .*$a' '$ent
 check r grep -q "^GRUB_DEVICETREE=\"$SP11_DTB\"" "$M/etc/default/grub"
 check r grep -q '^GRUB_TERMINAL_OUTPUT="gfxterm"' "$M/etc/default/grub"
 check r grep -q "^GRUB_GFXMODE=$GRUB_GFXMODE_VALUE\$" "$M/etc/default/grub"
+check r grep -q "^GRUB_FONT=\"/boot/grub2/fonts/$GRUB_FONT_FILE\"\$" "$M/etc/default/grub"
+check r test -s "$M/boot/grub2/fonts/$GRUB_FONT_FILE"
 check r grep -q "^GRUB_TIMEOUT=$GRUB_TIMEOUT_VALUE\$" "$M/etc/default/grub"
 for a in $ANACONDA_ARGS $SP11_ARGS_INSTALLED; do check r grep -qwF -- "$a" "$M/etc/kernel/cmdline"; done
 check r grep -q '^root=UUID=0000-test ro ' "$M/etc/kernel/cmdline"

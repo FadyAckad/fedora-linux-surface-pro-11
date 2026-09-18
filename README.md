@@ -215,9 +215,13 @@ device BlueZ knows. It changes nothing.
 - Kernel arguments: `clk_ignore_unused pd_ignore_unused systemd.tpm2_wait=0
   soundwire_qcom.sp11_feedback_active_offset2_zero=1`. The live media adds
   `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas`; the installed system drops them.
-- GRUB: `gfxterm` at `1024x768,800x600,auto` on the live media and the installed system. Live menu: the
-  SP11 kernel, a verbose variant and a `nomodeset` variant. Installed menu order: Fedora entries,
-  Windows Boot Manager, UEFI Firmware Settings.
+- GRUB: `gfxterm` at the panel's native `2880x1920,auto`. GRUB has no text-scale setting and sizes its
+  character cell from the loaded font, so legibility comes from a 40 pt DejaVu Sans Mono PF2 font built
+  with `grub2-mkfont` and shipped in the support RPM (`/usr/share/sp11/fonts/sp11-console.pf2`, copied to
+  `/boot/grub2/fonts/` and named by `GRUB_FONT`): a 24x48 px cell, 120x40 characters. The live menu falls
+  back to Fedora's `unicode.pf2` at `1024x768` if that font fails to load. Live menu entries: the SP11
+  kernel, a verbose variant and a `nomodeset` variant. Installed menu order: Fedora entries, Windows Boot
+  Manager, UEFI Firmware Settings.
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` finds the ESP holding
   `EFI/Microsoft/Boot/bootmgfw.efi` (a separate Windows ESP is fine) and adds a chainload entry.
   Fedora's aarch64 GRUB image lacks the `chain` module and Fedora's os-prober cannot find Windows on

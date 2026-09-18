@@ -151,11 +151,29 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does `search --file
   --set=root /boot/0x503d6c7e` then `configfile ($root)/boot/grub2/grub.cfg`. Kernel
   `/boot/aarch64/loader/linux`, initrd `/boot/aarch64/loader/initrd`, font
-  `/boot/aarch64/loader/grub2/fonts/unicode.pf2`. `xorriso ... -boot_image any replay -map ...`
+  `/boot/aarch64/loader/grub2/fonts/unicode.pf2` (step 50 maps `sp11-console.pf2` in beside it, lifted out
+  of the live root rather than generated a second time). `xorriso ... -boot_image any replay -map ...`
   reproduces the layout; `50-build-iso.sh` reads these paths from the ISO instead of assuming them.
 - Fedora's aarch64 GRUB image has `devicetree`, `gfxterm`, `loadfont`, `blscfg`, `fat`, `efi_gop`,
   `all_video`, `search_fs_uuid`, `part_gpt`, `fwsetup`, `efinet`, `net`, `boot`. It lacks `efi_uga`,
   `video_bochs`, `video_cirrus` and `chain` (Fedora builds `chain` into x86 images only).
+- GRUB has no text-scale setting: `gfxterm` sizes its character cell from the loaded PF2 font
+  (`calculate_normal_character_width` over ASCII 32-126 for the width, `MAXH` for the height), so a large
+  font is the only way to keep the menu legible at the panel's native mode. `sp11-console.pf2` is built by
+  step 30 with `grub2-mkfont -s "$GRUB_FONT_SIZE"` from DejaVu Sans Mono; at 40 pt the cell is 24x48 px,
+  i.e. 120x40 characters at 2880x1920 (measured from the PF2 header, not from the point size: `MAXW` is the
+  maximum over *all* glyphs and overstates the monospace advance). DejaVu is Bitstream-Vera licensed, hence
+  the extra `License:` term and a font name carrying neither "Bitstream" nor "Vera".
+  `00_header` honours `GRUB_FONT`: when set it emits `prepare_grub_to_access_device` plus a single
+  `if loadfont <path>` and skips its own `unicode/unifont/ascii` search, so exactly one font is loaded and
+  `gfxterm` uses it. The file must be under `/boot`: on the LUKS layout nothing else is readable by GRUB,
+  and 00_header's own fallback would otherwise land on `/usr/share/grub/unicode.pf2`, which is not. A
+  `GRUB_FONT` naming a missing file makes 00_header run `grub2-probe` on it and grub2-mkconfig fails
+  outright, so `sp11-grub-defaults` writes an empty `GRUB_FONT=` (the supported opt-out) whenever the copy
+  into `/boot/grub2/fonts/` did not happen. Verified so far only off-hardware: a real `grub2-mkconfig`
+  (2.12-76.fc45) in an overlay of the remastered root with an ext4 loop at `/boot` exits 0 and emits
+  `search --fs-uuid` + `if loadfont /grub2/fonts/sp11-console.pf2` with `set gfxmode=2880x1920,auto`.
+  How it actually reads on the panel, and whether the firmware GOP offers 2880x1920, is not confirmed.
 - `insmod NAME` resolves `$prefix/arm64-efi/NAME.mod`; on installed Fedora `$prefix` is `/boot/grub2`
   (set by `gen_grub_cfgstub`, which Anaconda calls to write the ESP stub `EFI/fedora/grub.cfg`:
   `search --fs-uuid <boot uuid>`, then `configfile $prefix/grub.cfg`). The stub names a single /boot, so a

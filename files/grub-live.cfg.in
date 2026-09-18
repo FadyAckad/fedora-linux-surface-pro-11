@@ -16,9 +16,16 @@ insmod ext2
 
 search --file --set=root @MARKER@
 
-# Low GRUB resolution: the 2880x1920 panel renders native-mode text unreadably small.
-if loadfont ($root)@FONT@; then
+# Native GRUB resolution with the large SP11 console font: gfxterm sizes its character cell from the
+# loaded font, and Fedora's 8x16 unicode.pf2 is unreadable on the 2880x1920 panel. If the SP11 font is
+# missing, fall back to that font at a low resolution, which is legible for the same reason.
+if loadfont ($root)@FONT_SP11@; then
 	set gfxmode=@GFXMODE@
+	load_video
+	insmod gfxterm
+	terminal_output gfxterm
+elif loadfont ($root)@FONT@; then
+	set gfxmode=@GFXMODE_FALLBACK@
 	load_video
 	insmod gfxterm
 	terminal_output gfxterm

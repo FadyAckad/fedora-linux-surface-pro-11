@@ -50,6 +50,7 @@ grep -q "root=live:CDLABEL=$VOLID" "$W/src-grub.cfg" || die "source grub.cfg doe
 log "source: volid=$VOLID marker=$MARKER kernel=$KERNEL_ISO initrd=$INITRD_ISO liveos=$LIVEOS_ISO font=${FONT_ISO:-none}"
 LOADER_DIR=$(dirname "$KERNEL_ISO")
 DTB_ISO="$LOADER_DIR/dtb/$SP11_DTB"
+FONT_SP11_ISO="$LOADER_DIR/grub2/fonts/$GRUB_FONT_FILE"
 
 # The extracted live image is cached between runs, so the cache has to be keyed to the ISO it came from:
 # on a release or compose change an unkeyed cache silently remasters the *previous* media. The stamp
@@ -65,7 +66,7 @@ fi
 GRUBEFI="$W/grubaa64.efi"
 xorriso -osirrox on -indev "$ISO" -extract /EFI/BOOT/grubaa64.efi "$GRUBEFI" >/dev/null 2>&1 || die "cannot extract /EFI/BOOT/grubaa64.efi"
 strings "$GRUBEFI" | grep -x devicetree >/dev/null || die "the ISO's GRUB lacks the devicetree command"
-strings "$GRUBEFI" | grep -x gfxterm >/dev/null || warn "the ISO's GRUB lacks gfxterm; low-resolution menu unavailable"
+strings "$GRUBEFI" | grep -x gfxterm >/dev/null || warn "the ISO's GRUB lacks gfxterm; the graphical menu and its console font are unavailable"
 
 ## 2. Extract the live root (always fresh: the result must depend only on the inputs)
 log "extracting EROFS live root to $ROOTFS (this takes a few minutes)"
@@ -151,10 +152,17 @@ GRUB_CMDLINE_LINUX_DEFAULT="quiet rhgb $SP11_ARGS_INSTALLED"
 GRUB_ENABLE_BLSCFG=true
 GRUB_TERMINAL_INPUT="console"
 GRUB
-# Device tree, gfxterm resolution and timeout come from the shipped helper, the same one the kernel-install
-# plugin and sp11-first-boot run, so the policy has a single source.
+# Device tree, gfxterm resolution, console font and timeout come from the shipped helper, the same one the
+# kernel-install plugin and sp11-first-boot run, so the policy has a single source.
 as_root chroot "$ROOTFS" /usr/libexec/sp11/sp11-grub-defaults || die "sp11-grub-defaults failed in the live root"
 grep -q "^GRUB_DEVICETREE=\"$SP11_DTB\"" "$ROOTFS/etc/default/grub" || die "GRUB_DEVICETREE not set in the live root"
+grep -q "^GRUB_FONT=\"/boot/grub2/fonts/$GRUB_FONT_FILE\"\$" "$ROOTFS/etc/default/grub" || die "GRUB_FONT not set in the live root"
+# The live menu loads the same console font from the ISO; take the support RPM's copy rather than running
+# grub2-mkfont a second time, so both menus are drawn with one font.
+FONT_SP11_SRC="$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE"
+as_root test -s "$FONT_SP11_SRC" || die "support RPM does not ship /usr/share/sp11/fonts/$GRUB_FONT_FILE"
+as_root install -m 0644 -o "$(id -u)" -g "$(id -g)" "$FONT_SP11_SRC" "$W/$GRUB_FONT_FILE"
+[ "$(dd if="$W/$GRUB_FONT_FILE" bs=1 count=4 skip=8 status=none)" = PFF2 ] || die "$GRUB_FONT_FILE is not a PF2 font"
 
 ## 5. dracut-live initramfs for the SP11 kernel, generated inside the live root (same arguments Fedora uses).
 ##    The support RPM's dracut drop-in pulls the whole Denali firmware set into every initramfs. The installed
@@ -212,7 +220,8 @@ log "remastered root: $(du -h "$W/remastered.erofs" | cut -f1)"
 ## 7. GRUB menu and /sp11 payload
 if [ -n "$FONT_ISO" ]; then FONT_LINE="$FONT_ISO"; else FONT_LINE="/nonexistent-font.pf2"; fi
 render "$FILES_DIR/grub-live.cfg.in" "$W/grub.cfg" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" TIMEOUT="$GRUB_TIMEOUT_VALUE" \
-  MARKER="$MARKER" FONT="$FONT_LINE" GFXMODE="$GRUB_GFXMODE_VALUE" VOLID="$VOLID" ARGS_INSTALLED="$SP11_ARGS_INSTALLED" \
+  MARKER="$MARKER" FONT="$FONT_LINE" FONT_SP11="$FONT_SP11_ISO" GFXMODE="$GRUB_GFXMODE_VALUE" \
+  GFXMODE_FALLBACK="$GRUB_GFXMODE_FALLBACK_VALUE" VOLID="$VOLID" ARGS_INSTALLED="$SP11_ARGS_INSTALLED" \
   ARGS_LIVE="$SP11_ARGS_LIVE_ONLY" DTB="$DTB_ISO" KERNEL="$KERNEL_ISO" INITRD="$INITRD_ISO"
 grep -q 'fips=1' "$W/grub.cfg" && die "grub.cfg enables FIPS"
 rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "$KRPM" "$SRPM" "$IRPM" "$W/sp11/rpms/"
@@ -228,6 +237,7 @@ xorriso -indev "$ISO" -outdev "$OUT" -boot_image any replay -volid "$VOLID" \
   -map "$W/remastered.erofs" "$LIVEOS_ISO" \
   -map "$W/vmlinuz" "$KERNEL_ISO" -map "$W/initrd" "$INITRD_ISO" \
   -map "$W/dtb" "$LOADER_DIR/dtb" -map "$W/grub.cfg" /boot/grub2/grub.cfg -map "$W/sp11" /sp11 \
+  -map "$W/$GRUB_FONT_FILE" "$FONT_SP11_ISO" \
   -commit >"$W/xorriso.log" 2>&1 || { tail -20 "$W/xorriso.log" >&2; die "xorriso failed"; }
 
 ## 9. Validate the result
@@ -235,9 +245,10 @@ xorriso -indev "$ISO" -outdev "$OUT" -boot_image any replay -volid "$VOLID" \
 REPORT=$(xorriso -indev "$OUT" -report_el_torito plain -report_system_area plain 2>/dev/null)
 grep -Eq 'El Torito boot img +: +1 +UEFI' <<<"$REPORT" || die "output has no UEFI El Torito boot image"
 grep -Eq 'GPT type GUID +: +2 +28732ac11ff8d211ba4b00a0c93ec93b' <<<"$REPORT" || die "output lacks the appended EFI system partition"
-xorriso -osirrox on -indev "$OUT" -extract /boot/grub2/grub.cfg "$W/out-grub.cfg" -extract "$DTB_ISO" "$W/out.dtb" >/dev/null 2>&1 || die "output lacks grub.cfg or the DTB"
+xorriso -osirrox on -indev "$OUT" -extract /boot/grub2/grub.cfg "$W/out-grub.cfg" -extract "$DTB_ISO" "$W/out.dtb" -extract "$FONT_SP11_ISO" "$W/out-font.pf2" >/dev/null 2>&1 || die "output lacks grub.cfg, the DTB or the console font"
 cmp -s "$W/grub.cfg" "$W/out-grub.cfg" || die "grub.cfg in output differs"
 cmp -s "$W/dtb/$SP11_DTB" "$W/out.dtb" || die "DTB in output differs"
+cmp -s "$W/$GRUB_FONT_FILE" "$W/out-font.pf2" || die "console font in output differs"
 ( cd "$OUT_DIR" && sha256sum "$OUTPUT_ISO_NAME" > "$OUTPUT_ISO_NAME.sha256" )
 log "ISO ready: $OUT ($(du -h "$OUT" | cut -f1))"
 log "sha256: $(cut -d' ' -f1 "$OUT.sha256")"

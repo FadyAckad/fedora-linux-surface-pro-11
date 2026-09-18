@@ -3,11 +3,11 @@
 # ooaklee FullIO v19c audio files, Wi-Fi board data, Bluetooth address service, kernel-install boot
 # policy plugin, dracut policy and the first-boot finalizer.
 . "$(dirname "$0")/lib.sh"
-require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file
+require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
 
 # Bump whenever anything under files/ or the generated payload changes, so `dnf upgrade` picks it up.
-VERSION="2.3"
+VERSION="2.4"
 
 CACHED=$(rpm_of sp11-surface-support)
 if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
@@ -82,7 +82,21 @@ install -d -m 0755 "$STAGE/etc/sp11"
 printf '# Bluetooth public address of this Surface Pro 11 (from Windows)\nSP11_BT_MAC="%s"\n' "$SP11_BT_MAC" > "$STAGE/etc/sp11/bluetooth-address"
 chmod 0600 "$STAGE/etc/sp11/bluetooth-address"
 
-## 5. Boot policy: kernel-install plugin, first-boot finalizer, dracut policy, UCM apply helper
+## 5. GRUB console font: gfxterm draws with a fixed-size PF2, and Fedora's stock unicode.pf2 (8x16 ASCII
+##    cell) is unreadable on the 2880x1920 panel. A large font is what lets GRUB run at the native mode.
+##    DejaVu is Bitstream-Vera licensed: a derived font must not carry "Bitstream" or "Vera" in its name.
+FONT_TTF=$(ls /usr/share/fonts/*/DejaVuSansMono.ttf 2>/dev/null | head -1 || true)
+[ -n "$FONT_TTF" ] || die "DejaVuSansMono.ttf not found; run scripts/00-setup-host.sh (dejavu-sans-mono-fonts)"
+FONT_OUT="$STAGE/usr/share/sp11/fonts/$GRUB_FONT_FILE"; install -d "$(dirname "$FONT_OUT")"
+grub2-mkfont -s "$GRUB_FONT_SIZE" -n "$GRUB_FONT_NAME" -o "$FONT_OUT" "$FONT_TTF" \
+  || die "grub2-mkfont failed on $FONT_TTF"
+[ -s "$FONT_OUT" ] || die "grub2-mkfont produced an empty $GRUB_FONT_FILE"
+# PF2 starts with the section header FILE + a 4-byte length + the magic PFF2.
+[ "$(dd if="$FONT_OUT" bs=1 count=4 skip=8 status=none)" = PFF2 ] || die "$FONT_OUT is not a PF2 font"
+chmod 0644 "$FONT_OUT"
+log "GRUB console font: $GRUB_FONT_FILE, ${GRUB_FONT_SIZE}pt from ${FONT_TTF##*/} ($(du -h "$FONT_OUT" | cut -f1))"
+
+## 6. Boot policy: kernel-install plugin, first-boot finalizer, dracut policy, UCM apply helper
 install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
 install -m 0755 "$FILES_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
 install -m 0755 "$FILES_DIR/sp11-grub-defaults" "$STAGE/usr/libexec/sp11/sp11-grub-defaults"
@@ -107,6 +121,8 @@ SP11_ARGS_INSTALLED="$SP11_ARGS_INSTALLED"
 SP11_ARGS_LIVE_ONLY="$SP11_ARGS_LIVE_ONLY"
 SP11_GRUB_GFXMODE="$GRUB_GFXMODE_VALUE"
 SP11_GRUB_TIMEOUT="$GRUB_TIMEOUT_VALUE"
+SP11_GRUB_FONT="/usr/share/sp11/fonts/$GRUB_FONT_FILE"
+SP11_GRUB_FONT_BOOT="/boot/grub2/fonts/$GRUB_FONT_FILE"
 ENV
 # `bash -n A B C` parses only A (B and C become positional parameters): check every script on its own.
 for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
@@ -115,7 +131,7 @@ for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
 done
 sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"
 
-## 6. RPM
+## 7. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
   STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")

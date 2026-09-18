@@ -1,7 +1,9 @@
 #!/usr/bin/bash
 # Apply the Surface Pro 11 GRUB policy from /etc/sp11/sp11.env to /etc/default/grub (idempotent):
-# Denali DTB for every BLS entry, low gfxterm resolution, visible menu with the configured timeout.
-# Single source of truth for the kernel-install plugin (also inside Anaconda), sp11-first-boot and the ISO build.
+# Denali DTB for every BLS entry, gfxterm at the panel's native mode with the large SP11 console font,
+# visible menu with the configured timeout.
+# Single source of truth for the kernel-install plugin (also inside Anaconda), sp11-first-boot, the support
+# RPM's %posttrans (so `dnf upgrade` applies a changed policy) and the ISO build.
 set -eu
 [ -f /etc/sp11/sp11.env ] || exit 0
 . /etc/sp11/sp11.env
@@ -16,6 +18,20 @@ grub_set() {
     printf '%s=%s\n' "$key" "$value" >> "$file"
   fi
 }
+# GRUB can only read /boot (on a LUKS install the root filesystem is not reachable from the bootloader),
+# so the console font is copied out of /usr/share. Same cmp-guarded idiom as sp11-grub-modules.
+font=""
+if [ -n "${SP11_GRUB_FONT_BOOT:-}" ] && [ -d /boot/grub2 ]; then
+  install -d -m 0755 "$(dirname "$SP11_GRUB_FONT_BOOT")"
+  if [ -s "${SP11_GRUB_FONT:-}" ]; then
+    cmp -s "$SP11_GRUB_FONT" "$SP11_GRUB_FONT_BOOT" || install -m 0644 "$SP11_GRUB_FONT" "$SP11_GRUB_FONT_BOOT"
+  fi
+  if [ -s "$SP11_GRUB_FONT_BOOT" ]; then font="$SP11_GRUB_FONT_BOOT"; fi
+fi
+# An empty GRUB_FONT is the safe opt-out: 00_header then runs its own unicode/unifont/ascii search. A
+# GRUB_FONT naming a missing file makes it call grub2-probe on that path, and grub2-mkconfig fails outright.
+grub_set GRUB_FONT "${font:+\"$font\"}"
+
 grub_set GRUB_DEVICETREE "\"$SP11_DTB\""
 grub_set GRUB_GFXMODE "$SP11_GRUB_GFXMODE"
 grub_set GRUB_TERMINAL_OUTPUT "\"gfxterm\""

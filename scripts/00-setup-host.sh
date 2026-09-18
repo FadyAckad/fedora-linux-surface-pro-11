@@ -20,6 +20,8 @@ PKGS=(
   inih-devel guidelines-support-library-devel systemd-rpm-macros
   # ISO remaster
   xorriso erofs-utils erofs-fuse dracut dracut-live cpio curl git dosfstools
+  # GRUB console font (grub2-mkfont; DejaVu Sans Mono is the source face)
+  grub2-tools-extra dejavu-sans-mono-fonts
   # Windows Bluetooth pairing export
   python3-hivex hivex
   # cross-release RPM builds (sp11-iptsd against the target Fedora's fmt/spdlog)
