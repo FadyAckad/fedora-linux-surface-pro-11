@@ -419,10 +419,9 @@ because the exclusion list predated that package; support RPM 1.8 adds `kernel-u
 dnf5 override hint and 2.0 adds the Adreno microcode to the initramfs. Removing the stray kernel needed
 `dnf --setopt=disable_excludes='*' remove`.
 
-Benign boot-time messages on this unit: `qcom_q6v5_pas … Handover signaled, but it already happened`;
-`qcom_pmic_glink … Failed to create device link (0x180) with supplier …` for the PD and USB nodes (probe
-deferral, retried); `surface_hid … unexpected descriptor length: got 0, expected 9` then `error -71` for one
-Surface Aggregator HID endpoint that nothing depends on.
+Benign boot-time messages on this unit: `qcom_pmic_glink … Failed to create device link (0x180) with
+supplier …` for the PD and USB nodes (probe deferral, retried); `surface_hid … unexpected descriptor length:
+got 0, expected 9` then `error -71` for one Surface Aggregator HID endpoint that nothing depends on.
 
 Confirmed working on the installed system by the owner on 2026-09-16: Bluetooth, audio, pen, Wi-Fi,
 battery, Flatpak and the Windows GRUB entry; in a second round the same day, keyboard/touchpad, GPU
