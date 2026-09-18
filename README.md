@@ -1,5 +1,7 @@
 # Fedora Live ISO for Surface Pro 11 (Snapdragon X Elite, OLED, incl. the 5G SKU)
 
+![Screenshot showing the About section](https://github.com/fadyackad/fedora-linux-surface-pro-11/blob/main/images/Screenshot.png)
+
 Builds a Fedora live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition
 with the Samsung OLED panel (Snapdragon X Elite X1E80100). The ISO uses the Surface Pro 11 kernel from
 [ooaklee/linux_ms_dev_kit-sp11](https://github.com/ooaklee/linux_ms_dev_kit-sp11) (release v23, based on
