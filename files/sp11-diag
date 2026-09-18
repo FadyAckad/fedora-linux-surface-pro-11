@@ -18,7 +18,7 @@ run ls -l /sys/bus/spi/drivers/mshw0485_touch/ /sys/bus/spi/devices/
 sec "hidraw nodes and their HID parents"
 for h in /sys/class/hidraw/hidraw*; do [ -e "$h" ] || continue; printf '%s -> %s\n' "$(basename "$h")" "$(readlink -f "$h/device")"; done
 for h in /sys/class/hidraw/hidraw*; do [ -e "$h" ] || continue
-  case "$(readlink -f "$h/device")" in */001C:045E:0C83.*|*/001C:045E:0C80.*)
+  case "$(readlink -f "$h/device")" in */001C:045E:0C83.*)
     dev=/dev/$(basename "$h"); sec "SP11 digitizer bridge $dev"
     run udevadm info "$dev"; printf '\n$ %s\n' "/usr/libexec/sp11-iptsd-check-device $dev"
     /usr/libexec/sp11-iptsd-check-device "$dev"; echo "check-device exit: $?"; run ldd /usr/libexec/sp11-iptsd

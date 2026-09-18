@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# kernel-install plugin (runs before Fedora's 20-grub.install and systemd's 90-loaderentry.install).
+# kernel-install plugin (runs before Fedora's 20-grub.install).
 # Enforces the Surface Pro 11 boot policy every time a kernel is added, including during Anaconda's
 # installation to internal storage, which rewrites /etc/default/grub:
 #   - GRUB_DEVICETREE: the BLS entry gets "devicetree /dtb-<version>/<Denali OLED dtb>"
@@ -8,35 +8,23 @@
 set -eu
 [ "${1:-}" = add ] || exit 0
 [ -n "${KERNEL_INSTALL_MACHINE_ID:-}" ] || exit 0
-[ -f /etc/sp11/sp11.env ] || exit 0
 . /etc/sp11/sp11.env
 
 # /etc/default/grub policy (GRUB_DEVICETREE, gfxterm resolution, timeout): one shared helper, also used by
 # sp11-first-boot and the ISO build.
 /usr/libexec/sp11/sp11-grub-defaults
 
-# systemd's 90-loaderentry.install reads the DTB name from here.
-install -d /etc/kernel
-printf '%s\n' "$SP11_DTB" > /etc/kernel/devicetree
-
-# 20-grub.install builds BLS "options" from /etc/kernel/cmdline when it exists and from /proc/cmdline
-# otherwise. Apply the policy to whichever is the source. The result is persisted only when it still names a
-# root filesystem: inside Anaconda's chroot /proc/cmdline is the live command line (root=live:...), and a
-# persisted file without root= would break every later kernel-install.
-src=/etc/kernel/cmdline; [ -f "$src" ] || src=/proc/cmdline
-new=""
-for a in $(tr '\n' ' ' < "$src"); do
-  case " $SP11_ARGS_LIVE_ONLY " in *" $a "*) continue ;; esac
-  case "$a" in root=live:*|rd.live.*|initrd=*|BOOT_IMAGE=*) continue ;; esac
-  new="$new $a"
-done
-for a in $SP11_ARGS_INSTALLED; do
-  case " $new " in *" $a "*) ;; *) new="$new $a" ;; esac
-done
-persist=0
-case " $new " in *" root="*) persist=1 ;; esac
-if [ "$src" = /etc/kernel/cmdline ]; then persist=1; fi
-if [ "$persist" = 1 ]; then printf '%s\n' "${new# }" > /etc/kernel/cmdline; fi
+# 20-grub.install builds BLS "options" from /etc/kernel/cmdline, which Anaconda's first grub2-mkconfig creates
+# from its own boot arguments (never the live-only ones). Rewrite it after /etc/default/grub, so 20-grub.install
+# takes it as current.
+if [ -f /etc/kernel/cmdline ]; then
+  new=""
+  for a in $(tr '\n' ' ' < /etc/kernel/cmdline); do new="$new $a"; done
+  for a in $SP11_ARGS_INSTALLED; do
+    case " $new " in *" $a "*) ;; *) new="$new $a" ;; esac
+  done
+  printf '%s\n' "${new# }" > /etc/kernel/cmdline
+fi
 
 # Anaconda persists modprobe.blacklist=<module> from the live command line; the ADSP must run on NVMe.
 rm -f /etc/modprobe.d/anaconda-denylist.conf

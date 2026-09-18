@@ -1,47 +1,37 @@
 #!/usr/bin/bash
 # Import Bluetooth pairings exported from Windows into BlueZ on this Fedora system.
-# Usage: sudo sp11-bt-import-pairings [--from DIR] [--only AA:BB:CC:DD:EE:FF ...]
+# Usage: sudo sp11-bt-import-pairings [--from DIR]
 # DIR holds <ADAPTER>/<DEVICE>/info directories as produced by scripts/70-export-bt-pairings.sh
 # (default: the current directory, e.g. where sp11-bt-pairings.tar.gz was extracted).
 # Existing device directories are backed up under /var/lib/sp11/.
 set -euo pipefail
 here=$PWD
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
-only=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --from) here=$(cd "$2" && pwd); shift 2 ;;
-    --only) only+=("$(printf '%s' "$2" | tr 'a-f-' 'A-F:')"); shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-wanted() { [ ${#only[@]} -eq 0 ] && return 0; local m; for m in "${only[@]}"; do [ "$m" = "$1" ] && return 0; done; return 1; }
 
 shopt -s nullglob
 infos=("$here"/*:*:*:*:*:*/*:*:*:*:*:*/info)
 [ ${#infos[@]} -gt 0 ] || { echo "no <ADAPTER>/<DEVICE>/info files under $here (use --from DIR)" >&2; exit 1; }
 
-stamp=$(date +%Y%m%d-%H%M%S)
-backup=/var/lib/sp11/bluetooth-backup-$stamp
-imported=0
-# BlueZ reads info files only at startup, so stop it while replacing them (skipped without a running systemd,
-# e.g. when applying to a mounted root from live media).
-have_systemd=0
-[ -z "${SP11_NO_SYSTEMD:-}" ] && [ -d /run/systemd/system ] && systemctl is-active bluetooth.service >/dev/null 2>&1 && have_systemd=1
-if [ "$have_systemd" = 1 ]; then systemctl stop bluetooth.service; trap 'systemctl start bluetooth.service' EXIT; fi
+backup=/var/lib/sp11/bluetooth-backup-$(date +%Y%m%d-%H%M%S)
+# BlueZ reads info files only at startup, so stop it while replacing them.
+running=0
+if systemctl is-active --quiet bluetooth.service; then
+  running=1
+  systemctl stop bluetooth.service
+  trap 'systemctl start bluetooth.service' EXIT
+fi
 for info in "${infos[@]}"; do
   dev=$(basename "$(dirname "$info")"); adapter=$(basename "$(dirname "$(dirname "$info")")")
-  wanted "$dev" || continue
   adir="/var/lib/bluetooth/$adapter"
   if [ ! -d "$adir" ]; then
     echo "adapter $adapter is unknown to BlueZ here (have: $(ls /var/lib/bluetooth 2>/dev/null | tr '\n' ' '))." >&2
-    reversed=$(printf '%s' "$adapter" | awk -F: '{print $6":"$5":"$4":"$3":"$2":"$1}')
-    if [ -d "/var/lib/bluetooth/$reversed" ]; then
-      echo "The controller address is byte-reversed ($reversed)." >&2
-      echo "Update sp11-surface-support, reboot, then re-run this import." >&2
-    else
-      echo "The Linux controller must use the same address as Windows; check sp11-bluetooth-address@hci0.service." >&2
-    fi
+    echo "The Linux controller must use the same address as Windows; check sp11-bluetooth-address@hci0.service." >&2
     exit 1
   fi
   if [ -d "$adir/$dev" ]; then
@@ -53,9 +43,10 @@ for info in "${infos[@]}"; do
   install -m 0600 "$info" "$adir/$dev/info"
   name=$(sed -n 's/^Name=//p' "$info" | head -1)
   echo "imported $dev ${name:+($name) }-> $adir/$dev/info"
-  imported=$((imported + 1))
 done
-command -v restorecon >/dev/null 2>&1 && restorecon -R /var/lib/bluetooth || :
-[ "$imported" -gt 0 ] || { echo "nothing imported" >&2; exit 1; }
-[ -d "$backup" ] && echo "previous pairings backed up under $backup"
-if [ "$have_systemd" = 1 ]; then echo "restarting bluetooth; devices connect when they next advertise (press a key / touch the pen)"; else echo "bluetooth not restarted (no running systemd); reboot or restart bluetooth.service"; fi
+if [ -d "$backup" ]; then echo "previous pairings backed up under $backup"; fi
+if [ "$running" = 1 ]; then
+  echo "restarting bluetooth; devices connect when they next advertise (press a key / touch the pen)"
+else
+  echo "bluetooth.service is not running; start it or reboot"
+fi

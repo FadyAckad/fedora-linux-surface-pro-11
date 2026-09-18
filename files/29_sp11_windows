@@ -12,7 +12,7 @@ export TEXTDOMAIN=grub
 export TEXTDOMAINDIR="${datarootdir}/locale"
 . "$pkgdatadir/grub-mkconfig_lib"
 
-[ -x /usr/libexec/sp11/sp11-grub-modules ] && /usr/libexec/sp11/sp11-grub-modules || :
+/usr/libexec/sp11/sp11-grub-modules || :
 [ -f /boot/grub2/arm64-efi/chain.mod ] || exit 0
 
 esp_type="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"

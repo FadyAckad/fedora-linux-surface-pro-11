@@ -7,7 +7,6 @@
 set -eu
 src=/usr/lib/grub/arm64-efi
 dst=/boot/grub2/arm64-efi
-[ -f "$src/chain.mod" ] || exit 0
 [ -d /boot/grub2 ] || exit 0
 
 deps_of() {  # recursive dependency closure from moddep.lst
@@ -20,4 +19,3 @@ for mod in $(deps_of chain | sort -u); do
   [ -f "$src/$mod.mod" ] || continue
   cmp -s "$src/$mod.mod" "$dst/$mod.mod" || install -m 0644 "$src/$mod.mod" "$dst/$mod.mod"
 done
-command -v restorecon >/dev/null 2>&1 && restorecon -R "$dst" >/dev/null 2>&1 || :

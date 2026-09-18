@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # Optional step: verify the remastered live root left behind by scripts/50-build-iso.sh, and simulate the
-# installed-system kernel-install hand-off in a chroot (Anaconda-style /etc/default/grub and
-# /etc/kernel/cmdline) to prove the BLS entry receives the Denali DTB and the SP11 kernel arguments.
+# installed-system kernel-install hand-off in a chroot, with the inputs Anaconda leaves at that point, to prove the
+# BLS entry receives the Denali DTB and the SP11 kernel arguments.
 . "$(dirname "$0")/lib.sh"
 require_cmd dtc
 load_hardware
@@ -67,17 +67,22 @@ trap cleanup EXIT
 r mount -t overlay overlay -o "lowerdir=$ROOTFS,upperdir=$T/upper,workdir=$T/work" "$T/merged" || die "overlay mount failed"
 M="$T/merged"
 for d in dev proc sys; do r mount --rbind "/$d" "$M/$d"; r mount --make-rslave "$M/$d"; done
-r tee "$M/etc/default/grub" >/dev/null <<'GRUB'
+# Anaconda's bootloader step writes /etc/default/grub from scratch (only the preserved live arguments reach
+# GRUB_CMDLINE_LINUX) and its grub2-mkconfig writes /etc/kernel/cmdline from it; its payload step has already turned
+# the live media's modprobe.blacklist= into anaconda-denylist.conf. kernel-install add comes next. (On a BTRFS root
+# Anaconda repeats its bootloader step afterwards, which sp11-first-boot corrects on the first boot.)
+ANACONDA_ARGS="rd.luks.uuid=luks-0000-test rhgb quiet clk_ignore_unused pd_ignore_unused"
+r tee "$M/etc/default/grub" >/dev/null <<GRUB
 GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR="$(sed 's, release .*$,,g' /etc/system-release)"
+GRUB_DISTRIBUTOR="\$(sed 's, release .*\$,,g' /etc/system-release)"
 GRUB_DEFAULT=saved
 GRUB_DISABLE_SUBMENU=true
 GRUB_TERMINAL_OUTPUT="console"
-GRUB_CMDLINE_LINUX="rhgb quiet"
+GRUB_CMDLINE_LINUX="$ANACONDA_ARGS"
 GRUB_DISABLE_RECOVERY="true"
 GRUB_ENABLE_BLSCFG=true
 GRUB
-printf 'root=UUID=0000-test ro rhgb quiet %s\n' "$SP11_ARGS_LIVE_ONLY" | r tee "$M/etc/kernel/cmdline" >/dev/null
+printf 'root=UUID=0000-test ro %s\n' "$ANACONDA_ARGS" | r tee "$M/etc/kernel/cmdline" >/dev/null
 r tee "$M/etc/modprobe.d/anaconda-denylist.conf" >/dev/null <<<"blacklist qcom_q6v5_pas"
 r tee "$M/etc/kernel/install.conf" >/dev/null <<<"initrd_generator=none"
 echo 0123456789abcdef0123456789abcdef | r tee "$M/etc/machine-id" >/dev/null
@@ -92,9 +97,12 @@ check r test -s "$M/boot/dtb-$KERNEL_ABI/$SP11_DTB"
 for a in $SP11_ARGS_INSTALLED; do check r grep -q "^options .*\b$a\b" "$entry"; done
 # `grep -vq` would succeed on any non-matching line; assert absence with a negated grep instead.
 for a in $SP11_ARGS_LIVE_ONLY; do check r sh -c "! grep -q '^options .*$a' '$entry'"; done
-check r grep -q '^GRUB_DEVICETREE="qcom/x1e80100-microsoft-denali-oled.dtb"' "$M/etc/default/grub"
+check r grep -q "^GRUB_DEVICETREE=\"$SP11_DTB\"" "$M/etc/default/grub"
 check r grep -q '^GRUB_TERMINAL_OUTPUT="gfxterm"' "$M/etc/default/grub"
-check r grep -q "^GRUB_GFXMODE=$GRUB_GFXMODE_VALUE" "$M/etc/default/grub"
+check r grep -q "^GRUB_GFXMODE=$GRUB_GFXMODE_VALUE\$" "$M/etc/default/grub"
+check r grep -q "^GRUB_TIMEOUT=$GRUB_TIMEOUT_VALUE\$" "$M/etc/default/grub"
+for a in $ANACONDA_ARGS $SP11_ARGS_INSTALLED; do check r grep -qwF -- "$a" "$M/etc/kernel/cmdline"; done
+check r grep -q '^root=UUID=0000-test ro ' "$M/etc/kernel/cmdline"
 check r test ! -e "$M/etc/modprobe.d/anaconda-denylist.conf"
 
 log "--- Windows chainload generator (fake Windows ESP on a loop device, run in the chroot)"

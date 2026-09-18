@@ -42,16 +42,12 @@ finalizer. The firmware is proprietary and must not be redistributed.
 %install
 cp -a %{stage}/. %{buildroot}/
 
-%post
-/usr/lib/systemd/systemd-sysctl /usr/lib/sysctl.d/90-sp11.conf >/dev/null 2>&1 || :
-/usr/bin/udevadm control --reload >/dev/null 2>&1 || :
-/usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
-/usr/libexec/sp11/sp11-ucm-apply || :
-
+# systemd's RPM file triggers reload units and udev rules and apply the sysctl file; both triggers below also
+# run when this package is installed while their target is present.
 %posttrans
-# Regenerate the GRUB menu on an installed system so the Windows entry appears without a reboot.
-if [ -f /boot/grub2/grub.cfg ] && ! grep -qw rd.live.image /proc/cmdline 2>/dev/null; then
-  /usr/libexec/sp11/sp11-grub-modules || :
+# Regenerate the GRUB menu on an installed system (the live root has no grub.cfg) so the Windows entry appears
+# without a reboot.
+if [ -f /boot/grub2/grub.cfg ]; then
   /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 || :
 fi
 
@@ -82,7 +78,6 @@ fi
 %dir /etc/sp11
 %config(noreplace) /etc/sp11/bluetooth-address
 /etc/sp11/sp11.env
-/etc/kernel/devicetree
 
 %changelog
 * Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1

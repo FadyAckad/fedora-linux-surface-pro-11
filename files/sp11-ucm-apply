@@ -5,7 +5,6 @@
 set -eu
 src=/usr/share/sp11/ucm/x1e80100.conf
 dst=/usr/share/alsa/ucm2/conf.d/x1e80100/x1e80100.conf
-[ -s "$src" ] || exit 0
 install -d "$(dirname "$dst")"
 if [ -L "$dst" ] || ! cmp -s "$src" "$dst"; then
   rm -f "$dst"

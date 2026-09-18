@@ -167,19 +167,47 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   which the pipeline omits. Generate it in a chroot of the live root.
 - `rd.live.check` needs an implanted ISO checksum, which xorriso remastering does not carry over, so the
   live menu has no media-check entry.
-- Anaconda 44.30 discovers kernels from `/boot/vmlinuz-*` and runs `kernel-install add <ver>
-  /lib/modules/<ver>/vmlinuz`. Deleting stock `/boot/vmlinuz-*` makes the SP11 kernel the only
-  candidate while the stock kernel packages stay installed (the 44 1.7 and 45 Beta media carry no
-  `kernel-core`; see `kernel-uki-dtbloader` below). Anaconda rewrites `/etc/default/grub`, persists
-  `modprobe.blacklist=` into `/etc/modprobe.d/anaconda-denylist.conf`, preserves `clk_ignore_unused
-  pd_ignore_unused arm64.nopauth` but not `systemd.tpm2_wait=0`. Its grub2-mkconfig runs in a chroot
-  with `/dev` bound but no udev database.
-- Fedora's `20-grub.install` writes `devicetree /dtb-<ver>/$GRUB_DEVICETREE` into the BLS entry and
-  copies `/usr/lib/modules/<ver>/dtb` to `/boot/dtb-<ver>`; systemd's `90-loaderentry.install` reads
-  `/etc/kernel/devicetree`. `15-sp11-surface.install` sets both before they run, via
-  `/usr/libexec/sp11/sp11-grub-defaults` (the single writer of the `/etc/default/grub` policy, also used by
-  `sp11-first-boot` and `50-build-iso.sh`). It filters `/etc/kernel/cmdline` when present, otherwise
-  `/proc/cmdline`, and persists the result only when it contains `root=` (never the live command line).
+- Anaconda 44.30 and 45.22 (code read in a Fedora 44 and a Workstation 45 Beta live root; same task
+  order in both) discover kernels only from `/boot/vmlinuz-*` (`live_os/utils.py`) and run
+  `kernel-install add <ver> /lib/modules/<ver>/vmlinuz` for each (the 44 1.7 and 45 Beta media carry no
+  `kernel-core`; see `kernel-uki-dtbloader` below). Queue order (`modules/boss/installation.py`): payload
+  (`PrepareSystemForInstallationTask` writes `/etc/modprobe.d/anaconda-denylist.conf` from
+  `modprobe.blacklist=`; rsync of the live root without `--delete`, excluding `/boot/loader/`, then
+  `/boot/grub2`, `/etc/sysconfig` and `/usr/lib/grub` copied again without xattrs) → bootloader
+  (`InstallBootloaderTask`: `write_defaults` truncates `/etc/default/grub` and sets `GRUB_CMDLINE_LINUX` to
+  Anaconda's boot args, then grub2-mkconfig, which creates `/etc/kernel/cmdline`; `CreateBLSEntriesTask`:
+  deletes every BLS entry, `kernel-install add`, `grub2-mkconfig -o /etc/grub2.cfg`) → configuration queue
+  (`RecreateInitrdsTask`: `dracut -f`). Only `preserved_arguments` from the live command line reach the boot
+  args (`clk_ignore_unused pd_ignore_unused arm64.nopauth` among them, 45.22 also `systemd.tpm2_wait`; never
+  `modprobe.blacklist`, `rd.driver.blacklist` or the soundwire argument), plus `rhgb quiet` and storage
+  arguments. Command lines and their output go to `/var/log/anaconda/program.log` on the installed system.
+  Its grub2-mkconfig runs in a chroot with `/dev` bound but no udev database. The live root's
+  `/etc/default/grub` never reaches an installation. On a BTRFS root (Fedora's default layout, with or
+  without LUKS) `FixBTRFSBootloaderTask` runs after `RecreateInitrdsTask` and repeats
+  `ConfigureBootloaderTask` and `InstallBootloaderTask`: `/etc/default/grub` is truncated again and
+  grub2-mkconfig rewrites every entry's options and `/etc/kernel/cmdline` from Anaconda's arguments, after
+  the kernel-install plugin ran. The entry's `devicetree` line, the initramfs and the removed denylist
+  survive; the GRUB settings and the SP11-only arguments do not.
+- Fedora's `10_linux` (`update_bls_cmdline`) rewrites the `options` line of **every** BLS entry from
+  `root=… ro $GRUB_CMDLINE_LINUX $GRUB_CMDLINE_LINUX_DEFAULT` on each grub2-mkconfig, and rewrites
+  `/etc/kernel/cmdline` when that file is missing or older than `/etc/default/grub`. `20-grub.install` reads
+  the options for a new entry from `/etc/kernel/cmdline`, but first runs grub2-mkconfig when that file is
+  older than `/etc/default/grub`; it writes `devicetree /dtb-<ver>/$GRUB_DEVICETREE` and copies
+  `/usr/lib/modules/<ver>/dtb` to `/boot/dtb-<ver>`. kernel-install resolves `layout=other` on these
+  systems ("Entry-token directory … not found"), so `90-loaderentry.install` quits and
+  `/etc/kernel/devicetree` is never read.
+- `15-sp11-surface.install` runs before `20-grub.install`: `sp11-grub-defaults` (the single writer of the
+  `/etc/default/grub` policy, also used by `sp11-first-boot` and `50-build-iso.sh`) sets `GRUB_DEVICETREE`
+  and the display settings, the plugin appends the SP11 arguments to `/etc/kernel/cmdline` (rewritten after
+  `/etc/default/grub`, so 20-grub does not rerun mkconfig) and removes the Anaconda denylist before
+  Anaconda's initramfs rebuild. Anaconda's last grub2-mkconfig still strips the SP11-only arguments from the
+  entry (the soundwire argument; on 44 also `systemd.tpm2_wait=0`), and on BTRFS the GRUB settings as well,
+  so the first boot runs without them until `sp11-first-boot` (`grubby --update-kernel=ALL --args`, which
+  also updates `GRUB_CMDLINE_LINUX` and `/etc/kernel/cmdline`, then `sp11-grub-defaults` and
+  grub2-mkconfig) fixes both for the second boot. Reproduced for the non-BTRFS order in an overlay of a
+  Fedora 44 root with real grub2-mkconfig runs (a `grub2-probe`/`grub2-mkrelpath` stub for the overlay root,
+  an ext4 loop at `/boot`). The plugin does not filter live-only arguments; step 60 checks that no Anaconda
+  config mentions them.
 - `mkfs.erofs -Ededupe` is single-threaded in erofs-utils 1.9.4 (hours). `-Efragments -C1048576
   --workers=N -zlzma,level=6` takes ~5 min and is only slightly larger. Use `--file-contexts` from the
   root's own SELinux policy.
@@ -197,6 +225,10 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   rejects a name without instance); restart `'NAME@*.service'` explicitly.
 - dracut `install_items` applies to `--no-hostonly` builds too; `50` parks the support RPM's drop-in
   during the live initramfs run and installs only the GPU zap shader.
+- `rpm --noscripts` also skips triggers, so step 50 runs `sp11-ucm-apply` in the chroot itself. On a normal
+  install, the support RPM's `%triggerin -- alsa-ucm` and `%triggerin -- grub2-efi-aa64-modules` also fire
+  for its own installation, and systemd's RPM file triggers daemon-reload, reload udev rules and run
+  `systemd-sysctl` (only when `/run/systemd/system` exists), so the spec needs no `%post`.
 - Never install RPMs into the live root with `--nodeps`. Workstation Live lacks `spdlog`, which
   `sp11-iptsd` links against; a daemon that cannot load makes udev's `check-device` fail, so no
   `sp11-iptsd@` unit starts. `LIVE_EXTRA_PKGS` in `sp11.conf` lists
@@ -296,10 +328,14 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   design; inking comes from the `sp11-iptsd@dev-hidrawN.service` started by the udev rule.
 - Live media boots with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (an ADSP
   restart resets USB-C while rooted on USB), so no audio or battery in the live session; the installed
-  system drops those arguments via the kernel-install plugin and `sp11-first-boot.service`.
+  system drops those arguments via the kernel-install plugin and `sp11-first-boot.service`. Anaconda carries
+  neither argument into the boot entry, but turns the first into `/etc/modprobe.d/anaconda-denylist.conf`,
+  which the kernel-install plugin removes before Anaconda rebuilds the initramfs. (`module_blacklist=` would
+  avoid that file, but the kernel logs it with `pr_err` on every load attempt.)
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` + `/usr/libexec/sp11/sp11-grub-modules` (copies
-  `chain.mod` and its dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi`, re-run by an
-  RPM trigger on `grub2-efi-aa64-modules`). Booting Windows through this entry works on the tested unit.
+  `chain.mod` and its dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi`; run by the
+  generator on every grub2-mkconfig and by an RPM trigger on `grub2-efi-aa64-modules`, which keeps the copy
+  matched to the GRUB image). Booting Windows through this entry works on the tested unit.
 
 ## Bluetooth dual-boot pairings
 

@@ -1,6 +1,5 @@
 [Unit]
 Description=Surface Pro 11: set Bluetooth public address on %I
-ConditionPathExists=/etc/sp11/bluetooth-address
 Wants=bluetooth.service
 Before=bluetooth.service
 StartLimitIntervalSec=5min
