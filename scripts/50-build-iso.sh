@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # Step 6: remaster the Fedora live ISO (FEDORA_EDITION: Workstation or a spin) for the Surface Pro 11.
 #   - extract the LZMA EROFS live root, install the kernel-sp11 / sp11-surface-support / sp11-iptsd RPMs
-#   - hide the stock kernel from Anaconda, generate a dracut-live initramfs for the SP11 kernel
+#   - remove the stock kernel packages, generate a dracut-live initramfs for the SP11 kernel
 #   - repack the root as LZMA EROFS with SELinux labels, write a GRUB menu that loads the Denali OLED DTB
 #   - replay the source ISO's hybrid GPT/El Torito boot layout with xorriso
 # Needs sudo (ownership/xattrs in the extracted root, chroot for dracut).
@@ -74,13 +74,12 @@ log "extracting EROFS live root to $ROOTFS (this takes a few minutes)"
 as_root rm -rf --one-file-system "$ROOTFS"
 as_root fsck.erofs --extract="$ROOTFS" --xattrs --preserve "$W/live.erofs" >"$W/fsck-erofs.log" 2>&1 || { tail -5 "$W/fsck-erofs.log" >&2; die "fsck.erofs extraction failed"; }
 [ -d "$ROOTFS/usr/lib/modules" ] || die "extracted root looks wrong"
-STOCK_KVER=$(ls "$ROOTFS/usr/lib/modules" | head -1)
 # Defence in depth behind the stamp above: an extracted root from the wrong release would otherwise only
 # surface later as a confusing dependency failure while installing the runtime RPMs.
 ROOT_RELEASE=$(as_root sed -n 's/^VERSION_ID=//p' "$ROOTFS/etc/os-release" | tr -d '"' || true)
 [ "$ROOT_RELEASE" = "$FEDORA_RELEASE" ] \
   || die "live root is Fedora $ROOT_RELEASE but this build targets Fedora $FEDORA_RELEASE (stale $W/live.erofs?)"
-log "stock kernel in live root: $STOCK_KVER (Fedora $ROOT_RELEASE)"
+log "live root: Fedora $ROOT_RELEASE"
 
 ## 3. Install runtime dependencies the live media lacks, then the SP11 RPMs. Dependencies are checked
 ##    (no --nodeps): a missing library would leave e.g. iptsd unable to start on the installed system.
@@ -111,7 +110,24 @@ as_root depmod -b "$ROOTFS" "$KERNEL_ABI" || die "depmod in live root failed"
 [ -s "$ROOTFS/boot/vmlinuz-$KERNEL_ABI" ] || die "kernel image missing from live root"
 [ -s "$ROOTFS/usr/lib/modules/$KERNEL_ABI/dtb/$SP11_DTB" ] || die "DTB missing from live root"
 
-## 4. Boot policy inside the root: only the SP11 kernel is visible to Anaconda; no stale BLS/rescue state
+## 4. Only the SP11 kernel in the root: Anaconda installs every kernel that has a /boot/vmlinuz-*. The stock kernel
+##    packages go (rpm -e refuses if anything else still needs them); kernel-tools*, kernel-headers and
+##    kernel-devel stay, they own nothing in /boot.
+mapfile -t STOCK_PKGS < <(as_root rpm --root "$ROOTFS" -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel \
+  kernel-core kernel-modules kernel-modules-core kernel-modules-extra kernel-modules-internal 'kernel-uki-*' | sort -u)
+if [ ${#STOCK_PKGS[@]} -gt 0 ]; then
+  log "removing stock kernel packages: ${STOCK_PKGS[*]}"
+  as_root rpm --root "$ROOTFS" -e --noscripts "${STOCK_PKGS[@]}" >"$W/rpm-erase.log" 2>&1 \
+    || { cat "$W/rpm-erase.log" >&2; die "stock kernel removal failed"; }
+fi
+# Generated files that no package owns can keep a removed kernel's module tree alive.
+for d in "$ROOTFS"/usr/lib/modules/*/; do
+  v=$(basename "$d"); [ "$v" = "$KERNEL_ABI" ] && continue
+  as_root rpm --root "$ROOTFS" -qf "/usr/lib/modules/$v" >/dev/null 2>&1 && die "a package still owns /usr/lib/modules/$v"
+  log "removing leftover /usr/lib/modules/$v"
+  as_root rm -rf --one-file-system "$d"
+done
+[ "$(ls "$ROOTFS/usr/lib/modules")" = "$KERNEL_ABI" ] || die "module trees other than $KERNEL_ABI left in the live root"
 as_root find "$ROOTFS/boot" -maxdepth 1 \( -name 'vmlinuz-*' -o -name 'initramfs-*' -o -name 'System.map-*' -o -name 'config-*' -o -name 'symvers-*' -o -name '.vmlinuz-*.hmac' \) \
   ! -name "vmlinuz-$KERNEL_ABI" ! -name "System.map-$KERNEL_ABI" ! -name "config-$KERNEL_ABI" -exec rm -f {} +
 as_root rm -rf "$ROOTFS/boot/dtb"

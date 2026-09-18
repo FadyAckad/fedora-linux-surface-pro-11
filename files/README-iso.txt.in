@@ -1,6 +1,6 @@
 Fedora @RELEASE@ Live for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED, incl. 5G SKU)
 
-Kernel:        @ABI@ (ooaklee/linux_ms_dev_kit-sp11 @COMMIT@, mode: @MODE@); the stock Fedora kernel is not offered.
+Kernel:        @ABI@ (ooaklee/linux_ms_dev_kit-sp11 @COMMIT@, mode: @MODE@); the stock Fedora kernel is removed.
 Device tree:   @DTB@ (loaded explicitly by GRUB; installed system uses GRUB_DEVICETREE in BLS entries)
 Built:         @DATE@ for SKU @SKU@
 Base media:    @MEDIA@

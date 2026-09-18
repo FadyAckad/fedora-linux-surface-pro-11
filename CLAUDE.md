@@ -242,49 +242,53 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   support RPM now `Requires: qcom-firmware`. With 2.0 or later the error is gone on the installed 45 Beta
   Workstation system. The live initramfs still carries only the zap shader (step 50 parks the drop-in).
 
-- The live root keeps the stock kernel packages for Anaconda with their `/boot` images deleted, which
-  leaves every installed system a half-removed kernel. dracut 111 without an output path writes
-  `/boot/initramfs-<ver>.img` only when `/boot/vmlinuz-<ver>` exists; otherwise, with `/boot/efi` mounted,
-  it falls back to `/boot/efi/<machine-id>/<ver>/initrd`. `dracut --regenerate-all` therefore fails with
-  `Can't write to ...` for the stock kernel, then carries on to the next kernel and exits non-zero.
-  `sp11-remove-stock-kernels.service` (one shot with its own stamp, `/var/lib/sp11/stock-kernels-removed.done`,
-  so it also runs on systems whose first boot already happened) erases the stock set with plain `rpm -e`,
-  removes module trees no package owns, and deletes BLS entries whose kernel image is missing. The entry
-  cleanup is keyed on the image because `rpm -e` has usually already removed the module tree the version
-  could have been read from. Since support RPM 2.2 an SP11 kernel is any version an installed `kernel-sp11`
-  owns (`/usr/lib/modules/<ver>/vmlinuz` in its file list): the script refuses unless one of them is running,
-  never touches their entries (even with the image missing), and also removes the entries and unowned
-  module trees of SP11 kernels removed earlier. 2.1 compared `uname -r` with a fixed `SP11_KERNEL_ABI` from
-  `/etc/sp11/sp11.env` (now dropped) and refused on any other SP11 kernel. Tested in an overlay of a Fedora
-  44 root with 7.2.0 and 7.2.5 installed and a faked `uname -r`: 2.1 refuses under 7.2.5; 2.2 refuses
-  under the stock kernel, cleans up under 7.2.5, and a rerun under 7.2.0 changes nothing. In such a chroot,
-  install the support RPM with `--noscripts --notriggers`: its `%post` runs `systemd-sysctl`, which writes
-  through the bound `/proc` into the host kernel.
-  Nothing outside the kernel family requires those packages on 45 (`rpm -e --test` is clean);
-  `60-verify-rootfs.sh` runs that erase test on every root it checks. `kernel-sp11`'s unversioned
+- A stock kernel whose packages stay installed without its `/boot` image breaks `dracut --regenerate-all`:
+  dracut 111 without an output path writes `/boot/initramfs-<ver>.img` only when `/boot/vmlinuz-<ver>`
+  exists; otherwise, with `/boot/efi` mounted, it falls back to `/boot/efi/<machine-id>/<ver>/initrd`, fails
+  with `Can't write to ...`, carries on to the next kernel and exits non-zero. Up to support RPM 2.2 the live
+  root kept the stock packages with their images deleted, and `sp11-remove-stock-kernels.service` (one shot
+  with its own stamp, `/var/lib/sp11/stock-kernels-removed.done`, so it also runs on systems whose first
+  boot already happened; 2.1 compared `uname -r` with a fixed `SP11_KERNEL_ABI` from `/etc/sp11/sp11.env`,
+  2.2 accepted any installed `kernel-sp11` version) erased the stock set with plain `rpm -e`, removed module
+  trees no package owns, and deleted BLS entries whose kernel image is missing; confirmed on hardware on
+  2026-09-16 as an upgrade to 2.1 on the Fedora 45 Beta install. Tested in an overlay of a Fedora 44 root
+  with 7.2.0 and 7.2.5 installed and a faked `uname -r`: 2.1 refuses under 7.2.5; 2.2 refuses under the
+  stock kernel, cleans up under 7.2.5, and a rerun under 7.2.0 changes nothing. Nothing outside the kernel
+  family requires those packages on 45 (`rpm -e --test` is clean); `kernel-sp11`'s unversioned
   `kernel-uname-r`, `kernel-core-uname-r` and `kernel-modules-core-uname-r` provides satisfy the stock
   packages' versioned requires, so even a partial erase of the set passes; erasing `glibc` is a working
-  negative control. Tested in an overlay of the 45 root, including the refusal path and a second
-  idempotent run. Confirmed on hardware on 2026-09-16 as an upgrade to 2.1 on the Fedora 45 Beta
-  install; `dracut --regenerate-all -f` succeeds afterwards.
+  negative control.
+  Since 2.3, step 50 erases the stock set from the live root with `rpm -e --noscripts` (a plain erase, so
+  dependencies are still checked; nothing outside the kernel family requires them on 44 or 45, and the same
+  `kernel-sp11` provides satisfy the stock packages' versioned requires). On the Fedora 44 and 45 Beta roots
+  the erase left no module tree and no `/boot` file behind (the depmod outputs are `%ghost`); step 50 still
+  removes unowned leftovers and refuses any other module tree. The installer then only ever sees
+  `kernel-sp11`. The service is gone, so a system that never ran it (support RPM older than 2.1) needs 2.1
+  or 2.2 and one reboot before 2.3.
 
 ## Peripherals and userspace
 
 - Firmware: ADSP/CDSP/GPU blobs come from this device's Windows DriverStore (`surfacepro_ext_adsp8380*`,
-  `qcnspmcdm_ext_cdsp8380*`, `qcdx8380*`); Fedora's `qcom-firmware` has no Denali directory. The DTS
-  names `adsp_dtb.mbn`/`cdsp_dtb.mbn`; Windows ships `adsp_dtbs.elf`/`cdsp_dtbs.elf`; both names are
-  installed. GPU zap shader `qcdxkmsuc8380.mbn`.
+  `qcnspmcdm_ext_cdsp8380*`, `qcdx8380*`); Fedora's `qcom-firmware` has no Denali directory. The Denali
+  DT requests exactly `qcadsp8380.mbn`, `adsp_dtb.mbn`, `qccdsp8380.mbn`, `cdsp_dtb.mbn` and the zap shader
+  `qcdxkmsuc8380.mbn` (all ELF); Windows ships the DT blobs as `adsp_dtbs.elf`/`cdsp_dtbs.elf`, and the
+  support RPM installs them under the DT names only. Not shipped since 2.3: the `*_dtbs.elf` copies;
+  `*.jsn` (the kernel's pd-mapper, `CONFIG_QCOM_PD_MAPPER=m`, is created by `qcom_common` as the
+  `pd-mapper` aux device and needs no files; no userspace pd-mapper is installed); `qcdxkmsucpurwa.mbn`
+  (X1P zap shader); `qcvss8380.mbn` (the iris node is `status = "disabled"` in `hamoa.dtsi` and Denali does
+  not enable it). Step 60 compares the Denali directory with the DT's `firmware-name` list.
 - Audio: ooaklee `sp11-audio-v19c` topology and UCM. Its `x1e80100.conf` matcher lacks the 5G variant
   and is patched via `UCM_SP11_REGEX`. `alsa-ucm` ships `conf.d/x1e80100/x1e80100.conf` as a symlink;
   the support RPM replaces it and re-applies on an `alsa-ucm` trigger.
 - Wi-Fi: WCN7850, PCI 17cb:1107, `qmi-board-id=255`; no exact `board-2.bin` entry, so the 17cb:3378
   entry is extracted with `ath12k-bdencoder` as `board.bin`. `disable-rfkill` is in the Denali DTS.
+  `board-2.bin` is identical in the F44 (20260910) and F45 Beta (20260810) `atheros-firmware` packages.
 - Bluetooth address: the controller enumerates without a public address; `sp11-bt-set-addr.c` (OE
   commit 69f40d5) sets it over raw HCI management before `bluetooth.service`, triggered by udev.
   Upstream's `parse_mac` copies the printed octets in order, but the MGMT payload is a little-endian
   `bdaddr_t`, so the unpatched helper sets the byte-reversed address; `30-build-support-rpm.sh` patches
-  `out[i]` to `out[5 - i]` before compiling. `sp11-bt-import-pairings` detects a byte-reversed adapter
-  directory under `/var/lib/bluetooth` and says so.
+  `out[i]` to `out[5 - i]` before compiling. The helper validates the index and the address itself;
+  `sp11-bt-apply` only maps the unit instance `hciN` to `N`.
 - Pen: unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`) on the kernel's
   HIDRAW bridge (`hidraw` parent `001C:045E:0C83.*`, created by `mshw0485_touch` with `ipts_hid_bridge`
   defaulting to on); integration templates from OE `userspace/iptsd-sp11`; the build needs cmake for

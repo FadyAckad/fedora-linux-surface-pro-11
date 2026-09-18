@@ -28,8 +28,6 @@ check r test -x "$ROOTFS/etc/grub.d/29_sp11_windows"
 check r test -f "$ROOTFS/usr/lib/grub/arm64-efi/chain.mod"
 check r grep -q "^kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
-check r test -x "$ROOTFS/usr/libexec/sp11/sp11-remove-stock-kernels"
-check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-remove-stock-kernels.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
 stock=$(r find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' ! -name "vmlinuz-$KERNEL_ABI" | wc -l); check test "$stock" -eq 0
 bls=$(r find "$ROOTFS/boot/loader/entries" -name '*.conf' 2>/dev/null | wc -l); check test "$bls" -eq 0
@@ -42,18 +40,18 @@ for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device /usr/lib
   check r chroot "$ROOTFS" /usr/bin/sh -c "! ldd $bin | grep -q 'not found'"
 done
 check r chroot "$ROOTFS" /usr/libexec/sp11-iptsd-check-device --help
-check r rpm --root "$ROOTFS" -q kernel
-# Both depend on the edition's package set: the media must carry the installer, and the stock kernel set that
-# sp11-remove-stock-kernels erases on the installed system (same query as its stock()) must go without
-# breaking another package's dependencies.
 check r test -x "$ROOTFS/usr/bin/liveinst"
+# Step 50 removes the stock kernel (the query matches the dnf exclusion) and every module tree it leaves behind.
 mapfile -t stock_pkgs < <(r rpm --root "$ROOTFS" -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel kernel-core \
-  kernel-modules kernel-modules-core kernel-modules-extra kernel-modules-internal 'kernel-uki-*' | sort -u)
-log "stock kernel set: ${stock_pkgs[*]:-none}"
-check test "${#stock_pkgs[@]}" -gt 0
-check r rpm --root "$ROOTFS" -e --test "${stock_pkgs[@]}"
+  kernel-modules kernel-modules-core kernel-modules-extra kernel-modules-internal 'kernel-uki-*')
+log "stock kernel packages: ${stock_pkgs[*]:-none}"
+check test "${#stock_pkgs[@]}" -eq 0
+check test "$(ls "$ROOTFS/usr/lib/modules")" = "$KERNEL_ABI"
+# The plugin does not filter live-only arguments, so Anaconda must not carry any of them into the installed system.
+check r test -f "$ROOTFS/etc/anaconda/anaconda.conf"
+check r sh -c "! grep -rqE 'modprobe\.blacklist|rd\.driver\.blacklist' '$ROOTFS/etc/anaconda'"
 
-log "--- kernel-install hand-off simulation (chroot, Anaconda-like inputs)"
+log "--- kernel-install hand-off simulation (chroot, inputs as Anaconda leaves them)"
 T="$WORK_DIR/iso/handoff-test"
 [ -z "$(mounts_under "$T")" ] || die "mounts left under $T from an earlier run; unmount them first: $(mounts_under "$T" | tr '\n' ' ')"
 r rm -rf --one-file-system "$T"; mkdir -p "$T"

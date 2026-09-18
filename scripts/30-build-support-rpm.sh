@@ -94,19 +94,15 @@ chmod 0600 "$STAGE/etc/sp11/bluetooth-address"
 install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
 install -m 0755 "$FILES_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
 install -m 0755 "$FILES_DIR/sp11-grub-defaults" "$STAGE/usr/libexec/sp11/sp11-grub-defaults"
-# The stock kernel packages stay installed but must not come back through `dnf upgrade` on the installed system.
+# The ISO build removes the stock kernel packages; they must not come back through `dnf upgrade`.
 install -D -m 0644 "$FILES_DIR/90-sp11-dnf.conf" "$STAGE/etc/dnf/libdnf5.conf.d/90-sp11.conf"
 install -D -m 0755 "$FILES_DIR/29_sp11_windows" "$STAGE/etc/grub.d/29_sp11_windows"
 install -m 0755 "$FILES_DIR/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-first-boot"
-install -m 0755 "$FILES_DIR/sp11-remove-stock-kernels" "$STAGE/usr/libexec/sp11/sp11-remove-stock-kernels"
 install -m 0755 "$FILES_DIR/sp11-bt-import-pairings" "$STAGE/usr/libexec/sp11/sp11-bt-import-pairings"
 install -m 0755 "$FILES_DIR/sp11-diag" "$STAGE/usr/libexec/sp11/sp11-diag"
 install -D -m 0644 "$FILES_DIR/sp11-first-boot.service" "$STAGE/usr/lib/systemd/system/sp11-first-boot.service"
 install -d "$STAGE/usr/lib/systemd/system/multi-user.target.wants"
 ln -sf ../sp11-first-boot.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
-# Separate one-shot with its own stamp, so it also runs once on systems whose first boot already happened.
-install -D -m 0644 "$FILES_DIR/sp11-remove-stock-kernels.service" "$STAGE/usr/lib/systemd/system/sp11-remove-stock-kernels.service"
-ln -sf ../sp11-remove-stock-kernels.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-remove-stock-kernels.service"
 install -D -m 0755 "$FILES_DIR/15-sp11-surface.install" "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install"
 install -D -m 0644 "$FILES_DIR/90-sp11.conf" "$STAGE/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
 install -D -m 0644 "$FILES_DIR/90-sp11.sysctl.conf" "$STAGE/usr/lib/sysctl.d/90-sp11.conf"
@@ -122,7 +118,7 @@ SP11_SKU="$SP11_SKU"
 ENV
 # `bash -n A B C` parses only A (B and C become positional parameters): check every script on its own.
 for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
-         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,remove-stock-kernels,grub-modules,grub-defaults,bt-import-pairings,diag,bt-apply,ucm-apply}; do
+         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,bt-import-pairings,diag,bt-apply,ucm-apply}; do
   bash -n "$f" || die "shell syntax error in ${f#"$STAGE"}"
 done
 sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"

@@ -88,9 +88,9 @@ Steps:
    7816 modules.
 5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: firmware from the Windows
    DriverStore, audio topology and UCM, Wi-Fi board data, Bluetooth address service, boot policy
-   (kernel-install plugin, dracut, sysctl and dnf settings), the Windows GRUB entry, the first-boot and
-   stock-kernel cleanup services, `sp11-bt-import-pairings` and `sp11-diag`. It rebuilds when its
-   `VERSION=` or the target Fedora release changes.
+   (kernel-install plugin, dracut, sysctl and dnf settings), the Windows GRUB entry, the first-boot
+   service, `sp11-bt-import-pairings` and `sp11-diag`. It rebuilds when its `VERSION=` or the target Fedora
+   release changes.
 6. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface
    Pro 11 integration.
 7. `scripts/50-build-iso.sh` installs the RPMs into the live root, builds the live initramfs, writes the
@@ -115,9 +115,9 @@ Windows GRUB entry.
 4. Boot the USB and take the first GRUB entry.
 5. Run "Install to Hard Drive" and choose "Share disk with other operating systems". Keep a single
    Fedora installation on the machine: a second one takes over the GRUB menu and hides the first.
-6. Reboot without the USB and log in. On the first boot, two one-shot services enable the audio DSP,
-   give GRUB the Denali DTB, low resolution and the Windows entry, rebuild the initramfs and remove the
-   hidden stock kernel packages. If audio is not up yet, reboot once.
+6. Reboot without the USB and log in. On the first boot, a one-shot service enables the audio DSP, gives
+   GRUB the Denali DTB, low resolution and the Windows entry, and rebuilds the initramfs. If audio is not up
+   yet, reboot once.
 
 ## Update an installed system
 
@@ -226,12 +226,13 @@ device BlueZ knows. It changes nothing.
 - Pen: `sp11-iptsd` links against Fedora's `spdlog`, `fmt` and `inih`. The ISO build installs whichever
   of them the live image lacks (`LIVE_EXTRA_PKGS`; Workstation lacks `spdlog`) and refuses RPMs with
   unmet dependencies.
-- Stock kernel: its packages stay in the live root for the installer, but their boot images are
-  removed, so the installer installs the SP11 kernel. On the installed system
-  `sp11-remove-stock-kernels.service` removes those packages once, and
-  `/etc/dnf/libdnf5.conf.d/90-sp11.conf` keeps dnf from bringing a stock kernel back (`kernel`,
-  `kernel-core`, `kernel-modules*`, `kernel-uki-*`; `dnf --setopt=disable_excludes='*' ...` overrides it).
-- Initramfs: the live one carries only the GPU zap shader; the ADSP/CDSP firmware (about 26 MiB) and the
+- Stock kernel: the ISO build removes its packages from the live root, so the installer installs only
+  the SP11 kernel, and `/etc/dnf/libdnf5.conf.d/90-sp11.conf` keeps dnf from bringing a stock kernel
+  back (`kernel`, `kernel-core`, `kernel-modules*`, `kernel-uki-*`;
+  `dnf --setopt=disable_excludes='*' ...` overrides it).
+- Firmware: only the five files the Denali device tree requests (ADSP and CDSP images with their
+  device-tree blobs, GPU zap shader), under the names it requests them by.
+- Initramfs: the live one carries only the GPU zap shader; the ADSP/CDSP firmware (about 24 MiB) and the
   Adreno microcode go into the installed system's initramfs.
 - Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth
   radio, so an external monitor or a USB Bluetooth dongle does not change the result.
