@@ -16,7 +16,7 @@ IRPM=$(rpm_of sp11-iptsd);           [ -n "$IRPM" ] || die "sp11-iptsd RPM missi
 [ "$SP11_DTB_SELECTED" = "$SP11_DTB" ] || die "hardware.env selects DTB $SP11_DTB_SELECTED, config expects $SP11_DTB"
 
 W="$WORK_DIR/iso"; ROOTFS="$W/rootfs"; OUT="$OUT_DIR/$OUTPUT_ISO_NAME"
-# User-visible name of the base media ("COSMIC 44", "Workstation 45 Beta"): pre-release composes carry an
+# User-visible name of the base media ("Xfce 44", "Workstation 45 Beta"): pre-release composes carry an
 # underscore (45_Beta) that reads badly in a boot menu, and the ISO's README says plainly when the media is
 # not a supported Fedora release.
 MEDIA_LABEL="$FEDORA_EDITION ${FEDORA_MEDIA_VERSION/_/ }"

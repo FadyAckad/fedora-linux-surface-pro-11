@@ -144,18 +144,6 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `Fedora-KDE-44-1.7-aarch64-CHECKSUM`, `Fedora-KDE-Desktop-Live-...`) and is not covered.
 - `Fedora-Workstation-Live-44-1.7.aarch64.iso`, volume id `Fedora-WS-Live-44`, built by kiwi. The
   live root `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB.
-- `Fedora-COSMIC-Live-44-1.7.aarch64.iso` (2 899 554 304 B), volume id `Fedora-CSMC-Live-44`, marker
-  `/boot/0x0beaaabc`, same loader paths as Workstation. The per-image package lists on Koji
-  (`kojipkgs.fedoraproject.org/packages/Fedora-<Edition>-Live/44/1.7/images/*.packages`) show the same
-  Anaconda (44.30) and stock kernel set as Workstation 44. COSMIC already ships `spdlog`, `fmt` and `inih`,
-  so `LIVE_EXTRA_PKGS` adds nothing. It lacks the `linux-firmware` main package, which holds no qcom, qca or
-  ath12k files: this unit's firmware comes from `atheros-firmware` (`qca/hmtbtfw20.tlv`, `qca/hmtnv20.*`,
-  `ath12k/WCN7850`), `qcom-firmware` (`gen70500_*`) and the support RPM (DTS `firmware-name` entries).
-  Session `cosmic.desktop` behind `cosmic-greeter` (greetd), `livesys_session="cosmic"`, installer
-  "Install to Hard Drive" (`liveinst`, anaconda-webui 68), no `iio-sensor-proxy`. cosmic-comp 1.0.9 carries
-  smithay's tablet-v2 (`zwp_tablet_seat_v2`), and pen inking through iptsd works under COSMIC. Remastered
-  2026-09-16 (ISO sha256 `eafe3df5…935b`): step 60 passes (56 checks), and dracut with the support RPM's
-  drop-in active succeeds in an overlay of the root. Hardware status below.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does `search --file
   --set=root /boot/0x503d6c7e` then `configfile ($root)/boot/grub2/grub.cfg`. Kernel
   `/boot/aarch64/loader/linux`, initrd `/boot/aarch64/loader/initrd`, font
@@ -228,8 +216,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - `rpm/sp11-iptsd.spec.in` must carry `BuildRequires: cmake`: meson locates Microsoft.GSL only through its
   CMake config. The host build masked this because `00-setup-host.sh` installs cmake for other reasons.
 - The boot kernel on aarch64 is owned by `kernel-uki-dtbloader`, not `kernel-core` (Workstation Live
-  installs no `kernel-core` at all). Not new in 45: Koji's package lists of the 44 1.7 Workstation and
-  COSMIC images show the same set (`kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`, no
+  installs no `kernel-core` at all). Not new in 45: Koji's package list of the 44 1.7 Workstation image
+  shows the same set (`kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`, no
   `kernel-core`). It provides `installonlypkg(kernel)` and `kernel-core-uname-r`, so dnf
   adds it *alongside* rather than upgrading in place, and its `/usr/bin/kernel-install` dependency writes
   the BLS entry. `files/90-sp11-dnf.conf` therefore excludes `kernel-uki-*` as well; the glob deliberately
@@ -252,8 +240,7 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `failed to load gen70500_sqe.fw` until switch-root makes `/usr/lib/firmware` reachable. `qcom-firmware`
   ships `qcom/gen70500_sqe.fw.xz` and `qcom/gen70500_gmu.bin.xz`; `files/90-sp11.conf` installs both and the
   support RPM now `Requires: qcom-firmware`. With 2.0 or later the error is gone on the installed 45 Beta
-  Workstation and 44 COSMIC systems. The live initramfs still carries only the zap shader (step 50 parks
-  the drop-in).
+  Workstation system. The live initramfs still carries only the zap shader (step 50 parks the drop-in).
 
 - The live root keeps the stock kernel packages for Anaconda with their `/boot` images deleted, which
   leaves every installed system a half-removed kernel. dracut 111 without an output path writes
@@ -268,8 +255,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   owns (`/usr/lib/modules/<ver>/vmlinuz` in its file list): the script refuses unless one of them is running,
   never touches their entries (even with the image missing), and also removes the entries and unowned
   module trees of SP11 kernels removed earlier. 2.1 compared `uname -r` with a fixed `SP11_KERNEL_ABI` from
-  `/etc/sp11/sp11.env` (now dropped) and refused on any other SP11 kernel. Tested in an overlay of the 44
-  COSMIC root with 7.2.0 and 7.2.5 installed and a faked `uname -r`: 2.1 refuses under 7.2.5; 2.2 refuses
+  `/etc/sp11/sp11.env` (now dropped) and refused on any other SP11 kernel. Tested in an overlay of a Fedora
+  44 root with 7.2.0 and 7.2.5 installed and a faked `uname -r`: 2.1 refuses under 7.2.5; 2.2 refuses
   under the stock kernel, cleans up under 7.2.5, and a rerun under 7.2.0 changes nothing. In such a chroot,
   install the support RPM with `--noscripts --notriggers`: its `%post` runs `systemd-sysctl`, which writes
   through the bound `/proc` into the host kernel.
@@ -278,9 +265,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   `kernel-uname-r`, `kernel-core-uname-r` and `kernel-modules-core-uname-r` provides satisfy the stock
   packages' versioned requires, so even a partial erase of the set passes; erasing `glibc` is a working
   negative control. Tested in an overlay of the 45 root, including the refusal path and a second
-  idempotent run. Confirmed on hardware on 2026-09-16 both on the first boot of a fresh Fedora 44 COSMIC
-  install (only `kernel-sp11` and the `kernel-tools` packages left) and as an upgrade to 2.1 on the
-  Fedora 45 Beta install; `dracut --regenerate-all -f` succeeds on both afterwards.
+  idempotent run. Confirmed on hardware on 2026-09-16 as an upgrade to 2.1 on the Fedora 45 Beta
+  install; `dracut --regenerate-all -f` succeeds afterwards.
 
 ## Peripherals and userspace
 
@@ -327,8 +313,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   rewrites the keys in place) → `build/out/sp11-bt-pairings.tar.gz`;
   converter `scripts/bt-pairings-from-hive.py` (python3-hivex, LE only, filtered by `BT_PAIRING_USB_IDS`);
   importer `/usr/libexec/sp11/sp11-bt-import-pairings` (also inside the tarball). Verified on 44
-  Workstation (keyboard connects over BLE with battery reporting), 45 Beta Workstation and 44 COSMIC
-  (keyboard and pen connect without pairing again).
+  Workstation (keyboard connects over BLE with battery reporting) and 45 Beta Workstation (keyboard and
+  pen connect without pairing again).
 
 ## Hardware-verified status
 
@@ -367,16 +353,6 @@ acceleration, the Bluetooth pairing import, no early-boot Adreno error with supp
 `dnf upgrade --refresh` after the `kernel-uki-*` exclusion, and support RPM 2.1 as an upgrade (stock kernel
 removed, `dracut --regenerate-all -f` clean). The 44 GA list above carries over to 45 Beta. Suspend and
 resume confirmed on 2026-09-17.
-
-### Fedora 44 GA COSMIC (2026-09-16, support RPM 2.1)
-
-Built with `FEDORA_EDITION=COSMIC` (ISO sha256 `eafe3df5…935b`) and installed on the tested unit.
-Confirmed working by the owner on 2026-09-16: Wi-Fi, Bluetooth, touch, pen inking under COSMIC, audio,
-battery, Flatpak, the Windows GRUB entry, keyboard/touchpad, GPU acceleration (`glxinfo -B` from
-`glx-utils` shows the Adreno GPU, not llvmpipe), the Bluetooth pairing import, no early-boot Adreno error,
-`dracut --regenerate-all -f` and `sp11-diag`. On the first boot `sp11-remove-stock-kernels` left only
-`kernel-sp11` and the `kernel-tools` packages, and `dnf upgrade --refresh` added no stock kernel entry.
-Suspend and resume confirmed on 2026-09-17.
 
 ### Kernel 7.2.5 on Fedora 45 Beta Workstation (2026-09-17)
 

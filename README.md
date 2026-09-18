@@ -14,23 +14,23 @@ Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). The first three 
 installations from ISOs with ooaklee's unmodified 7.2.0 kernel. The last column is the Fedora 45 Beta
 installation after its kernel was updated to the current default, 7.2.5.
 
-| Feature | Fedora 44 Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.0 | Fedora 44 COSMIC, 7.2.0 | Fedora 45 Beta Workstation, 7.2.5 |
-|---|:-:|:-:|:-:|:-:|
-| Display with GPU acceleration | yes | yes | yes | yes |
-| Wi-Fi | yes | yes | yes | yes |
-| Bluetooth | yes | yes | yes | yes |
-| Touchscreen | yes | yes | yes | yes |
-| Pen | yes | yes | yes | yes |
-| Speakers | yes | yes | yes | yes |
-| Microphone | yes | yes | yes | yes |
-| Keyboard and touchpad | yes | yes | yes | yes |
-| Battery status | yes | yes | yes | yes |
-| Suspend and resume | yes | yes | yes | yes |
-| Flatpak | yes | yes | yes | yes |
-| Windows in the GRUB menu | yes | yes | yes | yes |
-| Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes | yes | yes | yes |
-| 5G modem | no | no | no | no |
-| Cameras | no | no | no | no |
+| Feature | Fedora 44 Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.5 |
+|---|:-:|:-:|:-:|
+| Display with GPU acceleration | yes | yes | yes |
+| Wi-Fi | yes | yes | yes |
+| Bluetooth | yes | yes | yes |
+| Touchscreen | yes | yes | yes |
+| Pen | yes | yes | yes |
+| Speakers | yes | yes | yes |
+| Microphone | yes | yes | yes |
+| Keyboard and touchpad | yes | yes | yes |
+| Battery status | yes | yes | yes |
+| Suspend and resume | yes | yes | yes |
+| Flatpak | yes | yes | yes |
+| Windows in the GRUB menu | yes | yes | yes |
+| Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes | yes | yes |
+| 5G modem | no | no | no |
+| Cameras | no | no | no |
 
 *yes*: confirmed on the tested unit. *no*: not covered by this project.
 
@@ -72,7 +72,6 @@ Every step is idempotent and skips finished work; `FORCE=1` rebuilds a step. Two
 
 ```bash
 FEDORA_TARGET=beta scripts/build-all.sh      # Fedora 45 Beta Workstation
-FEDORA_EDITION=COSMIC scripts/build-all.sh   # Fedora 44 COSMIC
 ```
 
 Steps:
@@ -292,8 +291,7 @@ nothing third-party is stored in the repository:
   unmodified.
 - Wi-Fi board data: `board-2.bin` from Fedora's `atheros-firmware`, extracted with `ath12k-bdencoder`
   from [qca/qca-swiss-army-knife](https://github.com/qca/qca-swiss-army-knife).
-- Base media: Fedora Workstation and Fedora COSMIC live images. Bring-up notes:
-  rjindael/fedora-surface-pro-11.
+- Base media: Fedora Workstation live images. Bring-up notes: rjindael/fedora-surface-pro-11.
 - ADSP/CDSP/GPU firmware: proprietary Qualcomm and Microsoft files copied from your own Windows
   DriverStore at build time. Never part of this repository; see Status and scope.
 
