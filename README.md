@@ -95,7 +95,7 @@ Steps:
    DriverStore, audio topology and UCM, Wi-Fi board data, Bluetooth address service, boot policy
    (kernel-install plugin, dracut, sysctl and dnf settings), the Windows GRUB entry, the first-boot
    service, `sp11-bt-import-pairings` and `sp11-diag`. It rebuilds when its `VERSION=` or the target Fedora
-   release changes.
+   release changes, and then runs `scripts/35-verify-support-rpm.sh` (see below) when a live root is there.
 6. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface
    Pro 11 integration.
 7. `scripts/50-build-iso.sh` installs the RPMs into the live root, builds the live initramfs, writes the
@@ -104,7 +104,13 @@ Steps:
    `.sha256`. The file name carries the edition, so images of different editions coexist.
 
 `build-all.sh` runs these steps (about an hour after the downloads, most of it the kernel; WSL has to keep
-running, or the kernel build stops and resumes on the next run). `scripts/60-verify-rootfs.sh` then
+running, or the kernel build stops and resumes on the next run), then `scripts/35-verify-support-rpm.sh`:
+in an overlay of the live root with a real ext4 `/boot`, it installs the support RPM the two ways it
+reaches a machine — `dnf upgrade` over the previous version with its scriptlets, and the scriptless live
+install step 7 does — and checks that every boot-policy value in `sp11.conf` arrives in
+`/etc/default/grub` and in the menu grub2-mkconfig generates from it. The update path stages a deliberately
+wrong policy first, so a package that installs without applying it cannot pass.
+`scripts/60-verify-rootfs.sh` then
 checks the root that step 7 left behind: RPM dependencies, loadable binaries, the installer, the firmware
 against the device tree, the absence of the stock kernel, the boot entry and GRUB settings an installation
 would get (Denali DTB, kernel arguments) and the Windows GRUB entry.

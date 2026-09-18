@@ -137,3 +137,12 @@ RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$
   STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"
+
+## 8. Prove the package applies the policy on both paths it reaches a machine by (dnf upgrade over the
+##    previous version with its scriptlets, and the live-root install 50-build-iso.sh does). A policy value
+##    that installs but never applies is otherwise invisible until the hardware boots.
+if as_root test -d "$WORK_DIR/iso/rootfs/usr/lib/modules"; then
+  "$(dirname "$0")/35-verify-support-rpm.sh" || die "35-verify-support-rpm.sh failed for $RPM"
+else
+  warn "no extracted live root yet, so the RPM was not verified; run scripts/35-verify-support-rpm.sh after scripts/50-build-iso.sh"
+fi

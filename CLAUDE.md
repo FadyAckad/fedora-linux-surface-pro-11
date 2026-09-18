@@ -7,8 +7,18 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
 ## Repository
 
 - `sp11.conf`: every version, URL, regex and boot-policy string; scripts source it via `scripts/lib.sh`.
-- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00–50;
-  `60-verify-rootfs.sh` checks the remastered root; `70-export-bt-pairings.sh` is a separate tool.
+- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00–50 and then
+  `35-verify-support-rpm.sh`, which needs the live root 50 extracts (step 30 also runs it itself whenever
+  one is already there, and warns when it is not); `60-verify-rootfs.sh` checks the remastered root;
+  `70-export-bt-pairings.sh` is a separate tool.
+- `35-verify-support-rpm.sh` installs the freshly built support RPM in an overlay of the live root, with a
+  real ext4 `/boot` loop and the `grub2-probe`/`grub2-mkrelpath` stub, on both paths it reaches a machine:
+  `rpm -U` with scriptlets (what `dnf upgrade` does) and `rpm -U --noscripts` plus explicit helper runs
+  (what step 50 does). It asserts that every boot-policy value in `sp11.conf` reaches `/etc/default/grub`
+  and the generated menu. The update path first stages a deliberately wrong policy (`GRUB_GFXMODE=640x480`,
+  empty `GRUB_FONT`, `GRUB_TIMEOUT=99`, font deleted from `/boot`), so a package that installs without
+  applying the policy cannot pass. Verified as a negative control: with the pre-2.4 `%posttrans` the update
+  path fails seven checks while the live path still passes, which is exactly how the bug presented.
 - `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
 - `files/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`,
   `/usr/lib/...`), the live GRUB menu template and `README-iso.txt.in` (the note inside the ISO; it
@@ -26,7 +36,11 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
   (one source tree per stable version, payload, logs), `work/iso/` (extracted live root, root-owned),
   `rpms/`, `out/` (ISO, `.sha256`, pairing tarball), `bt-pairings/` (exported hive; secret), `hardware.env`.
 - Bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the support payload changes, so
-  `dnf upgrade` works on the installed system. Its `%posttrans` regenerates `grub.cfg`. Steps 20/30/40
+  `dnf upgrade` works on the installed system. Its `%posttrans` runs `sp11-grub-defaults` and then
+  regenerates `grub.cfg`. The helper call is not optional: up to 2.3 the scriptlet only ran grub2-mkconfig,
+  which rebuilt the menu from the *previous* `/etc/default/grub`, so a changed policy value installed but
+  never reached the machine (nothing else applies it on an installed system — the kernel-install plugin
+  runs only on a kernel install, `sp11-first-boot` only once). `35-verify-support-rpm.sh` guards this. Steps 20/30/40
   skip only when the cached RPM matches (kernel ABI file list; support `%{VERSION}` and the
   `.fc<release>` dist tag; iptsd version-release and commit), so a bump or a `FEDORA_RELEASE` switch
   triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec. `build_rpm` and
