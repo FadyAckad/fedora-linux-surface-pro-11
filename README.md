@@ -16,10 +16,13 @@ installation after its kernel was updated to the current default, 7.2.5.
 
 | Feature | Fedora 44 Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.5 |
 |---|:-:|:-:|:-:|
+| Boot from the internal NVMe drive | yes | yes | yes |
 | Display with GPU acceleration | yes | yes | yes |
+| Backlight (brightness slider) | not reported | not reported | yes |
 | Wi-Fi | yes | yes | yes |
 | Bluetooth | yes | yes | yes |
 | Touchscreen | yes | yes | yes |
+| Multi-touch (pinch, two-finger scroll) | not reported | not reported | yes |
 | Pen | yes | yes | yes |
 | Speakers | yes | yes | yes |
 | Microphone | yes | yes | yes |
@@ -31,8 +34,10 @@ installation after its kernel was updated to the current default, 7.2.5.
 | Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes | yes | yes |
 | 5G modem | no | no | no |
 | Cameras | no | no | no |
+| NPU (AI acceleration) | no | no | no |
 
-*yes*: confirmed on the tested unit. *no*: not covered by this project.
+*yes*: confirmed on the tested unit. *not reported*: not checked with that combination. *no*: not covered
+by this project.
 
 In the live session, audio and battery status are unavailable because the audio DSP stays off while
 running from USB-C; both work once installed.
@@ -100,9 +105,9 @@ Steps:
 
 `build-all.sh` runs these steps (about an hour after the downloads, most of it the kernel; WSL has to keep
 running, or the kernel build stops and resumes on the next run). `scripts/60-verify-rootfs.sh` then
-checks the root that step 7 left behind: RPM dependencies, loadable binaries, the installer, the
-stock-kernel cleanup, the boot entry an installation would get (Denali DTB, kernel arguments) and the
-Windows GRUB entry.
+checks the root that step 7 left behind: RPM dependencies, loadable binaries, the installer, the firmware
+against the device tree, the absence of the stock kernel, the boot entry and GRUB settings an installation
+would get (Denali DTB, kernel arguments) and the Windows GRUB entry.
 
 ## Install
 
@@ -163,6 +168,10 @@ Support RPM history (1.1 to 2.1 confirmed on the tested unit):
 - 2.2: the stock-kernel cleanup accepts every installed `kernel-sp11` version as the running SP11 kernel,
   so it also works with several SP11 kernels installed side by side. Tested in a chroot, not yet on the
   device; systems where the cleanup already ran gain nothing from it.
+- 2.3: the ISO build removes the stock kernel packages, so `sp11-remove-stock-kernels` is gone. Only the
+  five firmware files the device tree loads are shipped. Tested in a chroot, not yet on the device. A
+  system that never ran the stock-kernel cleanup (older than 2.1) needs 2.1 or 2.2 and one reboot before
+  this update.
 
 ## Bluetooth pairings shared with Windows (Flex Keyboard, Slim Pen 2)
 

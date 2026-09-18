@@ -31,7 +31,11 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
   `.fc<release>` dist tag; iptsd version-release and commit), so a bump or a `FEDORA_RELEASE` switch
   triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec. `build_rpm` and
   `mock_rebuild` delete every older RPM of the same name, so `build/rpms/` holds one release's set; copy it
-  aside (`build/rpms-fc<release>/`) before switching.
+  aside (`build/rpms-fc<release>/`) before switching. The support payload is byte-identical across releases
+  (2.2 fc44 and fc45 compared); only the dist tag differs.
+- The support spec disables `__os_install_post`: `board.bin` and the Qualcomm images are ELF files that
+  rpmbuild's brp scripts would otherwise rewrite (`board.bin` comes out 32 bytes shorter, the Bluetooth
+  helper loses its `.comment` data).
 - Step 10 honours `FORCE=1` only for the two dnf-downloaded caches (`build/cache/wifi/f<release>`,
   `build/cache/rpm-deps/f<release>`); checksum-pinned downloads are never re-fetched.
 - `50-build-iso.sh` caches the extracted live image as `build/work/iso/live.erofs` and keys it to the ISO it
@@ -399,8 +403,9 @@ resume confirmed on 2026-09-17.
 `kernel-sp11-7.2.5-sp11v23` (`KERNEL_STABLE_VERSION=7.2.5`, built with `FEDORA_TARGET=beta`) installed next
 to 7.2.0 on the 45 Beta install. Confirmed working by the owner: Bluetooth, touchscreen, Wi-Fi, pen,
 suspend and resume, speakers, microphone, GPU acceleration, keyboard/touchpad, battery, Flatpak, the
-Windows GRUB entry and the keyboard and pen pairings shared with Windows. 7.2.5 is the build default since
-then; no ISO with it has been built yet.
+Windows GRUB entry, the keyboard and pen pairings shared with Windows, backlight control (brightness
+slider) and multi-touch (rjindael/fedora-surface-pro-11's HID-over-SPI patches give single touch only).
+7.2.5 is the build default since then; no ISO with it has been built yet.
 
 ## References
 
