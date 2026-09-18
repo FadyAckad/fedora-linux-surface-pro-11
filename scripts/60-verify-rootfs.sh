@@ -3,6 +3,7 @@
 # installed-system kernel-install hand-off in a chroot (Anaconda-style /etc/default/grub and
 # /etc/kernel/cmdline) to prove the BLS entry receives the Denali DTB and the SP11 kernel arguments.
 . "$(dirname "$0")/lib.sh"
+require_cmd dtc
 load_hardware
 ROOTFS="$WORK_DIR/iso/rootfs"; [ -d "$ROOTFS/usr/lib/modules/$KERNEL_ABI" ] || die "no remastered root at $ROOTFS (run scripts/50-build-iso.sh)"
 fail=0; check() { if "$@"; then log "ok: ${*: -1}"; else warn "FAIL: ${*: -1}"; fail=1; fi; }
@@ -14,8 +15,12 @@ check r test -s "$ROOTFS/usr/lib/modules/$KERNEL_ABI/vmlinuz"
 check r test -s "$ROOTFS/usr/lib/modules/$KERNEL_ABI/dtb/$SP11_DTB"
 check r test -s "$ROOTFS/usr/lib/modules/$KERNEL_ABI/modules.dep"
 check r test ! -e "$ROOTFS/etc/system-fips"
-check r test -s "$ROOTFS/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn"
-check r test -s "$ROOTFS/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcadsp8380.mbn"
+# The Denali firmware directory holds exactly the files the device tree requests.
+dt_fw=$(dtc -I dtb -O dts "$ROOTFS/usr/lib/modules/$KERNEL_ABI/dtb/$SP11_DTB" 2>/dev/null \
+  | grep -o 'qcom/x1e80100/microsoft/Denali/[^"]*' | sort -u | tr '\n' ' ' || true)
+pkg_fw=$(cd "$ROOTFS/usr/lib/firmware" && find qcom/x1e80100/microsoft/Denali -type f | sort | tr '\n' ' ')
+check test -n "$dt_fw"
+check test "$pkg_fw" = "$dt_fw"
 check r test -s "$ROOTFS/usr/lib/firmware/qcom/x1e80100/X1E80100-Microsoft-Surface-Pro-11-tplg.bin"
 check r test -s "$ROOTFS/usr/lib/firmware/ath12k/WCN7850/hw2.0/board.bin"
 check r test -f "$ROOTFS/usr/share/alsa/ucm2/conf.d/x1e80100/x1e80100.conf"

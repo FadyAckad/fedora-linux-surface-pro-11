@@ -3,7 +3,7 @@
 # ooaklee FullIO v19c audio files, Wi-Fi board data, Bluetooth address service, kernel-install boot
 # policy plugin, dracut policy and the first-boot finalizer.
 . "$(dirname "$0")/lib.sh"
-require_cmd gcc python3 xz rpm2cpio cpio rpmbuild
+require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file
 load_hardware
 
 # Bump whenever anything under files/ or the generated payload changes, so `dnf upgrade` picks it up.
@@ -23,27 +23,19 @@ SDIR="$BUILD_DIR/support"; STAGE="$SDIR/stage"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 
 ## 1. Qualcomm platform firmware from the Windows DriverStore (device-bound; newest copy of each file wins,
-##    the same rule Fedora's qcom-firmware-extract uses).
+##    the same rule Fedora's qcom-firmware-extract uses): exactly the files the Denali device tree requests,
+##    under the names it requests them by. Windows ships the DSP device-tree blobs as *_dtbs.elf.
 FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
 [ -d "$FR" ] || die "Windows DriverStore not found at $FR (is Windows mounted at $WINDOWS_ROOT?)"
 FWD="$STAGE/usr/lib/firmware/qcom/x1e80100/microsoft/Denali"; install -d "$FWD"
-pick_fw() { find "$FR" -maxdepth 2 -type f -iname "$1" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-; }
-REQUIRED_FW="qcadsp8380.mbn adsp_dtbs.elf qccdsp8380.mbn cdsp_dtbs.elf qcdxkmsuc8380.mbn"
-OPTIONAL_FW="adspr.jsn adsps.jsn adspua.jsn battmgr.jsn cdspr.jsn qcdxkmsucpurwa.mbn qcvss8380.mbn"
-for f in $REQUIRED_FW $OPTIONAL_FW; do
-  src=$(pick_fw "$f")
-  if [ -z "$src" ]; then
-    case " $REQUIRED_FW " in *" $f "*) die "required firmware $f not found in $FR" ;; esac
-    warn "optional firmware $f not found"; continue
-  fi
-  install -m 0644 "$src" "$FWD/$f"
-  log "firmware $f <- ${src#"$FR"/}"
-done
-# The Denali device tree names the DSP DTB blobs *_dtb.mbn (upstream T14s naming is *_dtbs.elf). Ship both.
-install -m 0644 "$FWD/adsp_dtbs.elf" "$FWD/adsp_dtb.mbn"
-install -m 0644 "$FWD/cdsp_dtbs.elf" "$FWD/cdsp_dtb.mbn"
-for f in qcadsp8380.mbn qccdsp8380.mbn qcdxkmsuc8380.mbn; do
-  file "$FWD/$f" | grep ELF >/dev/null || die "$f does not look like a signed ELF (MBN) image"
+for pair in qcadsp8380.mbn:qcadsp8380.mbn adsp_dtbs.elf:adsp_dtb.mbn qccdsp8380.mbn:qccdsp8380.mbn \
+            cdsp_dtbs.elf:cdsp_dtb.mbn qcdxkmsuc8380.mbn:qcdxkmsuc8380.mbn; do
+  win=${pair%%:*}; dt=${pair#*:}
+  src=$(find "$FR" -maxdepth 2 -type f -iname "$win" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
+  [ -n "$src" ] || die "firmware $win not found in $FR"
+  file -b "$src" | grep ELF >/dev/null || die "$win does not look like a signed ELF image"
+  install -m 0644 "$src" "$FWD/$dt"
+  log "firmware $dt <- ${src#"$FR"/}"
 done
 
 ## 2. Audio: FullIO v19c topology + UCM (regex corrected for the 5G SKU and validated against this machine)
@@ -65,10 +57,10 @@ log "UCM matcher validated against '$SP11_UCM_DMI_INFO'"
 WIFI_TMP="$SDIR/wifi"; rm -rf "$WIFI_TMP"; mkdir -p "$WIFI_TMP/x"
 RPM_AF=$(ls -t "$CACHE_DIR/wifi/f$FEDORA_RELEASE"/atheros-firmware-*.rpm 2>/dev/null | head -1 || true)
 [ -n "$RPM_AF" ] || die "atheros-firmware RPM missing (run scripts/10-fetch-sources.sh)"
-( cd "$WIFI_TMP" && rpm2cpio "$RPM_AF" | cpio -idm --quiet './usr/lib/firmware/ath12k/WCN7850/hw2.0/board-2.bin*' ) || die "cannot extract board-2.bin"
-B2=$(find "$WIFI_TMP/usr" -name 'board-2.bin*' 2>/dev/null | head -1 || true); [ -n "$B2" ] || die "board-2.bin not in atheros-firmware"
-case "$B2" in *.xz) xz -d "$B2"; B2=${B2%.xz} ;; *.zst) zstd -dq --rm "$B2"; B2=${B2%.zst} ;; esac
-( cd "$WIFI_TMP/x" && python3 "$CACHE_DIR/ath12k-bdencoder" --extract "$B2" >/dev/null 2>&1 ) || die "ath12k-bdencoder extraction failed"
+rpm2cpio "$RPM_AF" | cpio -i --quiet --to-stdout ./usr/lib/firmware/ath12k/WCN7850/hw2.0/board-2.bin.xz \
+  | xz -d > "$WIFI_TMP/board-2.bin" || die "cannot extract board-2.bin.xz from $(basename "$RPM_AF")"
+( cd "$WIFI_TMP/x" && python3 "$CACHE_DIR/ath12k-bdencoder" --extract "$WIFI_TMP/board-2.bin" >/dev/null 2>&1 ) \
+  || die "ath12k-bdencoder extraction failed"
 [ -s "$WIFI_TMP/x/$WIFI_BOARD_ENTRY.bin" ] || die "board entry '$WIFI_BOARD_ENTRY' not found in board-2.bin"
 install -D -m 0644 "$WIFI_TMP/x/$WIFI_BOARD_ENTRY.bin" "$STAGE/usr/lib/firmware/ath12k/WCN7850/hw2.0/board.bin"
 log "Wi-Fi board.bin: $WIFI_BOARD_ENTRY ($(stat -c %s "$STAGE/usr/lib/firmware/ath12k/WCN7850/hw2.0/board.bin") bytes)"
