@@ -219,7 +219,8 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   systems ("Entry-token directory … not found"), so `90-loaderentry.install` quits and
   `/etc/kernel/devicetree` is never read.
 - `15-sp11-surface.install` runs before `20-grub.install`: `sp11-grub-defaults` (the single writer of the
-  `/etc/default/grub` policy, also used by `sp11-first-boot` and `50-build-iso.sh`) sets `GRUB_DEVICETREE`
+  `/etc/default/grub` policy, also used by `sp11-first-boot`, the support RPM's `%posttrans` and
+  `50-build-iso.sh`) sets `GRUB_DEVICETREE`
   and the display settings, the plugin appends the SP11 arguments to `/etc/kernel/cmdline` (rewritten after
   `/etc/default/grub`, so 20-grub does not rerun mkconfig) and removes the Anaconda denylist before
   Anaconda's initramfs rebuild. Anaconda's last grub2-mkconfig still strips the SP11-only arguments from the

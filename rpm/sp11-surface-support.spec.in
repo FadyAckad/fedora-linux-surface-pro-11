@@ -45,9 +45,12 @@ cp -a %{stage}/. %{buildroot}/
 # systemd's RPM file triggers reload units and udev rules and apply the sysctl file; both triggers below also
 # run when this package is installed while their target is present.
 %posttrans
-# Regenerate the GRUB menu on an installed system (the live root has no grub.cfg) so the Windows entry appears
-# without a reboot.
+# Apply the /etc/default/grub policy and regenerate the GRUB menu on an installed system (the live root has
+# no grub.cfg), so an upgrade that changes the policy takes effect without a reboot. Without the helper an
+# upgrade would regenerate the menu from the previous policy: on an installed system nothing else runs it
+# (the kernel-install plugin only on a kernel install, sp11-first-boot only once).
 if [ -f /boot/grub2/grub.cfg ]; then
+  /usr/libexec/sp11/sp11-grub-defaults || :
   /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 || :
 fi
 
