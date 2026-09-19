@@ -24,11 +24,11 @@ and everything in the last column still works. That installation had been instal
 |---|:-:|:-:|:-:|
 | Boot from the internal NVMe drive | yes | yes | yes |
 | Display with GPU acceleration | yes | yes | yes |
-| Backlight (brightness slider) | not reported | not reported | yes |
+| Backlight (brightness slider) | yes | yes | yes |
 | Wi-Fi | yes | yes | yes |
 | Bluetooth | yes | yes | yes |
 | Touchscreen | yes | yes | yes |
-| Multi-touch (pinch, two-finger scroll) | not reported | not reported | yes |
+| Multi-touch (pinch, two-finger scroll) | yes | yes | yes |
 | Pen | yes | yes | yes |
 | Speakers | yes | yes | yes |
 | Microphone | yes | yes | yes |
