@@ -5,16 +5,20 @@
 Builds a Fedora live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition
 with the Samsung OLED panel (Snapdragon X Elite X1E80100). The ISO uses the Surface Pro 11 kernel from
 [ooaklee/linux_ms_dev_kit-sp11](https://github.com/ooaklee/linux_ms_dev_kit-sp11) (release v23, based on
-Linux 7.2.0) with the kernel.org 7.2.5 stable update applied, `7.2.5-jg-0sp11v23-qcom-x1e`, and GRUB
-loads the Denali OLED device tree explicitly. The build runs on the Surface itself, in WSL (Fedora
-aarch64): the kernel compiles natively, and the unit's identity, Bluetooth address and device firmware
+Linux 7.2.0) with the kernel.org 7.2.5 stable update applied and Fedora's LSM stack (SELinux) in place
+of Ubuntu's, `7.2.5-jg-0sp11v23.1-qcom-x1e`, and GRUB loads the Denali OLED device tree explicitly. The
+build runs on the Surface itself, in WSL (Fedora aarch64): the kernel compiles natively, and the unit's
+identity, Bluetooth address and device firmware
 come from its Windows installation, so every ISO is tailored to the unit that built it.
 
 ## Verified
 
 Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). The first three columns are
 installations from ISOs with ooaklee's unmodified 7.2.0 kernel. The last column is the Fedora 45 Beta
-installation after its kernel was updated to the current default, 7.2.5.
+installation after its kernel was updated to 7.2.5 with ooaklee's config. The current default build,
+`7.2.5-jg-0sp11v23.1-qcom-x1e` with Fedora's LSM stack (SELinux), was installed on that system as an update
+and everything in the last column still works. That installation had been installed with SELinux disabled
+(see Install below); since 2026-09-19 it runs SELinux enforcing with no denials logged.
 
 | Feature | Fedora 44 Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.5 |
 |---|:-:|:-:|:-:|
@@ -90,19 +94,19 @@ Steps:
    audio files, the pinned iptsd and OE checkouts, helper sources and the runtime packages the live
    image lacks.
 4. `scripts/20-build-kernel.sh` applies the stable update to ooaklee's source and compiles it with
-   ooaklee's exact config (about 45 min) into the `kernel-sp11` RPM. `KERNEL_MODE=prebuilt` repackages
-   ooaklee's released 7.2.0 `.deb` payload instead (1 min, without the stable update); both give the same
-   7816 modules.
+   ooaklee's config plus the `files/kernel-sp11-fedora.config` policy (Fedora's LSM stack, no Ubuntu-only
+   modules; about 45 min) into the `kernel-sp11` RPM. `KERNEL_MODE=prebuilt` repackages ooaklee's released
+   7.2.0 `.deb` payload instead (1 min, without the stable update or the policy).
 5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: firmware from the Windows
    DriverStore, audio topology and UCM, Wi-Fi board data, Bluetooth address service, boot policy
    (kernel-install plugin, dracut, sysctl and dnf settings), the Windows GRUB entry, the first-boot
-   service, `sp11-bt-import-pairings` and `sp11-diag`. It rebuilds when its `VERSION=` or the target Fedora
+   service, the SELinux restore, `sp11-bt-import-pairings` and `sp11-diag`. It rebuilds when its `VERSION=` or the target Fedora
    release changes, and then runs `scripts/35-verify-support-rpm.sh` (see below) when a live root is there.
 6. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface
    Pro 11 integration.
 7. `scripts/50-build-iso.sh` installs the RPMs into the live root, builds the live initramfs, writes the
    GRUB menu and assembles the ISO, for example
-   `build/out/Fedora-Workstation-Live-44-1.7-SP11-7.2.5-jg-0sp11v23-qcom-x1e.aarch64.iso`, plus
+   `build/out/Fedora-Workstation-Live-44-1.7-SP11-7.2.5-jg-0sp11v23.1-qcom-x1e.aarch64.iso`, plus
    `.sha256`. The file name carries the edition, so images of different editions coexist.
 
 `build-all.sh` runs these steps (about an hour after the downloads, most of it the kernel; WSL has to keep
@@ -112,6 +116,11 @@ reaches a machine — `dnf upgrade` over the previous version with its scriptlet
 install step 7 does — and checks that every boot-policy value in `sp11.conf` arrives in
 `/etc/default/grub` and in the menu grub2-mkconfig generates from it. The update path stages a deliberately
 wrong policy first, so a package that installs without applying it cannot pass.
+`scripts/36-verify-kernel-install.sh` (standalone, for a kernel RPM built for an existing installation)
+installs the kernel RPM the way `dnf install` does — next to the kernel already there, scriptlets running —
+into an overlay of the live root with a real ext4 `/boot`, then the support RPM, and checks the result: both
+packages present, the boot entry with the Denali DTB, the initramfs and the kernel arguments, the new kernel as
+the saved GRUB default, the menu regenerated, and that removing the new kernel puts the previous one back.
 `scripts/60-verify-rootfs.sh` then
 checks the root that step 7 left behind: RPM dependencies, loadable binaries, the installer, the firmware
 against the device tree, the absence of the stock kernel, the boot entry and GRUB settings an installation
@@ -155,7 +164,21 @@ previous kernel stays in the GRUB menu. Kernel RPMs built before 2026-09-17, suc
 existing installations, leave their boot entry behind when removed while another SP11 kernel stays, so run
 `sudo kernel-install remove 7.2.0-jg-0sp11v23-qcom-x1e` before `sudo dnf remove kernel-sp11-7.2.0`.
 
-Support RPM history (1.1 to 2.1 confirmed on the tested unit):
+A kernel with Fedora's LSM stack (`7.2.5-jg-0sp11v23.1-qcom-x1e` and later) can run SELinux, which the
+earlier SP11 kernels left inactive. Systems installed from media with those earlier kernels were installed
+with SELinux *disabled*: the live installer saw no SELinux and passed `--noselinux` to Anaconda, which put
+`selinux=0` into the boot arguments and `SELINUX=disabled` into `/etc/selinux/config`. Support RPM 2.5
+undoes that by itself when the SELinux kernel is installed, or on a later support upgrade: it removes the
+argument, sets `SELINUX=enforcing` again and marks the filesystem for relabeling; the next boot relabels and
+reboots once, and the system runs enforcing from then on. It acts only when both installer marks are
+present, so a system where SELinux was disabled by hand is left alone. The manual equivalent is
+`sudo grubby --update-kernel=ALL --remove-args=selinux=0`, `SELINUX=enforcing` in `/etc/selinux/config`,
+`sudo touch /.autorelabel` and a reboot. Booting an earlier SP11 kernel again afterwards creates unlabeled
+files, and the next SELinux boot relabels again. Done by hand on the tested unit on 2026-09-19 (permissive
+first as a precaution, then enforcing): the relabel boot happened and the system has run enforcing since,
+with pen, Bluetooth and audio working; the automatic path was confirmed on the tested unit the same day.
+
+Support RPM history (1.1 to 2.1 and 2.5 confirmed on the tested unit):
 
 - 1.1: Flatpak works (`kernel.apparmor_restrict_unprivileged_userns=0`).
 - 1.3: Windows Boot Manager entry in GRUB, before UEFI Firmware Settings.
@@ -180,6 +203,14 @@ Support RPM history (1.1 to 2.1 confirmed on the tested unit):
   five firmware files the device tree loads are shipped. Tested in a chroot, not yet on the device. A
   system that never ran the stock-kernel cleanup (older than 2.1) needs 2.1 or 2.2 and one reboot before
   this update.
+- 2.4: `%posttrans` applies the GRUB policy before regenerating the menu, so an upgrade that changes a
+  policy value takes effect; `scripts/35-verify-support-rpm.sh` checks both install paths.
+- 2.5: the user-namespace sysctl is limited to the earlier AppArmor kernels (`-` prefix, ignored where the
+  key does not exist); `sp11-diag` reports the active LSMs, `getenforce` and AVC denials. Installed together
+  with the SELinux kernel `7.2.5-jg-0sp11v23.1-qcom-x1e` as an update; nothing broke (SELinux was still
+  disabled by the installation's `selinux=0` boot argument). Rebuilt under the same version on 2026-09-19 with
+  `sp11-selinux-restore`, which re-enables SELinux on installations the live installer disabled it on;
+  confirmed on the tested unit.
 
 ## Bluetooth pairings shared with Windows (Flex Keyboard, Slim Pen 2)
 
@@ -212,10 +243,13 @@ device BlueZ knows. It changes nothing.
 ## What the scripts decide for you
 
 - Kernel: ooaklee's `7.2.0-jg-0sp11v23` source plus the kernel.org 7.2.5 stable update
-  (`KERNEL_STABLE_VERSION`), with the config exported from `debian.qcom-x1e/config/annotations`. Compared
-  with ooaklee's released 7.2.0 config, only `CONFIG_LOCALVERSION` (carries the ABI),
-  `CONFIG_VERSION_SIGNATURE` and two Allwinner crypto options that 7.2.5 removes differ. FIPS is not
-  compiled in, and the initramfs omits the dracut `fips` modules.
+  (`KERNEL_STABLE_VERSION`), with the config exported from `debian.qcom-x1e/config/annotations` and
+  `files/kernel-sp11-fedora.config` merged on top (`KERNEL_CONFIG_REV`): Fedora's LSM order
+  `lockdown,yama,integrity,selinux,bpf,landlock,ipe` with SELinux as the default, AppArmor and Ubuntu's
+  out-of-tree IgH EtherCAT module off. Everything else is ooaklee's config: compared with the released
+  7.2.0 one, only that policy, `CONFIG_LOCALVERSION` (carries the ABI), `CONFIG_VERSION_SIGNATURE` and two
+  Allwinner crypto options that 7.2.5 removes differ. FIPS is not compiled in, and the initramfs omits the
+  dracut `fips` modules.
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb`, loaded explicitly everywhere: GRUB
   `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry through
   `/usr/lib/kernel/install.d/15-sp11-surface.install`. Fedora's stubble hardware-ID database does not
@@ -235,11 +269,14 @@ device BlueZ knows. It changes nothing.
   Fedora's aarch64 GRUB image lacks the `chain` module and Fedora's os-prober cannot find Windows on
   aarch64, so the module is copied from `grub2-efi-aa64-modules` to `/boot/grub2/arm64-efi/` (loadable
   because Secure Boot is off).
-- Flatpak and other sandboxes: ooaklee's config enables AppArmor with
-  `CONFIG_SECURITY_APPARMOR_RESTRICT_USERNS=y`, and Fedora has no AppArmor profiles, so unprivileged
-  user namespaces would be denied; `/usr/lib/sysctl.d/90-sp11.conf` sets
-  `kernel.apparmor_restrict_unprivileged_userns = 0`. SELinux is compiled in but not active with this
-  kernel, so Fedora runs without MAC enforcement.
+- SELinux and sandboxes: ooaklee's config makes AppArmor the active LSM with
+  `CONFIG_SECURITY_APPARMOR_RESTRICT_USERNS=y`; Fedora has no AppArmor profiles, so unprivileged user
+  namespaces (Flatpak's bwrap, browser sandboxes) would be denied, and SELinux, although compiled in, never
+  starts, so Fedora runs without MAC enforcement. The config policy replaces the LSM stack with Fedora's:
+  SELinux is active with Fedora's targeted policy and the restriction is gone.
+  `/usr/lib/sysctl.d/90-sp11.conf` keeps `-kernel.apparmor_restrict_unprivileged_userns = 0` for the
+  earlier AppArmor kernels that stay installed; the `-` prefix makes systemd-sysctl ignore the missing key
+  on the others.
 - Bluetooth address: ooaklee's helper sets the controller address byte-reversed; the RPM build fixes the
   octet order, so Linux uses the address Windows reports for the built-in radio, which the shared
   pairings depend on.
@@ -271,11 +308,15 @@ read from each ISO. The UCM matcher patch in `scripts/30-build-support-rpm.sh` e
 
 `KERNEL_STABLE_VERSION` (default 7.2.5) applies a kernel.org stable update on top of ooaklee's release in
 source builds; `sp11.conf` pins the checksum of each accepted version. The patched source gets a tree of
-its own, and the result is `kernel-sp11-7.2.5-sp11v23` with the kernel version
-`7.2.5-jg-0sp11v23-qcom-x1e`. To build ooaklee's release unchanged (`7.2.0-jg-0sp11v23-qcom-x1e`):
+its own. `KERNEL_CONFIG_REV` (default 1) merges `files/kernel-sp11-fedora.config` into ooaklee's config
+and adds `.1` to the kernel version and the RPM release, so the result is `kernel-sp11-7.2.5-sp11v23.1`
+with the kernel version `7.2.5-jg-0sp11v23.1-qcom-x1e`. `kernel-sp11` is an install-only package, and a
+rebuild with the same version would own the same `/boot` and module paths as the installed one, so bump
+the revision with every change to the fragment. To build ooaklee's release unchanged
+(`7.2.0-jg-0sp11v23-qcom-x1e`, AppArmor):
 
 ```bash
-KERNEL_STABLE_VERSION= scripts/build-all.sh
+KERNEL_STABLE_VERSION= KERNEL_CONFIG_REV= scripts/build-all.sh
 ```
 
 The 7.2.5 update applies to ooaklee's v23 source unchanged. 7.2.6 does not: it changes the same lines as
@@ -289,7 +330,8 @@ kernel.org's `sha256sums.asc`) or clear it.
 - `sp11.conf`: all versions, URLs, regexes and boot policy.
 - `scripts/`: numbered pipeline steps, `lib.sh` (helpers), `build-all.sh`, the pairing export.
 - `rpm/`: spec templates for `kernel-sp11`, `sp11-surface-support` and `sp11-iptsd`.
-- `files/`: payload of the support RPM, the live GRUB menu template and the README inside the ISO.
+- `files/`: payload of the support RPM, the kernel config policy fragment, the live GRUB menu template and
+  the README inside the ISO.
 - `LICENSE`: GPL-3.0-or-later for the repository's own content (see License and credits).
 - `CLAUDE.md`: working notes with verified facts about the hardware, the Fedora media and pipeline
   pitfalls.

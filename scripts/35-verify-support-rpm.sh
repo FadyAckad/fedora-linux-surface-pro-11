@@ -97,6 +97,14 @@ as_root install -d "$M/var/lib/sp11"; echo stale | as_root tee "$M/var/lib/sp11/
 as_root sed -i -e 's|^GRUB_GFXMODE=.*|GRUB_GFXMODE=640x480|' -e 's|^GRUB_FONT=.*|GRUB_FONT=|' \
                -e 's|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=99|' "$M/etc/default/grub"
 as_root rm -f "$M/boot/grub2/fonts/$GRUB_FONT_FILE"
+# Also what an installer that ran without SELinux leaves behind (selinux=0 and SELINUX=disabled); the
+# %posttrans has to undo it through sp11-selinux-restore.
+printf 'root=UUID=0000-test ro rhgb quiet selinux=0 clk_ignore_unused pd_ignore_unused\n' \
+  | as_root tee "$M/etc/kernel/cmdline" >/dev/null
+as_root sed -i '/^GRUB_CMDLINE_LINUX=/d' "$M/etc/default/grub"
+echo 'GRUB_CMDLINE_LINUX="rhgb quiet selinux=0"' | as_root tee -a "$M/etc/default/grub" >/dev/null
+as_root sed -i 's/^SELINUX=.*/SELINUX=disabled/' "$M/etc/selinux/config"
+as_root rm -f "$M/.autorelabel"
 as_root chroot "$M" /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 \
   || die "grub2-mkconfig failed while staging the pre-upgrade state"
 as_root grep -qx 'GRUB_GFXMODE=640x480' "$M/etc/default/grub" || die "pre-upgrade state not staged"
@@ -106,6 +114,16 @@ NVR=$(basename "$SRPM" .rpm)
 [ "$(as_root chroot "$M" /usr/bin/rpm -q sp11-surface-support)" = "$NVR" ] \
   || die "the chroot ended up with a different package than $NVR"
 assert_policy update
+log "update: the installer's SELinux disable is undone"
+check as_root sh -c "! grep -qw selinux=0 '$M/etc/kernel/cmdline'"
+check as_root sh -c "! grep -qw selinux=0 '$M/etc/default/grub'"
+check as_root grep -qx 'SELINUX=enforcing' "$M/etc/selinux/config"
+check as_root test -e "$M/.autorelabel"
+# Negative control: a system disabled by hand carries the config line alone and must stay untouched.
+as_root sed -i 's/^SELINUX=.*/SELINUX=disabled/' "$M/etc/selinux/config"; as_root rm -f "$M/.autorelabel"
+as_root chroot "$M" /usr/libexec/sp11/sp11-selinux-restore || die "sp11-selinux-restore failed on the negative control"
+check as_root grep -qx 'SELINUX=disabled' "$M/etc/selinux/config"
+check as_root test ! -e "$M/.autorelabel"
 
 ## 2. Live path: what 50-build-iso.sh does to the live root — install without scriptlets, then run the
 ##    helpers explicitly. Catches a payload whose helpers do not run in a root that has never booted.

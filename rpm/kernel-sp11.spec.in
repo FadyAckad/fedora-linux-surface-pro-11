@@ -26,7 +26,7 @@ Requires:       /usr/bin/kernel-install
 
 %description
 Surface Pro 11 integration kernel %{abi} from ooaklee/linux_ms_dev_kit-sp11
-(commit @COMMIT@@STABLE@, release @RELEASE_TAG@, source mode: @MODE@), packaged for
+(commit @COMMIT@@STABLE@@POLICY@, release @RELEASE_TAG@, source mode: @MODE@), packaged for
 Fedora's RPM, kernel-install, BLS and dracut lifecycle. Ships the Denali OLED
 and LCD device trees under /usr/lib/modules/%{abi}/dtb/qcom. Unsigned.
 

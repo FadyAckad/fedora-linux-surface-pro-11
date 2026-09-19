@@ -188,6 +188,25 @@ mock_rebuild() {
 # Newest RPM of a package in $RPM_DIR, or empty. Never fails: callers test the result themselves.
 rpm_of() { ls -t "$RPM_DIR/$1"-[0-9]*.rpm 2>/dev/null | head -1 || true; }
 
+# config_fragment_holds FRAGMENT CONFIG — every line of a Kconfig fragment holds in CONFIG: a "CONFIG_X=v" line
+# must appear verbatim, a "# CONFIG_X is not set" line must have no CONFIG_X= at all. Warns per violation and
+# returns 1 without exiting, so the caller decides (step 20 dies, step 60 counts a failed check).
+config_fragment_holds() {
+  local frag=$1 cfg=$2 line sym rc=0
+  while IFS= read -r line; do
+    case "$line" in
+      CONFIG_*=*)
+        grep -qxF -- "$line" "$cfg" \
+          || { warn "config policy: '$line' not in $cfg (actual: $(grep -E "^${line%%=*}=" "$cfg" || echo unset))"; rc=1; } ;;
+      "# CONFIG_"*" is not set")
+        sym=${line#"# "}; sym=${sym% is not set}
+        ! grep -qE "^${sym}=" "$cfg" \
+          || { warn "config policy: '$line' violated in $cfg (actual: $(grep -E "^${sym}=" "$cfg"))"; rc=1; } ;;
+    esac
+  done < "$frag"
+  return $rc
+}
+
 # mounts_under DIR — mount targets strictly below DIR, one per line (empty when none). `findmnt -R` only
 # descends from a mount point, so match the target prefix instead.
 mounts_under() { findmnt -rn -o TARGET | awk -v p="$1/" 'index($0, p) == 1'; }

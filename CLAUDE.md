@@ -18,11 +18,33 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
   and the generated menu. The update path first stages a deliberately wrong policy (`GRUB_GFXMODE=640x480`,
   empty `GRUB_FONT`, `GRUB_TIMEOUT=99`, font deleted from `/boot`), so a package that installs without
   applying the policy cannot pass. Verified as a negative control: with the pre-2.4 `%posttrans` the update
-  path fails seven checks while the live path still passes, which is exactly how the bug presented.
+  path fails seven checks while the live path still passes, which is exactly how the bug presented. The
+  update path also seeds what an installer without SELinux leaves behind (`selinux=0` in `/etc/kernel/cmdline`
+  and `GRUB_CMDLINE_LINUX`, `SELINUX=disabled`) and asserts `%posttrans` undid it, followed by a negative
+  control with the config line alone, which `sp11-selinux-restore` must leave untouched.
+- `36-verify-kernel-install.sh` (standalone, not in `build-all.sh`: after a full pipeline run the live root
+  already carries the kernel under test) installs the freshly built `kernel-sp11` RPM into an overlay of the
+  live root the way `dnf install` does on an installed system — `rpm -i` with scriptlets, next to the kernel
+  already there — with a real ext4 `/boot` and the step-35 grub2 stubs, then the support RPM with `rpm -U`. It
+  asserts both packages, the BLS entry (`linux`, `initrd`, `devicetree /dtb-<abi>/…`, every
+  `SP11_ARGS_INSTALLED`, no live-only argument), `saved_entry` naming the new entry, the previous kernel's
+  files, the dracut initramfs (new module tree, Adreno microcode), the regenerated menu, the config policy in
+  the shipped `config`, the sysctl file under a kernel without the AppArmor key, the SELinux units the first
+  boot depends on, and that `rpm -e` of the new kernel puts the previous one back. `kernel-install` exits
+  non-zero in the chroot (`95-set-boot-entry.install` wants the kernel's initramfs, which the previous
+  kernel's entry is written without), so the script judges by the entry, as the RPM's `%posttrans` does with
+  `|| :`. `95-set-boot-entry.install` (grub2-common) is what turns `tmp_saved_entry` into `saved_entry`, so a
+  kernel whose initramfs failed to build never becomes the default. dracut's `selinux` module is in none of
+  these images (its `check()` returns 255: included only as a dependency or when added; Fedora's stock 45 Beta
+  live initrd lacks it too) — systemd loads the policy in the real root. The seeded `/etc/kernel/cmdline`
+  and `GRUB_CMDLINE_LINUX` carry the installer's `selinux=0` with `SELINUX=disabled` in the config, so the
+  previous kernel's entry is written with the argument; the checks assert the plugin removed it from both
+  entries, the cmdline file and `/etc/default/grub`, restored `SELINUX=enforcing` and created `/.autorelabel`.
 - `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
 - `files/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`,
-  `/usr/lib/...`), the live GRUB menu template and `README-iso.txt.in` (the note inside the ISO; it
-  carries the redistribution warning and credits).
+  `/usr/lib/...`), the live GRUB menu template, `README-iso.txt.in` (the note inside the ISO; it
+  carries the redistribution warning and credits) and `kernel-sp11-fedora.config`, the kernel config
+  policy fragment (a build input of step 20, not payload).
 - The repo is public under GPL-3.0-or-later (`LICENSE`; the support RPM's `License:` tag must agree).
   Tracked files carry no per-unit identifiers: Bluetooth/Wi-Fi/peripheral addresses, firmware versions,
   local paths and the owner's name stay out of `CLAUDE.md`, `README.md`, `files/` and `scripts/`.
@@ -88,19 +110,26 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - ooaklee/linux_ms_dev_kit-sp11, release `sp11-qcom-x1e-7.2.0-jg-0sp11v23`, commit
   `ce78e6ebc3d70c4a316b5721a62478ca87d6cb46`, ABI `7.2.0-jg-0sp11v23-qcom-x1e`. Source tarball and
   debs with SHA256SUMS are on the OE release page. Since 2026-09-17 the default build adds the kernel.org
-  7.2.5 stable update (ABI `7.2.5-jg-0sp11v23-qcom-x1e`, see `KERNEL_STABLE_VERSION` below).
+  7.2.5 stable update (see `KERNEL_STABLE_VERSION` below), since 2026-09-18 also the config policy
+  (`KERNEL_CONFIG_REV=1`, see below): ABI `7.2.5-jg-0sp11v23.1-qcom-x1e`, package
+  `kernel-sp11-7.2.5-sp11v23.1`.
 - `python3 debian/scripts/misc/annotations --file debian.qcom-x1e/config/annotations --arch arm64
   --flavour qcom-x1e --export` reproduces the released config exactly except `CONFIG_VERSION_SIGNATURE`.
   The ABI is injected with `CONFIG_LOCALVERSION="-jg-0sp11v23-qcom-x1e"`. Native build of a fresh tree:
   ~45 min on 12 cores, 7816 modules, same set as ooaklee's deb. A stopped build resumes where it left off
   (the background task dies with the Claude session or WSL); `FORCE=1` on a built tree takes ~5 min.
   Image is `arch/arm64/boot/vmlinuz.efi` (EFI zboot PE).
-- Relevant config: EROFS with LZMA and xattrs as module; `CONFIG_LSM="landlock,lockdown,yama,integrity,
-  apparmor"` (AppArmor active, SELinux inactive, Fedora runs without MAC);
-  `CONFIG_SECURITY_APPARMOR_RESTRICT_USERNS=y` (denies unprivileged user namespaces without a profile;
-  Fedora has none, so `kernel.apparmor_restrict_unprivileged_userns=0` is shipped in
-  `/usr/lib/sysctl.d/90-sp11.conf`, otherwise Flatpak's bwrap fails with EPERM); no `CRYPTO_FIPS`;
-  `MODULE_SIG=y` with an ephemeral key; zstd modules; `FW_LOADER_COMPRESS_XZ=y`.
+- Relevant config: EROFS with LZMA and xattrs as module; no `CRYPTO_FIPS`; `MODULE_SIG=y` with an ephemeral
+  key; zstd modules; `FW_LOADER_COMPRESS_XZ=y`. LSM stack from `files/kernel-sp11-fedora.config`:
+  `CONFIG_LSM="lockdown,yama,integrity,selinux,bpf,landlock,ipe"` (the value of Fedora's
+  `kernel-aarch64-fedora.config`, f45), `DEFAULT_SECURITY_SELINUX`, `SECURITY_IPE` (inert until a policy is
+  loaded), `SECURITY_APPARMOR` off, `IGH_ECAT` and `UBUNTU_ODM_DRIVERS` off. ooaklee's published config has
+  `CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor"` with `SECURITY_SELINUX=y` never activated (Fedora
+  ran without MAC) and `CONFIG_SECURITY_APPARMOR_RESTRICT_USERNS=y`, which denies unprivileged user
+  namespaces without a profile; Fedora has none, so Flatpak's bwrap failed with EPERM until
+  `kernel.apparmor_restrict_unprivileged_userns=0` was shipped in `/usr/lib/sysctl.d/90-sp11.conf`. The line
+  stays for those kernels, which remain installed next to the new one, prefixed `-`: `sysctl.d(5)` then logs
+  a missing key at debug level instead of failing the unit.
 - Fedora's `depmod -b BASE` expects `BASE/lib/modules`; the payload uses `/usr/lib/modules`, so
   `20-build-kernel.sh` uses a temporary `lib -> usr/lib` symlink.
 - `KERNEL_STABLE_VERSION` (default `7.2.5` in build mode; `KERNEL_STABLE_VERSION=` builds the release as
@@ -108,10 +137,73 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   ooaklee's source in a tree of its own, `build/kernel/src/linux-<commit>-stable-<v>`, stamped
   `.sp11-stable-<v>` only after `patch --batch --forward --fuzz=1` applied without a reject.
   `KERNEL_UPSTREAM_VERSION` stays ooaklee's base; `KERNEL_BUILD_VERSION`, the ABI
-  (`7.2.5-jg-0sp11v23-qcom-x1e`) and the RPM version follow the patch (`kernel-sp11-7.2.5-sp11v23`).
+  (`7.2.5-jg-0sp11v23-qcom-x1e`) and the RPM version follow the patch (`kernel-sp11-7.2.5-sp11v23`; the
+  config revision below appends `.1` to the ABI and the release).
   `KERNEL_MODE=prebuilt` ignores the default and refuses an explicit value. `sp11.conf` also refuses a
   stable version whose `X.Y.0` base is not `KERNEL_UPSTREAM_VERSION`, so a new ooaklee release on another
   base fails early until the default is revisited.
+- `KERNEL_CONFIG_REV` (default `1` in build mode; `KERNEL_CONFIG_REV=` builds ooaklee's config as published,
+  prebuilt mode refuses a value) merges `files/kernel-sp11-fedora.config` into the annotations export with
+  `scripts/kconfig/merge_config.sh -m` before `olddefconfig`; `config_fragment_holds` (`lib.sh`, also run by
+  step 60 on the shipped `config`) then asserts every fragment line, and `stage_common` refuses any module
+  under `kernel/ubuntu/` (Ubuntu's out-of-tree drivers; `IGH_ECAT` is `default m`, so a future one would
+  otherwise ship unnoticed). The revision goes into the ABI (`…0sp11v23.1-qcom-x1e`) and the RPM release
+  (`sp11v23.1`): `kernel-sp11` is install-only, and a same-ABI rebuild would own the same `/boot` and module
+  paths as the installed package, so RPM refuses it; a new ABI also keeps the previous kernel in GRUB as the
+  fallback. `make kernelrelease` is a no-sync-config target and `setlocalversion` reads
+  `include/config/auto.conf`, so on a built tree the ABI check needs `make syncconfig` first (step 20 does).
+- Why a config change and not a source change (measured 2026-09-18 against pristine kernel.org 7.2.5,
+  rebuilt from `linux-7.2.tar.xz` plus the pinned `patch-7.2.5.xz`): ooaklee's tree modifies 433 upstream
+  files (~20.5k lines), deletes none and adds ~230 source files. 161 of the modified files are
+  Qualcomm/Surface/DTS work, 45 are Ubuntu distro code (AppArmor notify/af_inet, `version_signature`,
+  `secureboot`, integrity), the rest cannot be attributed without git history, which the release tarball
+  does not carry; the touch/pen stack (`mshw0485_touch.c`, `drivers/hid/spi-hid/`, g6ts headers, 7.5k lines)
+  has no upstream counterpart. Ubuntu reaches the machine only through the config: the packaging is never
+  used (step 20 runs `debian/scripts/misc/annotations`, nothing else from `debian*/`). Ubuntu SAUCE that
+  stays compiled under any config: `fs/proc/version_signature.o` (gated on `BOOT_CONFIG`, which Fedora sets
+  too) and `drivers/firmware/efi/secureboot.o` (on `EFI`); AppArmor references outside `security/apparmor`
+  are `#ifdef CONFIG_SECURITY_APPARMOR`. Fedora's own aarch64 config already sets 20 of the 24
+  `REQUIRED_OPTS`; the missing four are ooaklee-only drivers, so a Fedora-config base (not done) would have
+  to re-add them explicitly and re-validate every hardware function.
+- SELinux on a system that ran the AppArmor kernels: with SELinux inactive nothing labels new files (no
+  `security.selinux` xattr from the kernel, no setfilecon from rpm), so everything created since the
+  installation is unlabeled. Fedora handles this itself: `selinux-autorelabel-mark.service`
+  (`policycoreutils`, enabled by preset, `ConditionSecurity=!selinux`) touches `/.autorelabel` on every such
+  boot, and `selinux-autorelabel-generator.sh` turns the marker into a relabel plus reboot on the first
+  SELinux boot. Booting an AppArmor kernel again afterwards creates unlabeled files, hence another relabel.
+  Helpers started through `SYSTEMD_WANTS` run as `unconfined_service_t` under the targeted policy; the one
+  path in `udev_t` is `PROGRAM="/usr/libexec/sp11-iptsd-check-device"` (`70-sp11-iptsd.rules`) opening
+  `/dev/hidraw*` (`usb_device_t`), the first suspect for an AVC if the pen daemon does not start.
+  `sp11-diag` prints `/sys/kernel/security/lsm`, `getenforce` and the boot's kernel AVC lines. All of this
+  presupposes that `/etc/selinux/config` does not say `disabled` — see the next bullet.
+- Every installation made from media whose live session had no active SELinux — every ISO built with the
+  AppArmor kernels — is **installed with SELinux disabled**, not merely inactive: Fedora's `/usr/bin/liveinst`
+  runs `sestatus` and, when it does not report `enabled`, starts Anaconda with `--noselinux`; the Security
+  module then holds `SELINUX_DISABLED`, `set_boot_args` adds `selinux=0` to the boot arguments
+  (`/etc/kernel/cmdline`, `GRUB_CMDLINE_LINUX`, every BLS entry) and `ConfigureSELinuxTask` writes
+  `SELINUX=disabled` into `/etc/selinux/config`. Found on 2026-09-19 when the SELinux kernel booted on the
+  owner's 45 Beta install with `getenforce: Disabled` and no `selinux` in the LSM list
+  (`SECURITY_SELINUX_BOOTPARAM=y` honours `selinux=0`). Since the 2026-09-19 rebuild of support RPM 2.5 (the
+  earlier 2.5 was never committed or released) `/usr/libexec/sp11/sp11-selinux-restore` undoes it: when *both*
+  marks are present (`selinux=0` in `/etc/kernel/cmdline` and `SELINUX=disabled`; a system disabled by hand
+  carries only the config line and is left alone) it removes the argument (`grubby --update-kernel=ALL
+  --remove-args=selinux=0`, plus sed on `/etc/kernel/cmdline` and `GRUB_CMDLINE_LINUX` for systems without
+  grubby or entries), sets `SELINUX=enforcing` and touches `/.autorelabel`; idempotent, never reboots, no-op in
+  a live session (`rd.live.image`). It runs from the kernel-install plugin, before `20-grub.install` writes the
+  new entry from `/etc/kernel/cmdline`, and from the support RPM's `%posttrans` (a support upgrade on a system
+  that already has the kernel; it runs before the menu regeneration so `update_bls_cmdline` rewrites every
+  entry from the cleaned `GRUB_CMDLINE_LINUX`). Enforcing directly, no permissive stage:
+  `/usr/libexec/selinux/selinux-autorelabel` switches to permissive itself for the relabel boot and reboots, so
+  the boot after it is enforcing on a relabeled system, and `SELINUX=enforcing` under an AppArmor kernel is
+  what every live session already ran. Manual equivalent: the grubby command, `SELINUX=enforcing`,
+  `touch /.autorelabel`, reboot. Done by hand by the owner on the 45 Beta install on 2026-09-19 (permissive
+  first as a precaution, then enforcing): the relabel boot happened, the next boot ran permissive with
+  `selinux` in the LSM list and no kernel AVC, then **enforcing** the same day — `sp11-diag` under enforcing shows no kernel
+  AVC, the pen daemon on its hidraw node, the Bluetooth address helper's result and the audio stack, with a
+  desktop login in between. The automatic path (`sp11-selinux-restore`) was confirmed on the device by the
+  owner on 2026-09-19 after steps 35 and 36 had passed. Media built with the SELinux kernel should not have the
+  problem — the live session runs enforcing, `sestatus` reports enabled and
+  Anaconda keeps the default — but no such ISO has been built or booted yet.
 - 7.2.5 applies to v23 without a reject (one fuzz-1 hunk in `nvme/host/tcp.c`) and touches none of the
   drivers the SP11 patches change (GPI DMA, spi-geni, Denali DTS, `sound/soc/qcom`, soundwire,
   `drivers/input`, `platform/surface`). Against the 7.2.0 build: the same 7816 module names,
@@ -253,7 +345,9 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - `grep -q` at the end of a pipeline under `pipefail` fails spuriously (SIGPIPE); use `grep ... >/dev/null`.
 - Under `set -e -o pipefail`, `var=$(ls pattern | head -1)` exits the script silently when the glob does
   not match (`ls` fails, the assignment inherits the status). Append `|| true` inside the substitution.
-  The same applies to `var=$(grep ... | sed ...)` and `var=$(... | grep -v ...)` on empty input.
+  The same applies to `var=$(grep ... | sed ...)` and `var=$(... | grep -v ...)` on empty input, and to
+  `var=$(find DIR ... | wc -l)` when DIR does not exist (`find` fails on a missing start point; filter with
+  `-path` from a directory that exists instead). Step 20's Ubuntu-module guard died that way on its first run.
 - `bash -n A B C` parses only `A` (`B C` become positional parameters); syntax-check files one at a time.
 - `grep -v -q PATTERN FILE` cannot assert absence (it succeeds on any non-matching line); use `! grep -q`.
 - `findmnt -R DIR` lists submounts only when DIR itself is a mount point; `mounts_under` in `lib.sh`
@@ -438,6 +532,25 @@ suspend and resume, speakers, microphone, GPU acceleration, keyboard/touchpad, b
 Windows GRUB entry, the keyboard and pen pairings shared with Windows, backlight control (brightness
 slider) and multi-touch (rjindael/fedora-surface-pro-11's HID-over-SPI patches give single touch only).
 7.2.5 is the build default since then; no ISO with it has been built yet.
+
+### Kernel config policy rev 1, SELinux (2026-09-18)
+
+`kernel-sp11-7.2.5-sp11v23.1` (`KERNEL_CONFIG_REV=1`, `FEDORA_TARGET=beta`) and support RPM 2.5, installed by
+the owner as an update on the 45 Beta Workstation system next to the AppArmor kernels: boots, nothing
+regressed (confirmed 2026-09-18/19). **SELinux is still disabled there**: the installation's boot arguments
+carry `selinux=0` and its `/etc/selinux/config` says `disabled`, both written by the installer (see the
+`liveinst` bullet in the Kernel section), so `sp11-diag` shows `getenforce: Disabled`,
+an LSM list without `selinux` (`lockdown,capability,yama,bpf,landlock,ipe,ima,evm`, i.e. the policy build with
+AppArmor gone and IPE in) and no relabel boot ever happened. After the manual enabling procedure (see the
+`liveinst` bullet) the same system runs SELinux **enforcing** since 2026-09-19 (permissive first, no kernel AVC
+in either mode; pen, Bluetooth and audio up under enforcing). Verified off-hardware before the hand-off: the shipped config differs from the AppArmor
+build only by the policy and what it pulls in (`SECURITY_APPARMOR*` off, `IGH_ECAT*` off, `SECURITY_IPE` on with
+its verity properties, `DEFAULT_SECURITY_SELINUX`, `CONFIG_LSM`, `ZSTD_COMPRESS` y→m because AppArmor's
+`EXPORT_BINARY` had selected it built-in, plus `LOCALVERSION`/`VERSION_SIGNATURE`); 7816 modules (`ec_master`
+gone, `zstd_compress` new); both Denali DTBs byte-identical to the AppArmor build; `36-verify-kernel-install.sh`
+passes against the 45 Beta live root; `35-verify-support-rpm.sh` passes on both paths for 2.5. The ISO has not
+been rebuilt. 2.5 was rebuilt on 2026-09-19 with `sp11-selinux-restore` under the same version (never released
+before); the automatic restore was confirmed on the device the same day.
 
 ## References
 

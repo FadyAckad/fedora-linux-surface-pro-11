@@ -1,7 +1,8 @@
 #!/usr/bin/bash
 # Step 3: produce the kernel-sp11 RPM (kernel image, modules, Denali DTBs).
 #   KERNEL_MODE=build    compile natively from ooaklee's source tarball with ooaklee's annotations config,
-#                        plus the kernel.org stable patch KERNEL_STABLE_VERSION when that is set
+#                        plus the kernel.org stable patch KERNEL_STABLE_VERSION and the config policy
+#                        fragment (KERNEL_CONFIG_REV: Fedora's LSM stack, no Ubuntu-only modules) when set
 #   KERNEL_MODE=prebuilt repackage ooaklee's released .deb payload
 . "$(dirname "$0")/lib.sh"
 require_cmd make gcc python3 depmod tar ar rpmbuild zstd xz patch
@@ -42,6 +43,16 @@ stage_common() {
   depmod -b "$base" "$KERNEL_ABI" || { rm -rf "$base"; die "depmod failed"; }
   rm -rf "$base"
   [ -s "$MODDIR/modules.dep" ] || die "depmod produced no modules.dep under $MODDIR"
+  # Ubuntu's out-of-tree drivers (ubuntu/ in the source) have no place in a Fedora kernel: the config policy
+  # turns them off, and any future one that arrives "default m" fails here instead of shipping unnoticed.
+  # (A path filter on the module root, not a find in kernel/ubuntu: that directory is absent once the policy is
+  # on, and a find on a missing directory fails, which under pipefail ends the script without a message.)
+  local ubuntu_mods; ubuntu_mods=$(find "$MODDIR/kernel" -path '*/kernel/ubuntu/*' -name '*.ko*' | wc -l)
+  if [ "$ubuntu_mods" -gt 0 ] && [ -n "$KERNEL_CONFIG_REV" ]; then
+    die "$ubuntu_mods Ubuntu-only module(s) under kernel/ubuntu in the payload"
+  elif [ "$ubuntu_mods" -gt 0 ]; then
+    warn "$ubuntu_mods Ubuntu-only module(s) under kernel/ubuntu in the payload (ooaklee's config as published)"
+  fi
   local dtb_compat
   dtb_compat=$(fdtget -t s "$MODDIR/dtb/$SP11_DTB" / compatible 2>/dev/null || true)
   [[ $dtb_compat == *microsoft,denali-oled* ]] || die "DTB compatible check failed: '$dtb_compat'"
@@ -84,9 +95,24 @@ build_from_source() {
   scripts/config --disable LOCALVERSION_AUTO
   scripts/config --set-str VERSION_SIGNATURE "SP11 $KERNEL_ABI (ooaklee ${KERNEL_SOURCE_COMMIT:0:12}${KERNEL_STABLE_VERSION:+ + stable $KERNEL_STABLE_VERSION}, built on Fedora $(rpm -E %{fedora}))"
   scripts/config --disable CRYPTO_FIPS
+  if [ -n "$KERNEL_CONFIG_REV" ]; then
+    # Config policy (Fedora's LSM stack, Ubuntu-only modules off) as a Kconfig fragment: -m merges it into
+    # .config without running make, olddefconfig below resolves the dependencies, and the fragment is asserted
+    # against the result (merge_config.sh checks its own values only when it runs make itself).
+    log "merging config policy rev $KERNEL_CONFIG_REV: files/$KERNEL_CONFIG_FRAGMENT"
+    scripts/kconfig/merge_config.sh -m .config "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" >"$KDIR/config-merge.log" 2>&1 \
+      || { cat "$KDIR/config-merge.log" >&2; die "merge_config.sh failed"; }
+  fi
   make -s olddefconfig
+  # kernelrelease is a no-sync-config target and setlocalversion reads include/config/auto.conf, which on a
+  # built tree still holds the previous LOCALVERSION; sync it first, as the build itself would.
+  make -s syncconfig
   [ "$(make -s kernelrelease)" = "$KERNEL_ABI" ] || die "kernelrelease '$(make -s kernelrelease)' != '$KERNEL_ABI'"
   check_config .config
+  if [ -n "$KERNEL_CONFIG_REV" ]; then
+    config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" .config || die "config policy did not survive olddefconfig"
+    log "config policy rev $KERNEL_CONFIG_REV holds: $(sed -n 's/^CONFIG_LSM=//p' .config)"
+  fi
 
   log "building kernel $KERNEL_ABI with $KERNEL_JOBS jobs (log: $KDIR/build.log)"
   export KBUILD_BUILD_USER=sp11 KBUILD_BUILD_HOST=fedora KBUILD_BUILD_VERSION=1
@@ -141,7 +167,8 @@ log "building kernel-sp11 RPM"
 RPM=$(build_rpm "$SPEC_DIR/kernel-sp11.spec.in" kernel-sp11 "$KDIR" \
   ABI="$KERNEL_ABI" KVER="$KERNEL_BUILD_VERSION" KREL="$KERNEL_RPM_RELEASE" PAYLOAD="$PAYLOAD" \
   MODE="$KERNEL_MODE" COMMIT="$KERNEL_SOURCE_COMMIT" RELEASE_TAG="$KERNEL_RELEASE_TAG" \
-  STABLE="${KERNEL_STABLE_VERSION:+, kernel.org stable patch-$KERNEL_STABLE_VERSION}")
+  STABLE="${KERNEL_STABLE_VERSION:+, kernel.org stable patch-$KERNEL_STABLE_VERSION}" \
+  POLICY="${KERNEL_CONFIG_REV:+, config policy rev $KERNEL_CONFIG_REV: Fedora LSM stack, no Ubuntu-only modules}")
 rpm -qp --provides "$RPM" | grep -x 'kernel-uname-r' >/dev/null || die "RPM lacks kernel-uname-r provide"
 rpm -qpl "$RPM" | grep -x "/boot/vmlinuz-$KERNEL_ABI" >/dev/null || die "RPM lacks /boot/vmlinuz-$KERNEL_ABI"
 log "kernel RPM: $RPM ($(du -h "$RPM" | cut -f1))"

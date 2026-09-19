@@ -32,9 +32,10 @@ Qualcomm ADSP/CDSP/GPU firmware extracted from this device's Windows installatio
 ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, WCN7850 Wi-Fi board
 data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, sysctl policy
-(unprivileged user namespaces for Flatpak), a GRUB menu entry that chainloads the
-Windows Boot Manager, a dnf exclusion of the stock kernel packages, and the first-boot
-finalizer. The firmware is proprietary and must not be redistributed.
+(unprivileged user namespaces on the earlier AppArmor kernels), a GRUB menu entry that chainloads the
+Windows Boot Manager, a dnf exclusion of the stock kernel packages, the first-boot
+finalizer, and the SELinux restore for installations the live installer disabled it on.
+The firmware is proprietary and must not be redistributed.
 
 %prep
 %build
@@ -45,6 +46,11 @@ cp -a %{stage}/. %{buildroot}/
 # systemd's RPM file triggers reload units and udev rules and apply the sysctl file; both triggers below also
 # run when this package is installed while their target is present.
 %posttrans
+# Installations made from media without active SELinux (the AppArmor kernels) carry the installer's selinux=0
+# and SELINUX=disabled. The kernel-install plugin undoes that when the SELinux kernel is added; this call covers
+# a support upgrade on a system that already has it, and runs first so the menu below is built from the
+# cleaned GRUB_CMDLINE_LINUX. No-op elsewhere; never reboots.
+/usr/libexec/sp11/sp11-selinux-restore || :
 # Apply the /etc/default/grub policy and regenerate the GRUB menu on an installed system (the live root has
 # no grub.cfg), so an upgrade that changes the policy takes effect without a reboot. Without the helper an
 # upgrade would regenerate the menu from the previous policy: on an installed system nothing else runs it

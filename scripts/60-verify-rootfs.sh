@@ -35,7 +35,10 @@ check r test -s "$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE"
 # GRUB cannot read the font from /usr on a LUKS install; Anaconda rsyncs /boot/grub2 to the target.
 check r test -s "$ROOTFS/boot/grub2/fonts/$GRUB_FONT_FILE"
 check r sh -c "[ \"\$(dd if='$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE' bs=1 count=4 skip=8 status=none)\" = PFF2 ]"
-check r grep -q "^kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
+check r grep -q "^-kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
+# The shipped kernel carries the config policy (Fedora's LSM stack, no Ubuntu-only modules) whenever one is set.
+[ -z "$KERNEL_CONFIG_REV" ] || check config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" "$ROOTFS/usr/lib/modules/$KERNEL_ABI/config"
+[ -z "$KERNEL_CONFIG_REV" ] || check test -z "$(find "$ROOTFS/usr/lib/modules/$KERNEL_ABI/kernel" -path '*/kernel/ubuntu/*' -name '*.ko*')"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
 stock=$(r find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' ! -name "vmlinuz-$KERNEL_ABI" | wc -l); check test "$stock" -eq 0

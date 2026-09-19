@@ -7,7 +7,7 @@ require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
 
 # Bump whenever anything under files/ or the generated payload changes, so `dnf upgrade` picks it up.
-VERSION="2.4"
+VERSION="2.5"
 
 CACHED=$(rpm_of sp11-surface-support)
 if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
@@ -100,6 +100,7 @@ log "GRUB console font: $GRUB_FONT_FILE, ${GRUB_FONT_SIZE}pt from ${FONT_TTF##*/
 install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
 install -m 0755 "$FILES_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
 install -m 0755 "$FILES_DIR/sp11-grub-defaults" "$STAGE/usr/libexec/sp11/sp11-grub-defaults"
+install -m 0755 "$FILES_DIR/sp11-selinux-restore" "$STAGE/usr/libexec/sp11/sp11-selinux-restore"
 # The ISO build removes the stock kernel packages; they must not come back through `dnf upgrade`.
 install -D -m 0644 "$FILES_DIR/90-sp11-dnf.conf" "$STAGE/etc/dnf/libdnf5.conf.d/90-sp11.conf"
 install -D -m 0755 "$FILES_DIR/29_sp11_windows" "$STAGE/etc/grub.d/29_sp11_windows"
@@ -126,7 +127,7 @@ SP11_GRUB_FONT_BOOT="/boot/grub2/fonts/$GRUB_FONT_FILE"
 ENV
 # `bash -n A B C` parses only A (B and C become positional parameters): check every script on its own.
 for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
-         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,bt-import-pairings,diag,bt-apply,ucm-apply}; do
+         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,selinux-restore,bt-import-pairings,diag,bt-apply,ucm-apply}; do
   bash -n "$f" || die "shell syntax error in ${f#"$STAGE"}"
 done
 sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"

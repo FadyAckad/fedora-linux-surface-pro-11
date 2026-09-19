@@ -10,7 +10,10 @@ run() { printf '\n$ %s\n' "$*"; "$@" 2>&1 | head -n "${LINES_MAX:-200}"; }
 
 sec "system"; run uname -r; run uptime; run rpm -q kernel-sp11 sp11-surface-support sp11-iptsd bluez
 run cat /proc/cmdline
-sec "sysctl / secure boot"; run sysctl kernel.apparmor_restrict_unprivileged_userns; run mokutil --sb-state
+sec "security / secure boot"; run cat /sys/kernel/security/lsm; run getenforce
+run sh -c "journalctl -k -b --no-pager -g 'avc:  denied' | tail -n 60"
+run sh -c 'sysctl kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo "no AppArmor in this kernel"'
+run mokutil --sb-state
 
 # run() caps output at LINES_MAX lines, so filter inside the command and truncate last.
 sec "touchscreen kernel driver (mshw0485)"; run lsmod; run sh -c "dmesg | grep -iE 'mshw0485|g6ts|hid-generic|hidraw|spi|qspi|iptsd' | tail -n 80"

@@ -1,0 +1,31 @@
+#!/usr/bin/bash
+# Restore the SELinux configuration Anaconda would have written had the live session run SELinux.
+# Media whose kernel has no active SELinux (the AppArmor builds) make Fedora's /usr/bin/liveinst start Anaconda
+# with --noselinux: the installation gets selinux=0 in its boot arguments (/etc/kernel/cmdline,
+# GRUB_CMDLINE_LINUX, every BLS entry) and SELINUX=disabled in /etc/selinux/config. Both together are that
+# installer's signature; a system disabled by hand carries only the config line and is left alone.
+# Restores Fedora's default: the argument goes, the config says enforcing again, and /.autorelabel marks the
+# filesystem (nothing labelled it while SELinux was off) for the relabel the next SELinux boot performs on its
+# own — in permissive mode, followed by one more reboot — so enforcing needs no intermediate step.
+# Run by the kernel-install plugin (before 20-grub.install writes the new entry from /etc/kernel/cmdline) and
+# by the support RPM's %posttrans. Idempotent, never reboots, does nothing in a live session.
+set -eu
+cmdline=/etc/kernel/cmdline
+cfg=/etc/selinux/config
+[ -f "$cmdline" ] && [ -f "$cfg" ] || exit 0
+grep -qw 'selinux=0' "$cmdline" || exit 0
+grep -qx 'SELINUX=disabled' "$cfg" || exit 0
+grep -qw rd.live.image /proc/cmdline && exit 0
+
+# grubby edits the BLS entries, GRUB_CMDLINE_LINUX and /etc/kernel/cmdline together; the sed lines cover a
+# system without grubby and the files grubby leaves alone when there is no entry yet.
+if command -v grubby >/dev/null 2>&1; then
+  grubby --update-kernel=ALL --remove-args=selinux=0 >/dev/null 2>&1 || :
+fi
+sed -i -E 's/(^|[[:space:]])selinux=0([[:space:]]|$)/\1/g; s/[[:space:]]+$//' "$cmdline"
+if [ -f /etc/default/grub ]; then
+  sed -i -E '/^GRUB_CMDLINE_LINUX=/ { s/[[:space:]]*selinux=0[[:space:]]*/ /g; s/=" /="/; s/ "$/"/; s/=[[:space:]]*$/=""/ }' /etc/default/grub
+fi
+sed -i 's/^SELINUX=disabled$/SELINUX=enforcing/' "$cfg"
+touch /.autorelabel
+echo "sp11: SELinux re-enabled (the installer had disabled it); the next boot relabels the filesystem and reboots once."
