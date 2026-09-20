@@ -38,6 +38,8 @@ and everything in the last column still works. That installation had been instal
 | Flatpak | yes | yes | yes |
 | Windows in the GRUB menu | yes | yes | yes |
 | Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes | yes | yes |
+| Sensors: readings from the accelerometer, gyroscope, magnetometer/compass and ambient light sensor (`ssccli`, `monitor-sensor`), with the sensors RPMs | not reported | not reported | yes |
+| Sensors: auto-rotation and automatic screen brightness on the desktop | not reported | not reported | not reported |
 | 5G modem | no | no | no |
 | Cameras | no | no | no |
 | NPU (AI acceleration) | no | no | no |
@@ -211,6 +213,8 @@ Support RPM history (1.1 to 2.1 and 2.5 confirmed on the tested unit):
   disabled by the installation's `selinux=0` boot argument). Rebuilt under the same version on 2026-09-19 with
   `sp11-selinux-restore`, which re-enables SELinux on installations the live installer disabled it on;
   confirmed on the tested unit.
+- 2.6: `sp11-diag` runs `sp11-sensors-check` when the sensors stack is installed. Tested in a chroot, not yet on
+  the device.
 
 ## Bluetooth pairings shared with Windows (Flex Keyboard, Slim Pen 2)
 
@@ -234,11 +238,62 @@ Existing Linux pairings for these devices are backed up under `/var/lib/sp11/`. 
 either system invalidates the other system's bond; export and import again afterwards. The tarball
 contains secret keys: do not share it.
 
+## Sensors (accelerometer, gyroscope, magnetometer, ambient light)
+
+The sensors are not on any bus Linux can see: they hang off the Snapdragon Sensor Core, the sensor framework
+running inside the ADSP firmware, and Windows reads them through a QMI client. The same path works on Linux with
+free software, and it needs no kernel change: `hexagonrpcd` serves the framework its configuration and registry
+over FastRPC, `libssc` talks to it over QRTR, and upstream `iio-sensor-proxy` 3.9 has drivers for it that Fedora
+builds out only because `libssc` is not packaged in Fedora. The stack is packaged separately from the ISO and is
+for the installed system only (the live session runs without the ADSP). Not yet confirmed on the tested unit.
+
+Build the four RPMs (the same `FEDORA_TARGET` as the installed system; the library RPMs are built in a mock
+buildroot of that release, so the first run takes a while):
+
+```bash
+scripts/75-export-sensor-registry.sh
+```
+
+exports this unit's sensor registry from Windows (one UAC prompt: the ADSP wrote it under
+`DriverData\Qualcomm\fastRPC`, readable only elevated; per unit, keep it private), then
+
+```bash
+FEDORA_TARGET=beta scripts/45-build-sensors-rpms.sh
+```
+
+builds `hexagonrpc`, `libssc`, `iio-sensor-proxy` (Fedora's own source RPM with `-Dssc-support=enabled`) and
+`sp11-sensors` (the Windows sensor configuration, the registry, the platform identity, and the udev, systemd,
+SELinux, dracut and dnf glue) and verifies them in the extracted live root. On Fedora, from the directory holding
+the RPMs:
+
+```bash
+sudo dnf install ./hexagonrpc-*.rpm ./libssc-0*.rpm ./iio-sensor-proxy-*.rpm ./sp11-sensors-*.rpm
+```
+
+The framework re-reads its registry every time the file server attaches and writes into it while doing so, so
+`hexagonrpcd` is built with a patch that serves those writes (upstream refuses them, and this firmware then
+aborts the ADSP) into a copy of the registry under `/var/lib/sp11/hexagonrpc/sensors/persist`; `sudo
+sp11-sensors-reset` rebuilds that copy from the package. The framework compares the modification time of every
+configuration file with the stamp it recorded when it parsed the file, so the package ships the files with
+Windows' times. A guard on the daemon's unit stops it from attaching again after an ADSP
+crash in the same boot, so a failure costs one recoverable crash and a log rather than a loop. Reboot after
+installing. Then `sudo /usr/libexec/sp11/sp11-sensors-check`
+shows the daemon, the QRTR service, one reading per sensor (`ssccli`) and what iio-sensor-proxy sees
+(`monitor-sensor`); GNOME's auto-rotate quick setting and automatic screen brightness follow from the latter. The
+gyroscope and magnetometer have no desktop consumer and are read with `ssccli --sensor gyroscope` /
+`--sensor magnetometer`. `sp11-sensors` excludes `iio-sensor-proxy` from dnf updates, since a later Fedora build
+would replace the SSC-enabled one without a word. The exclusion also covers a local RPM of that package, so
+install the four in one command as above, and install a later SP11 build of it with
+`sudo dnf --setopt=disable_excludes='*' install ./iio-sensor-proxy-<version>.rpm`, the same override as for the
+kernel packages. Never stop or restart the ADSP through `/sys/class/remoteproc` to "reset" the sensors: that
+resets the SoC. Reference implementation: denisix/ubuntu-surface-pro-11 (`SENSORS.md`), which reports all 13
+sensors of the framework working on a Surface Pro 11 with this approach.
+
 ## Diagnostics
 
 `sudo /usr/libexec/sp11/sp11-diag` writes `sp11-diag-<date>.txt` to the current directory: kernel,
 touchscreen and pen (iptsd), input devices and Bluetooth state, including `bluetoothctl info` for every
-device BlueZ knows. It changes nothing.
+device BlueZ knows, and the sensors stack when `sp11-sensors` is installed. It changes nothing.
 
 ## What the scripts decide for you
 
@@ -328,16 +383,19 @@ kernel.org's `sha256sums.asc`) or clear it.
 ## Layout
 
 - `sp11.conf`: all versions, URLs, regexes and boot policy.
-- `scripts/`: numbered pipeline steps, `lib.sh` (helpers), `build-all.sh`, the pairing export.
-- `rpm/`: spec templates for `kernel-sp11`, `sp11-surface-support` and `sp11-iptsd`.
-- `files/`: payload of the support RPM, the kernel config policy fragment, the live GRUB menu template and
-  the README inside the ISO.
+- `scripts/`: numbered pipeline steps, `lib.sh` (helpers), `build-all.sh`, the pairing export, and the sensors
+  stack outside the pipeline (`45`/`46` build and verify its RPMs, `75` exports the registry from Windows).
+- `rpm/`: spec templates for `kernel-sp11`, `sp11-surface-support`, `sp11-iptsd`, and for the sensors stack
+  (`hexagonrpc`, `libssc`, `iio-sensor-proxy`, `sp11-sensors`).
+- `files/`: payload of the support RPM, the kernel config policy fragment, the live GRUB menu template, the
+  README inside the ISO, and `files/sensors/` (udev, systemd, SELinux and dnf glue of `sp11-sensors`).
 - `LICENSE`: GPL-3.0-or-later for the repository's own content (see License and credits).
 - `CLAUDE.md`: working notes with verified facts about the hardware, the Fedora media and pipeline
   pitfalls.
 - `.gitattributes`: LF line endings for every file; the payload scripts break with CRLF.
-- `build/`: caches, work trees, RPMs and output ISOs (git-ignored). `build/hardware.env` and
-  `build/bt-pairings/` hold your unit's identity and pairing keys; keep them private.
+- `build/`: caches, work trees, RPMs and output ISOs (git-ignored). `build/hardware.env`,
+  `build/bt-pairings/` and `build/sensors/` hold your unit's identity, pairing keys and sensor calibration;
+  keep them private.
 
 ## License and credits
 
@@ -355,6 +413,15 @@ nothing third-party is stored in the repository:
   unmodified.
 - Wi-Fi board data: `board-2.bin` from Fedora's `atheros-firmware`, extracted with `ath12k-bdencoder`
   from [qca/qca-swiss-army-knife](https://github.com/qca/qca-swiss-army-knife).
+- Sensors: [linux-msm/hexagonrpc](https://github.com/linux-msm/hexagonrpc) (GPL-3.0-or-later), built from
+  [this project's fork](https://github.com/FadyAckad/hexagonrpc), branch `sp11-sensors`: upstream plus four
+  commits (the sensor framework's registry writes, requests longer than 256 bytes, the registry's parent
+  directory; meant for upstream, see its issue #19 and pull request #21),
+  [DylanVanAssche/libssc](https://codeberg.org/DylanVanAssche/libssc) (GPL-3.0-or-later) and Fedora's
+  `iio-sensor-proxy` source RPM (GPL-3.0-or-later), the latter two unmodified; the approach follows
+  [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The sensor configuration
+  and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files copied from your own
+  Windows installation at build time, like the firmware below.
 - Base media: Fedora Workstation live images. Bring-up notes: rjindael/fedora-surface-pro-11.
 - ADSP/CDSP/GPU firmware: proprietary Qualcomm and Microsoft files copied from your own Windows
   DriverStore at build time. Never part of this repository; see Status and scope.

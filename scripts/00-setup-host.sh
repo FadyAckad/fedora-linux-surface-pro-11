@@ -26,6 +26,8 @@ PKGS=(
   python3-hivex hivex
   # cross-release RPM builds (sp11-iptsd against the target Fedora's fmt/spdlog)
   mock
+  # sensors stack (scripts/45): `mock --chain` keeps a local repository between the builds
+  createrepo_c
 )
 log "installing build dependencies"
 as_root dnf install -y -q "${PKGS[@]}"

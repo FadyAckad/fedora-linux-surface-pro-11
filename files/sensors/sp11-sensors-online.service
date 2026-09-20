@@ -1,0 +1,9 @@
+[Unit]
+Description=Surface Pro 11: hand the DSP sensors to iio-sensor-proxy once the ADSP publishes them
+# Pulled in together with hexagonrpcd by udev when /dev/fastrpc-adsp appears (81-sp11-sensors.rules).
+After=hexagonrpcd-adsp-sensorspd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/sp11/sp11-sensors-wait
+TimeoutStartSec=5min

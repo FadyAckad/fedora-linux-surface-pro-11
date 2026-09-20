@@ -1,0 +1,4 @@
+;; Surface Pro 11: iio-sensor-proxy's Qualcomm Sensor Core drivers (libssc) talk QMI over QRTR sockets, which
+;; Fedora's iiosensorproxy policy does not allow (it was written for IIO sysfs devices). Installed by
+;; sp11-sensors (semodule -i); removed with the package.
+(allow iiosensorproxy_t self (qipcrtr_socket (create bind connect getattr setattr read write ioctl getopt setopt shutdown)))

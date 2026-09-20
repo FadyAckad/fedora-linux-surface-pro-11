@@ -43,6 +43,8 @@ run ls -la /var/lib/bluetooth/ /var/lib/bluetooth/*/
 # Every device BlueZ knows (paired or cached), by address; nothing is hardcoded.
 for d in $(bluetoothctl devices 2>/dev/null | awk '$1 == "Device" { print $2 }'); do run bluetoothctl info "$d"; done
 run journalctl -b --no-pager -u bluetooth -n 60
+# Sensors (Snapdragon Sensor Core stack, sp11-sensors): the check script carries its own sections.
+if [ -x /usr/libexec/sp11/sp11-sensors-check ]; then /usr/libexec/sp11/sp11-sensors-check; else sec "sensors"; echo "sp11-sensors not installed"; fi
 sec "recent journal errors"; run journalctl -b --no-pager -p err -n 60
 sec "done"; echo "written $(date -u +%FT%TZ)"
 exec >/dev/tty 2>&1 || true

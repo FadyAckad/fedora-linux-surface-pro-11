@@ -1,0 +1,13 @@
+# Surface Pro 11: the accelerometer, gyroscope, magnetometer and light sensor hang off the ADSP's Snapdragon Sensor
+# Core. When the kernel creates the ADSP's FastRPC node, start the file server the DSP's sensor framework reads its
+# configuration and registry through (hexagonrpcd, sensors protection domain) and the helper that hands the sensors
+# to iio-sensor-proxy once the DSP publishes them. The node appears only after the ADSP has booted, so a boot target
+# cannot order this. iio-sensor-proxy's own rule (80-) enables ssc-light and ssc-compass on this node; ssc-accel
+# (auto-rotation) is upstream's opt-in.
+# ACCEL_MOUNT_MATRIX: the Sensor Core reports the accelerometer the Android way, the reaction force in the display
+# frame (x right, y up, z out of the screen: upright on the kickstand the device read y=+7.4, z=+6.4 m/s^2).
+# iio-sensor-proxy expects y<0 for the normal orientation, x>0 for left-up and z>0 for face-up (its
+# test-orientation.c), so x and y are negated and z kept. Upstream's proxy reads this property from this node.
+ACTION=="remove", GOTO="sp11_sensors_end"
+SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hexagonrpcd-adsp-sensorspd.service sp11-sensors-online.service", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-accel", ENV{ACCEL_MOUNT_MATRIX}="-1,0,0;0,-1,0;0,0,1"
+LABEL="sp11_sensors_end"

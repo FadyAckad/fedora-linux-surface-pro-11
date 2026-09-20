@@ -1,0 +1,36 @@
+#!/usr/bin/bash
+# Wait until the ADSP's Snapdragon Sensor Core actually serves sensor data, then restart iio-sensor-proxy so its
+# SSC drivers find the sensors. The proxy probes them on the udev "add" of /dev/fastrpc-adsp, before the DSP has
+# read the registry through hexagonrpcd; a probe that early finds nothing, and the proxy does not look again. The
+# QMI service (400) is registered as soon as the framework starts, registry or not, so the probe reads a sensor:
+# ssccli prints "<Sensor> sensor measurement: ..." once the light sensor answers, and hangs in the registry lookup
+# otherwise (killed by timeout). Run by sp11-sensors-online.service.
+set -u
+LIMIT=${SP11_SENSORS_WAIT:-120}               # seconds
+PROBE_SENSOR=${SP11_SENSORS_PROBE:-light}
+# The proxy's own probe on the udev "add" succeeds when the framework is up within the second (a registry that needs
+# no re-parse); a restart then only closes and reopens every sensor stream, so it is skipped when the proxy already
+# exposes an accelerometer and a light sensor (on this machine only the Sensor Core provides them).
+proxy_has_sensors() {
+  local p
+  for p in HasAccelerometer HasAmbientLight; do
+    busctl --system get-property net.hadess.SensorProxy /net/hadess/SensorProxy net.hadess.SensorProxy "$p" 2>/dev/null \
+      | grep -q '^b true$' || return 1
+  done
+}
+while :; do
+  if timeout 8 stdbuf -oL ssccli --sensor "$PROBE_SENSOR" --timeout 4 2>/dev/null | grep -q 'sensor measurement:'; then
+    if proxy_has_sensors; then
+      logger -t sp11-sensors "Snapdragon Sensor Core serves the $PROBE_SENSOR sensor after ${SECONDS}s; iio-sensor-proxy already has the sensors, no restart"
+    else
+      logger -t sp11-sensors "Snapdragon Sensor Core serves the $PROBE_SENSOR sensor after ${SECONDS}s; restarting iio-sensor-proxy"
+      systemctl try-restart iio-sensor-proxy.service || :
+    fi
+    exit 0
+  fi
+  if [ "$SECONDS" -ge "$LIMIT" ]; then
+    logger -t sp11-sensors "no reading from the $PROBE_SENSOR sensor within ${LIMIT}s: the sensor framework did not initialise with a file server attached (see sp11-sensors-check: boot timeline, hexagonrpcd log)"
+    exit 1
+  fi
+  sleep 2
+done

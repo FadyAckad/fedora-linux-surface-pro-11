@@ -1,0 +1,67 @@
+# Fedora's iio-sensor-proxy spec (source RPM @VERSION@-@BASEREL@) with the Qualcomm Snapdragon Sensor Core
+# drivers enabled. Fedora builds with -Dssc-support=disabled because libssc is not packaged in Fedora; the
+# release carries Fedora's number plus a suffix so this build replaces Fedora's in place, and sp11-sensors
+# excludes the package from dnf updates so a later Fedora build does not take the drivers away again.
+# Refresh from the target release's source RPM when Fedora changes the spec (scripts/45 refuses one with patches).
+%global debug_package %{nil}
+
+Name:           iio-sensor-proxy
+Version:        @VERSION@
+Release:        @BASEREL@.@SUFFIX@%{?dist}
+Summary:        IIO accelerometer sensor to input device proxy, with Qualcomm Sensor Core support
+
+# tests/unittest_inspector.py is LGPL-2.1-or-later but it is not packaged
+License:        GPL-3.0-or-later
+URL:            https://gitlab.freedesktop.org/hadess/iio-sensor-proxy
+Source0:        %{name}-%{version}.tar.bz2
+
+BuildRequires:  meson
+BuildRequires:  gcc
+BuildRequires:  pkgconfig(udev)
+BuildRequires:  pkgconfig(systemd)
+BuildRequires:  pkgconfig(gio-2.0)
+BuildRequires:  pkgconfig(gudev-1.0)
+BuildRequires:  pkgconfig(polkit-gobject-1)
+BuildRequires:  pkgconfig(libssc) >= 0.2.1
+BuildRequires:  systemd
+BuildRequires:  systemd-rpm-macros
+%{?systemd_requires}
+
+%description
+%{summary}. Fedora's %{version}-@BASEREL@ build plus -Dssc-support=enabled: the
+drivers that read the accelerometer, light and compass sensors of Qualcomm's
+Snapdragon Sensor Core through libssc (QMI over QRTR), which the Fedora package
+leaves out. Built for the Surface Pro 11, whose sensors sit behind that DSP.
+
+%prep
+%autosetup -p1
+
+%build
+%meson -Dgtk_doc=false -Dgtk-tests=false -Dssc-support=enabled
+%meson_build
+
+%install
+%meson_install
+
+%post
+%systemd_post %{name}.service
+
+%preun
+%systemd_preun %{name}.service
+
+%postun
+%systemd_postun_with_restart %{name}.service
+
+%files
+%license COPYING
+%doc README.md
+%{_bindir}/monitor-sensor
+%{_libexecdir}/%{name}
+%{_unitdir}/%{name}.service
+%{_udevrulesdir}/*-%{name}.rules
+%{_datadir}/dbus-1/system.d/net.hadess.SensorProxy.conf
+%{_datadir}/polkit-1/actions/net.hadess.SensorProxy.policy
+
+%changelog
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - @VERSION@-@BASEREL@.@SUFFIX@
+- Rebuild Fedora's @VERSION@-@BASEREL@ with -Dssc-support=enabled (libssc) for the Surface Pro 11 sensors

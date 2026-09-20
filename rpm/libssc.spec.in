@@ -1,0 +1,71 @@
+%global commit @COMMIT@
+%global debug_package %{nil}
+%global _build_id_links none
+
+Name:           libssc
+Version:        @VERSION@
+Release:        @RPMREL@%{?dist}
+Summary:        Library and CLI for the sensors of the Qualcomm Snapdragon Sensor Core
+License:        GPL-3.0-or-later
+URL:            https://codeberg.org/DylanVanAssche/libssc
+Source0:        libssc-%{commit}.tar.gz
+ExclusiveArch:  aarch64
+
+BuildRequires:  gcc
+BuildRequires:  meson >= 1.4.0
+BuildRequires:  ninja-build
+BuildRequires:  pkgconf-pkg-config
+BuildRequires:  pkgconfig(glib-2.0) >= 2.56
+BuildRequires:  pkgconfig(gio-unix-2.0)
+BuildRequires:  pkgconfig(qmi-glib) >= 1.33.4
+BuildRequires:  pkgconfig(libprotobuf-c)
+# protoc plus the protoc-gen-c plugin generate the message code
+BuildRequires:  protobuf-compiler
+BuildRequires:  protobuf-c-compiler
+# The QMI mocking server for the test suite is declared unconditionally in meson (python module)
+BuildRequires:  python3-devel
+
+%description
+libssc exposes the sensors managed by the Qualcomm Snapdragon Sensor Core, the
+sensor framework running on the ADSP or SLPI of Qualcomm SoCs since 2018, as a
+GLib library: QMI over QRTR to the DSP, protobuf-encoded requests. ssccli reads
+one sensor from the command line (--sensor accelerometer|gyroscope|magnetometer|
+light|compass|proximity). Upstream commit %{commit}. iio-sensor-proxy 3.9 builds
+its SSC drivers against this library.
+
+%package devel
+Summary:        Development files for libssc
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+Requires:       pkgconfig(qmi-glib)
+Requires:       pkgconfig(gio-2.0)
+
+%description devel
+Headers and pkg-config file for building against libssc.
+
+%prep
+%setup -q -n libssc-%{commit}
+
+%build
+%meson
+%meson_build
+
+%install
+%meson_install
+# The QMI mocking server exists for the test suite, which needs a QRTR bus; not shipped.
+rm -rf %{buildroot}%{python3_sitelib}/ssc_server %{buildroot}%{_libexecdir}/installed-tests \
+       %{buildroot}%{_datadir}/installed-tests
+
+%files
+%license LICENSE
+%doc README.md CHANGELOG.md
+%{_libdir}/libssc.so.2*
+%{_bindir}/ssccli
+
+%files devel
+%{_includedir}/libssc/
+%{_libdir}/libssc.so
+%{_libdir}/pkgconfig/libssc.pc
+
+%changelog
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+- Package upstream libssc for the Surface Pro 11 sensors stack (Fedora has no package)

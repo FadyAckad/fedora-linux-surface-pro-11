@@ -1,0 +1,132 @@
+%global stage @STAGE@
+%global debug_package %{nil}
+%global __os_install_post %{nil}
+%global __strip /bin/true
+%global _build_id_links none
+%undefine _missing_build_ids_terminate_build
+# The sensor framework records the modification time of every configuration file it parsed in its registry
+# (sns_reg_config) and re-parses a file whose mtime differs, discarding the entries first. The payload keeps
+# Windows' mtimes, so Fedora's clamping of file times to the changelog date must stay off.
+%global source_date_epoch_from_changelog 0
+%global clamp_mtime_to_source_date_epoch 0
+
+Name:           sp11-sensors
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Surface Pro 11 sensors: Snapdragon Sensor Core configuration, registry and desktop integration
+License:        GPL-3.0-or-later AND LicenseRef-Proprietary-Firmware
+ExclusiveArch:  aarch64
+AutoReqProv:    no
+
+# 0.5.0-3 serves the framework's registry writes, including large ones, and its temporary file next to the registry
+Requires:       hexagonrpc >= 0.5.0-3
+Requires:       libssc
+Requires:       iio-sensor-proxy >= 3.9
+Requires:       qrtr
+Requires:       systemd
+Requires:       systemd-udev
+Requires:       policycoreutils
+# stdbuf (line-buffered daemon log) and the initramfs module
+Requires:       coreutils
+Requires:       dracut
+Requires:       sp11-surface-support >= 2.0
+
+%description
+Device-bound sensor support for Microsoft Surface Pro 11 (X1E80100, SKU @SKU@).
+The accelerometer, gyroscope, magnetometer and light sensor hang off the ADSP's
+Snapdragon Sensor Core, so this package carries what that framework reads through
+hexagonrpcd: the sensor configuration from the Windows driver package (@SNSCFG@),
+the registry the framework wrote on this unit's Windows installation (per-sensor
+platform data and calibration) and the platform identity files, under
+@PAYLOAD_DIR@. It adds the udev and systemd glue that starts the file server when
+the ADSP comes up and hands the sensors to iio-sensor-proxy (auto-rotation,
+ambient light, compass), a SELinux module for iio-sensor-proxy's QRTR sockets, a
+dnf exclusion that keeps the SSC-enabled iio-sensor-proxy, and sp11-sensors-check.
+The configuration and registry files are Microsoft/Qualcomm proprietary and must
+not be redistributed. Reboot after installing: the framework reads the registry
+only when the ADSP boots.
+
+%prep
+%build
+
+%install
+cp -a %{stage}/. %{buildroot}/
+
+%post
+# systemd's RPM file triggers reload the units and udev rules. The policy module is what lets iio-sensor-proxy
+# open QRTR sockets under enforcing; a system without a policy store has nothing to load into.
+if [ -d /etc/selinux/targeted ] && [ -x /usr/sbin/semodule ]; then
+  /usr/sbin/semodule -i /usr/share/selinux/packages/sp11-sensors.cil >/dev/null 2>&1 || :
+fi
+%systemd_post sp11-sensors-resume.service
+%posttrans
+# The working directory the daemon serves (links into the package plus a writable copy of the registry under
+# sensors/persist): made here and not in %%post, because on an upgrade %%post runs while the previous release's
+# payload files are still in place and the copy would take them along (seen with 1.4's sns_reg_version). 1.3 and
+# 1.4 kept the copy at sensors/registry, which nothing serves any more.
+rm -rf /var/lib/sp11/hexagonrpc/sensors/registry
+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/sp11-sensors.conf >/dev/null 2>&1 || :
+# 1.1 and 1.2 put an initramfs hook into the running kernel's initramfs (an early attach the framework turned out
+# not to need); regenerating it here takes that hook out again. Nothing to do in a live session or a build chroot.
+if [ -f "/boot/initramfs-$(uname -r).img" ] && ! grep -qw rd.live.image /proc/cmdline 2>/dev/null; then
+  /usr/bin/dracut -f --kver "$(uname -r)" >/dev/null 2>&1 || :
+fi
+
+%preun
+%systemd_preun sp11-sensors-online.service sp11-sensors-resume.service
+
+%postun
+if [ $1 -eq 0 ]; then
+  [ -x /usr/sbin/semodule ] && /usr/sbin/semodule -r sp11-sensors >/dev/null 2>&1 || :
+  rm -rf /var/lib/sp11/hexagonrpc
+fi
+
+%files
+%defattr(-,root,root,-)
+@PAYLOAD_DIR@/
+/usr/lib/udev/rules.d/81-sp11-sensors.rules
+%dir /usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d
+/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-sp11.conf
+/usr/lib/systemd/system/sp11-sensors-online.service
+/usr/lib/systemd/system/sp11-sensors-resume.service
+/usr/lib/systemd/system/suspend.target.wants/sp11-sensors-resume.service
+/usr/lib/systemd/system/suspend-then-hibernate.target.wants/sp11-sensors-resume.service
+/usr/libexec/sp11/sp11-sensors-wait
+/usr/libexec/sp11/sp11-sensors-check
+/usr/libexec/sp11/sp11-sensors-guard
+/usr/libexec/sp11/sp11-sensors-reset
+/usr/lib/tmpfiles.d/sp11-sensors.conf
+/usr/share/selinux/packages/sp11-sensors.cil
+/etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf
+
+%changelog
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- sns_reg_version and parsed_file_list.csv beside the registry copy (sensors/persist), where Windows keeps them
+  and where the framework looks for them (served among the entries, it deleted them and tried to create
+  sns_reg_version); the payload carries them in sensors/registry-parent
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 1.5-1
+- Writable parent for the registry (sensors/persist, the framework's temporary file lands there), configuration
+  files keep Windows' modification times (the framework re-parses a file whose mtime differs from the stamp in
+  its registry), accelerometer mount matrix for iio-sensor-proxy, no proxy restart when it already has the
+  sensors, crash counts per remote processor in sp11-sensors-check; needs hexagonrpc 0.5.0-3 (large writes)
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 1.4-1
+- The guard runs as ExecCondition: its refusal skips the unit instead of failing it, so Restart= never re-runs
+  it (RestartPreventExitStatus= applies to the main process only; an ExecStartPre failure was restarted up to
+  the start limit)
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 1.3-1
+- Writable registry copy under /var/lib/sp11/hexagonrpc (tmpfiles), crash guard on the unit, no initramfs
+  hook, sp11-sensors-reset; needs hexagonrpc 0.5.0-2 (registry writes)
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 1.2-1
+- LF line endings for sns_reg_config, json.lst and the platform files (the DSP kept Windows' CR in the paths it
+  parsed and never found its registry); the initramfs hook re-attaches until the sensors PD accepts it
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 1.1-1
+- Attach hexagonrpcd from the initramfs (dracut module), where the ADSP boots; line-buffered daemon log;
+  readiness probe through libssc instead of the QMI service list
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 1.0-1
+- Surface Pro 11 sensors payload and integration

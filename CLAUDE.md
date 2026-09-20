@@ -40,6 +40,14 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
   and `GRUB_CMDLINE_LINUX` carry the installer's `selinux=0` with `SELINUX=disabled` in the config, so the
   previous kernel's entry is written with the argument; the checks assert the plugin removed it from both
   entries, the cmdline file and `/etc/default/grub`, restored `SELINUX=enforcing` and created `/.autorelabel`.
+- Sensors stack, outside `build-all.sh` (see the Sensors section): `45-build-sensors-rpms.sh` builds `hexagonrpc`,
+  `libssc` and `iio-sensor-proxy` with `mock --chain` (`mock_chain` in `lib.sh`; always mock, so the host never
+  gets unpackaged libraries and iio-sensor-proxy resolves `libssc-devel` from the chain's local repo) and
+  `sp11-sensors` (files only, `build_rpm`), then runs `46-verify-sensors-rpms.sh` (overlay install of the four
+  into the live root with scriptlets, linkage, units, rules, CIL module, sysusers, merged dnf excludes, payload,
+  erase; with `SENSORS_PREVIOUS_RPMS="<earlier RPMs>"` also the in-place upgrade from those, which is what every
+  device round is). `75-export-sensor-registry.sh` is the UAC tool that copies this unit's registry out of
+  `DriverData\Qualcomm\fastRPC` (robocopy in an elevated PowerShell) into `build/sensors/`.
 - `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
 - `files/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`,
   `/usr/lib/...`), the live GRUB menu template, `README-iso.txt.in` (the note inside the ISO; it
@@ -48,8 +56,8 @@ Re-verify anything that depends on a newer Fedora, GRUB, Anaconda or ooaklee rel
 - The repo is public under GPL-3.0-or-later (`LICENSE`; the support RPM's `License:` tag must agree).
   Tracked files carry no per-unit identifiers: Bluetooth/Wi-Fi/peripheral addresses, firmware versions,
   local paths and the owner's name stay out of `CLAUDE.md`, `README.md`, `files/` and `scripts/`.
-  Per-unit values live in `build/hardware.env`, `build/bt-pairings/` and, inside the built RPM,
-  `/etc/sp11/bluetooth-address`. Check before staging:
+  Per-unit values live in `build/hardware.env`, `build/bt-pairings/`, `build/sensors/` and, inside the built
+  RPMs, `/etc/sp11/bluetooth-address` and the `sp11-sensors` registry. Check before staging:
   `git grep -nE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}'` must show only the `AA:BB:CC:DD:EE:FF` placeholders.
 - `CLAUDE.local.md` (git-ignored, loaded by Claude Code after this file) holds the owner's private working
   rules and hand-off notes. `.gitattributes` forces LF. `.gitignore` also blocks `hardware.env`, `*.hiv`,
@@ -468,6 +476,233 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   generator on every grub2-mkconfig and by an RPM trigger on `grub2-efi-aa64-modules`, which keeps the copy
   matched to the GRUB image). Booting Windows through this entry works on the tested unit.
 
+## Sensors (Snapdragon Sensor Core)
+
+- **No sensor is on a bus Linux can see.** Windows' `Sensor` class holds two ACPI stubs, `MSHW048A` (display) and
+  `MSHW048B` (keyboard, "Qualcomm All-Ways Aware Sensor Platform Device", `qcSensors.dll`: a QMI/protobuf client,
+  `sns_client.pb`, `sns_suid.pb`, `sns_surface_imu.pb`). The chips, from the registry JSONs: ST LSM6DSV accel+gyro on
+  the SSC's I3C buses 2 (display) and 1 (keyboard), AKM AK0991x magnetometer on I2C 4/3, AMS TCS3430 ALS/colour on
+  I2C 4, TMD2755 ALS/prox, LPS22DF barometer on I2C 7, all on QUP instances the ADSP's sensor framework (SSC,
+  protection domain `sensor_pd` inside `qcadsp8380.mbn`, `adsps.jsn`) owns. The Denali DTS has no sensor nodes
+  (`&i2c0`/`&i2c4` carry "Something @…" comments only); the T14s bit-banged LIS2DW12 is a different board.
+- Kernel: nothing to change. `CONFIG_QCOM_FASTRPC=m` with the ADSP `fastrpc` node (`hamoa.dtsi:4372`,
+  `qcom,non-secure-domain`, hence `/dev/fastrpc-adsp`), `FASTRPC_IOCTL_INIT_ATTACH_SNS`, `QRTR`/`QRTR_SMD=m`,
+  `qcom_pd_mapper` advertising `msm/adsp/sensor_pd` for x1e80100. Installed system only: the live session
+  blacklists the ADSP.
+- Stack (denisix/ubuntu-surface-pro-11 `SENSORS.md` reports 13 sensors working on an SP11 this way): `hexagonrpcd -s`
+  attaches to the sensors PD and serves the DSP a virtual tree from `-R DIR`: `/vendor/etc/sensors/config` ←
+  `DIR/sensors/config/`, `/vendor/etc/sensors/sns_reg_config` ← `DIR/sensors/sns_reg.conf`,
+  `/persist/sensors/registry/registry` ← `DIR/sensors/registry/`, `/sys/devices/soc0/*` ← `DIR/socinfo/*`
+  (`rpcd_builder.c`); without `-R` it guesses `/usr/share/qcom/<qcom,SOC>/<first word of model>/<device>` from the DT,
+  `x1e80100/Microsoft/denali-oled` here. `libssc` finds `QMI_SERVICE_SSC` (0x190 = 400) on QRTR. Upstream
+  iio-sensor-proxy 3.9 has `drv-ssc-{accel,light,compass,proximity}.c` behind `-Dssc-support`; Fedora builds it
+  `disabled` (no libssc package), its udev rule enables `ssc-light ssc-compass` on `fastrpc-adsp*`, `ssc-accel` is
+  the opt-in, its unit already allows `AF_QIPCRTR`. Fedora's `iiosensorproxy_t` has no `qipcrtr_socket` rule, so
+  `sp11-sensors` loads a CIL module.
+- Inputs. Unelevated: `DriverStore/FileRepository/surfacepro_snscfgcrd8380.inf_*` (65 JSON, `json.lst`,
+  `sns_reg_config`, `golden_color_calibration.bin`, the platform files `hw_platform`=CRD, `soc_id`=615,
+  `revision`=3.1, …). **Every text file there is CRLF.** `sns_reg_config`, `json.lst` and the platform files are
+  shipped as LF (step 45 strips the CR, step 46 refuses one): the DSP kept the CR in the values it parsed and asked
+  hexagonrpcd for `.../registry\r/sns_secure_database.bin` (round 2 on the device, 101-byte message, exactly one
+  CR), so with the Windows bytes it never found its registry. The JSON configs (CRLF inside JSON is whitespace) and
+  the registry files stay as Windows has them; denisix ships the same set that way. Windows' `json.lst` is not exact: it names
+  `8380_crd_tcs3430_0.json` twice and omits `sns_cal.json`, so step 45 ships every JSON of the package and asserts
+  the unique listed set exists (the list itself stays as Windows wrote it). Elevated only (SYSTEM/Administrators ACL, denied
+  to WSL and unelevated PowerShell): `C:\Windows\System32\drivers\DriverData\Qualcomm\fastRPC\persist\sensors\registry\registry\`
+  (the pre-parsed registry the framework wrote under Windows, per unit: platform data and calibration; denisix:
+  321 files, the framework does not initialise without it, the JSON path needs an Android-only `oemconfig.so`) and
+  `...\fastRPC\vendor\etc\sensors\config\` (calibration overrides). `Start-Process -Verb RunAs` on a cancelled UAC
+  prompt returns no process object, so `exit $p.ExitCode` is 0: step 75 treats that as failure explicitly.
+- Packaging: `hexagonrpc` 0.5.0 (commit pinned in `sp11.conf`; meson puts its units under libdir = `/usr/lib64`,
+  the spec moves them; `sscregistrygen` is built but not installed upstream; adds the `fastrpc` sysusers entry and
+  a `GROUP=fastrpc, MODE=0660` rule for `fastrpc-*`; built with `-Dhexagonrpcd_verbose=true`; releases 2 and 3
+  carried the sensor-framework write support as a patch in `files/sensors/` (see the third and fourth device
+  runs below); since release 4 the pin is the project's fork, `HEXAGONRPC_REPO`
+  github.com/FadyAckad/hexagonrpc, branch `sp11-sensors` = upstream 598b591 plus the same four commits, no patch
+  in the repo; `git_pin` fetches the commit by full hash, which GitHub serves for any reachable commit), `libssc`
+  0.4.4+ (`libssc.so.2`; meson declares the QMI mock
+  server unconditionally: `python3-devel`, `protobuf-compiler` for `protoc`, `protobuf-c-compiler` for
+  `protoc-gen-c`; the spec deletes the installed mock server), `iio-sensor-proxy` = Fedora's SRPM of the target
+  release with `-Dssc-support=enabled`, release `<fedora>.sp11.1` (step 45 refuses an SRPM with patches: refresh the
+  template), `sp11-sensors` (payload under `/usr/share/qcom/x1e80100/Microsoft/denali-oled`, `files/sensors/`).
+  Codeberg serves `git fetch --depth 1 origin <sha>` only with the full hash (`git_pin` uses it).
+- Runtime design: udev `SYSTEMD_WANTS` on the `fastrpc-adsp` misc device starts `hexagonrpcd-adsp-sensorspd.service`
+  (drop-in since 1.3: `-R /var/lib/sp11/hexagonrpc`, `ExecCondition=+sp11-sensors-guard`, `Restart=on-failure`,
+  `RestartSec=5`, `StartLimitBurst=4` per 5 min; the stock `[Install]` stays unused because the node exists only
+  after the ADSP booted. 1.3 had the guard as `ExecStartPre` with `RestartPreventExitStatus=3`, which does not
+  work: that setting covers the main process only, and on the host's systemd 259 an `ExecStartPre` exit 3 was
+  restarted four times until the start limit, while an `ExecCondition` exit 1-254 skips the unit without a
+  failure, hence 1.4) and `sp11-sensors-online.service`, which polls `qrtr-lookup`
+  (row format `%9u %7u %8u %4u %5u %s`, header line first) for service 400 and then `try-restart`s
+  iio-sensor-proxy: the proxy probes SSC sensors on the udev "add" only, seconds before the DSP has read the
+  registry (since 1.5 the restart is skipped when `busctl` already shows `HasAccelerometer` and `HasAmbientLight`
+  true: with an accepted registry the framework is up within a second of the attach and the proxy's own probe
+  finds the sensors, as the fourth device run showed). The daemon serves `/var/lib/sp11/hexagonrpc`: links to the
+  package's `sensors/config`, `sensors/sns_reg.conf` and `socinfo`, and `sensors/persist/` (1.5; `fastrpc`-owned,
+  mapped to the DSP's `/persist/sensors/registry`) holding the `C`-copied registry in `persist/registry/`.
+  `sp11-sensors-resume.service` restarts the daemon `After=suspend.target` (the stock unit has
+  `Conflicts=suspend.target`, and nothing restarts a conflict-stopped unit; `sleep.target` is the wrong anchor, it is
+  active before the suspend). `91-sp11-sensors.conf` excludes `iio-sensor-proxy`; libdnf5 appends `excludepkgs`
+  across drop-ins (verified with `dnf --dump-main-config` in the 45 Beta root: kernel list plus iio-sensor-proxy),
+  and the exclusion also filters a local RPM of the package ("from @commandline is filtered out by exclude
+  filtering", verified in the same root): the four RPMs go in one transaction, a later SP11 build of the proxy
+  needs `--setopt=disable_excludes='*'`.
+- ADSP safety: nothing in the stack writes `/sys/class/remoteproc/*/state` (step 45 greps the stage for it;
+  `sp11-sensors-check` only reads it). hexagonrpcd only attaches to the existing sensors PD (`INIT_ATTACH_SNS`),
+  never creates a PD (`-c`) nor supplies DSP libraries (`dsp/` absent → empty), and serves Windows' own bytes. Its
+  exit leaves the sensors running on the DSP (denisix: the stock daemon exits on an unimplemented write after the
+  registry is read; hence the restart policy). Stopping the ADSP through remoteproc resets the SoC (denisix).
+- First device run (2026-09-19, `sp11-sensors` 1.0 on the 45 Beta install): the daemon attached
+  (`INIT_ATTACH_SNS`), both remoteprocs stayed `running` through two suspend/resume cycles (the resume unit
+  re-attached), audio unaffected, SELinux enforcing with no AVC, so the stack is safe for the ADSP. But the
+  registry never reached the DSP: `sp11-sensors-online` found QMI service 400 already registered at attach time,
+  the DSP requested only `oemconfig.so` after the attach, and every `ssccli`/proxy request ended in libssc's
+  "'registry' sensor timed out after 30s, is hexagonrpcd running?". Cause, from the kernel: the PAS driver's
+  `RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE` restarts the UEFI-started ADSP with the Linux firmware at probe
+  time (`rproc_boot`, "restarting adsp with new firmware"), and on the installed system that probe happens in
+  the initramfs (dracut's `qcom-adsp` pre-udev hook loads the driver; the support policy and
+  `devicetree-firmware` put the firmware there), before the LUKS prompt: the framework initialised ~20 s before
+  hexagonrpcd could exist. The framework registers its QMI service regardless of the registry, so service 400 is
+  no readiness signal; a reading (`ssccli --sensor light`) is. Fix in 1.1: the `95sp11-sensors` dracut module
+  (payload + `hexagonrpcd` + `stdbuf` in the initramfs, pre-udev hook 31 after qcom-adsp's 30, polls for
+  `/dev/fastrpc-adsp` up to 8 s, attaches an instance that dies at switch-root; `%posttrans` regenerates the
+  running kernel's initramfs), the drop-in runs the daemon under `stdbuf -oL` (its `openat` log lines are on
+  stdout, fully buffered on the journal socket, so 1.0 showed only stderr), and `sp11-sensors-wait` probes the
+  light sensor instead of the service list. `ssccli` hangs in its synchronous registry lookup before its own
+  `--timeout` applies, so a `timeout`-killed run prints nothing.
+- Second device run (1.1): the initramfs hook attached 350 ms after the node, 20 ms after "adsp is now up", and
+  the DSP refused it (`Could not attach to FastRPC node`: the sensors PD was not up yet; the hook did not retry).
+  The root-side attach at 22 s showed, thanks to `stdbuf`, what the DSP asks for after every attach: `oemconfig.so`,
+  then `<output dir>\r/sns_secure_database.bin`, then the directory: the CRLF defect above. So the framework does
+  retry its registry on a listener attach; a correct payload may work from the root side alone, and the initramfs
+  hook (1.2: re-attaches every 200 ms for up to ~60 s of failures) covers the boot-time read as well.
+- Third device run (1.2, 2026-09-19 evening): a 1.1 boot had hung at a black screen before the LUKS prompt (never
+  explained: the hung boot leaves no journal; the initramfs attach is the only new element in that phase), the next
+  boot came up. With 1.2 the initramfs hook's first attach was refused (sensors PD not up 20 ms after the ADSP),
+  the retry attached, the DSP asked for `oemconfig.so` and then method 24, on which upstream's daemon quits. The
+  root-side attach at 25 s then logged `Tried to open /persist/sensors/registry/registry/DIR for writing` (`DIR`
+  is the framework's own 3-byte marker, present in the registry exported from Windows; a verification write test
+  must not use that name), the daemon refused, and the kernel logged `fatal error received: err_qdi.c:1205:EF:sensor_process:0x4:sns_registry_4:
+  0x67:sns_registry_sensor.c:279:SNS_RC_SUCCESS == rc`, `crash detected in adsp`, recovery in 5 s (which also took
+  the CDSP down: `sleep_statsi.c:537`), `/dev/fastrpc-adsp` re-created, udev started the unit again, and so on every
+  5 s: **an ADSP crash loop**, with the battery indicator flapping (battery status comes over pmic_glink from the
+  ADSP). Stopped with `systemctl mask --now`, `dnf remove sp11-sensors`, `dracut -f`, reboot. So the registry
+  initialisation of this firmware writes into its registry directory (method 24 = `apps_std_fremove`, sc
+  `0x18020000`: 2 in, 0 out; then `fopen(.../DIR, w)`) and asserts when a write is refused; denisix's private
+  hexagonrpcd patch ("method 24 stub", "write support") is exactly what got them past it. The DSP repeats the
+  registry initialisation on every attach, so an early attach is not needed. Fix in round 4: `hexagonrpc`
+  0.5.0-2 with a patch, since release 4 the fork's commits (hexagonfs gains create/write/truncate/unlink/rename
+  for mapped directories; `apps_std` gains `fopen` 0, `fwrite` 5, `fsync` 23, `fremove` 24, `ftrunc` 32,
+  `frename` 33, and `fopen_with_env` opens `w`/`a`/`+` modes read-write and accepts absolute names with unknown
+  search variables; `invoke_requested_procedure` answers unsupported requests with `AEE_EUNSUPPORTED` and empty
+  output buffers instead of ending the session; the method ids follow quic/fastrpc `inc/apps_std.h`, the
+  extended ids > 30 travel in the first prim word); a harness against the patched hexagonfs covers
+  create/write/append/truncate/rename/remove and refusal outside mapped directories. `sp11-sensors` 1.3 serves
+  `/var/lib/sp11/hexagonrpc` (tmpfiles: links to the package's config/sns_reg.conf/socinfo, a `C`-copied registry
+  owned by `fastrpc`; `sp11-sensors-reset` rebuilds it), drops the initramfs module (its `%posttrans` `dracut -f`
+  stays to purge the 1.1/1.2 hook), and adds `sp11-sensors-guard`: no attach once `crash detected in adsp` is in
+  the boot's kernel log, at most 12 attaches per boot, exit 3. 1.3 ran the guard as `ExecStartPre` with
+  `RestartPreventExitStatus=3`; transient test units on the host's systemd 259 showed that combination restarting
+  the failed pre-start four times until the start limit (the setting judges the main process only), while an
+  `ExecCondition` exit 1-254 skips the unit without a failure (`Skipped due to 'exec-condition'`, no restart), so
+  1.4 runs it that way and 46 asserts the drop-in carries neither of the two settings. 46 also verifies the upgrade
+  path the device takes: with `SENSORS_PREVIOUS_RPMS="<hexagonrpc 0.5.0-1> <sp11-sensors 1.2>"` it installs the
+  previous release into a fresh overlay, masks the unit as the owner did to stop the loop, and puts the current
+  two on top with `rpm -U` and scriptlets: hook removed, working copy created, mask kept, policy module present.
+  46 passes (104 checks, among them a write as the `fastrpc` user into the copy and the patched daemon's strings
+  in the RPM); handed over as round 4 (1.4 replaced 1.3 in the folder before any device run). Not run on the
+  device yet.
+- Fourth device run (hexagonrpc 0.5.0-2 + `sp11-sensors` 1.4, 2026-09-19 night): **sensor data for the first
+  time**. Without the initramfs hook the ADSP still boots in the initramfs, but `/dev/fastrpc-adsp` appears only
+  with the root's udev (17.8 s); the daemon attached at 18.4 s (guard exit 0, attach count 1). The DSP read
+  `sns_reg_config`, stat'ed and **removed** `sns_secure_database.bin`, removed every registry entry (341 `remove(`
+  lines) and re-parsed the JSON configuration (so the framework parses JSON without `oemconfig.so`, contrary to
+  denisix's note); it then opened `/persist/sensors/registry/fstempfile` for writing (ENOSYS: the registry's
+  parent is a virtual directory in `rpcd_builder.c`), missed two entries it had not been able to write, opened
+  `sns_secure_database.bin` for writing and wrote it with an input buffer longer than the 256 bytes the listener
+  inlines, on which upstream's listener quits (`Large (>256B) input buffers aren't implemented`, exit 0, 1.1 s
+  after the start; `Restart=on-failure` leaves it). The sensors ran regardless for the rest of the session:
+  `ssccli` light 12 lux, accelerometer/gyroscope/magnetometer/compass streams, `monitor-sensor` light + compass +
+  orientation, iio-sensor-proxy's own probe at 19.6 s had already found the SSC sensors (the wait unit's restart
+  at 24 s was redundant), SELinux enforcing with no AVC, no ADSP crash, battery steady. Why the re-parse: the
+  registry's `sns_reg_config` entry records the **mtime** of every parsed JSON (62 of the 65 DriverStore JSONs and
+  the two Surface calibration overrides match their Windows file times to the second; the two overrides are what
+  the framework parsed, not the DriverStore copies), and the payload's files carried the build time (`install`
+  without `-p`, then rpm's clamping to the changelog date), so every file counted as changed. Orientation:
+  `bottom-up` with the device upright on its kickstand (accel x=+0.77, y=+7.39, z=+6.35 m/s²): the Sensor Core
+  reports the Android convention (reaction force; x right, y up, z out of the screen; libssc's own matrix from
+  the SSC placement attribute is all zeros → identity), while iio-sensor-proxy's `test-orientation.c` wants y<0
+  for normal, x>0 for left-up, and `tilt_calc` z>0 for face-up. One CDSP crash (`sleep_statsi.c:537`,
+  "handling crash #1 in cdsp", recovered in 5 s) at 24.16 s, 130 ms after the wait unit began restarting
+  iio-sensor-proxy (every sensor stream closed); none in rounds 1-2, and in round 3 the CDSP fell with the same
+  assert 5 s after the ADSP crash: the CDSP firmware's sleep-stats code trips on some ADSP/sensor state change.
+  Unexplained; nothing on Linux uses the CDSP.
+- Round 5 (hexagonrpc 0.5.0-3, `sp11-sensors` 1.5): the listener fetches long input buffers with
+  `adsp_listener_get_in_bufs2` (method 5 of the interface, quic/fastrpc `inc/adsp_listener.h`; the first 256
+  bytes arrive with `next2`, the rest is fetched from offset 256 as `listener_android.c` does); the builder maps
+  `/persist/sensors/registry` as a whole to `DIR/sensors/persist` when that directory exists (`fstempfile`, then
+  the rename into `persist/registry/`; otherwise the upstream layout), so the working copy is
+  `/var/lib/sp11/hexagonrpc/sensors/persist/registry` (tmpfiles, run from `%posttrans` since 1.6: on an upgrade
+  `%post` runs while the previous release's payload files are still in place, and the copy took 1.4's
+  `sns_reg_version` along, caught by 46's upgrade section; `%posttrans` also removes the 1.3/1.4 copy); the payload
+  keeps Windows' mtimes (`install -p`, `source_date_epoch_from_changelog 0` and
+  `clamp_mtime_to_source_date_epoch 0` in the spec; 46 compares two JSONs' mtimes with the registry's stamps and
+  tmpfiles' `C` keeps them, as the device showed for `tdm_uid.bin`); `ACCEL_MOUNT_MATRIX="-1,0,0;0,-1,0;0,0,1"`
+  on the fastrpc-adsp node (the x flip is inferred from the Android convention, not yet seen);
+  `sp11-sensors-wait` restarts the proxy only when `busctl` shows it without accelerometer or light sensor; the
+  check counts crashes per remote processor and prints the daemon log's tail. 45+46 pass (118 checks, the
+  upgrade from the round-4 packages included; the RPM carries the JSONs with mtime 1747743184 and the overrides
+  with 1789827151, the registry's stamps). Handed over as round 5, not run on the device yet. The hexagonrpc
+  changes also exist as four topic commits (hexagonfs write ops, apps_std methods, listener, builder;
+  `git format-patch` series in the round-5 folder, identical to the patch): the sustainable form is a fork of
+  linux-msm/hexagonrpc pinned by `HEXAGONRPC_REPO`/`HEXAGONRPC_COMMIT` (no patch in this repo) and a pull request
+  upstream, both the owner's to create; until then the patch stays as the build input.
+- 1.6 (same night, replacing 1.5 before any device run): Windows keeps `sns_reg_version` (9 bytes, `version=1`,
+  no line ending) and `parsed_file_list.csv` (CRLF, written by the DSP itself, kept byte for byte) in the
+  registry's **parent** directory (`persist\sensors\registry\`), and `75-export-sensor-registry.sh` copies them
+  from there into the entries export (its line 47); served among the entries, the DSP deleted them as stale
+  entries in round 4 and then tried to create `sns_reg_version` (the `fstempfile` open). Step 45 moves them to
+  the payload's `sensors/registry-parent/` and tmpfiles `C`-copies them beside the registry copy
+  (`sensors/persist/`); 46 asserts both places. This matches psacal's report in upstream PR #21 (SC8280XP,
+  Windows firmware: the DSP creates `sns_reg_version` through method 5 when it is missing, and a JSON-format
+  `sns_reg_config` makes it "generate oversized messages", i.e. the large input buffers).
+- Upstream state (checked 2026-09-19 against linux-msm/hexagonrpc): no pull request carries these changes. PR #21
+  (z3ntu, draft since 2026-03-20, for issue #19 "Support opening files for writing", the same
+  `.../registry/registry/DIR` refusal as round 3) stubs `fwrite` (accepts the `DIR` marker and a `version=`
+  string, nothing reaches disk), mocks `fremove`, hard-codes `fopen_with_env_fd`, and adds an `sns_reg_version`
+  mapping in the registry's parent; it conflicts with main since the interface rework (PR #13) and its author
+  has little time. Maintainer guidance in that thread (lumag): real writes belong in a writable directory under
+  `/var`, attempts to modify `/usr/share/qcom` should fail loudly; our series does that (writes go into the
+  `-R` tree the daemon is pointed at, the package stays read-only). Nobody implements the large-buffer fetch,
+  the temporary file's directory, `ftrunc`/`frename`/`fsync`. Main has not moved past 598b591; none of the 14
+  forks carries write support beyond z3ntu's branch. Owner's decision: fork only for now
+  (github.com/FadyAckad/hexagonrpc, created 2026-09-19 with main = 598b591), no pull request yet; the four-commit
+  series in the round-5 folder references issue #19 and PR #21 for later. The `sp11-sensors` branch was pushed
+  on 2026-09-20 (head 7a7c4f1, the four commits with the owner as author and committer, no other trailer); since
+  then `HEXAGONRPC_REPO`/`HEXAGONRPC_COMMIT` point at the fork, `Patch0` and the patch file are gone, the release
+  is `4.git7a7c4f1.sp11` (the numeric part must rise: rpm compares `git<hash>` as a string), and step 46's
+  upgrade section covers 0.5.0-3 → 0.5.0-4 with `sp11-sensors` 1.6 kept.
+- Fifth device run (hexagonrpc 0.5.0-3 + `sp11-sensors` 1.6, 2026-09-20 00:17, check at 00:20): **the stack
+  works as designed.** Node at 17.9 s, attach at 18.5 s (guard 0, attach count 1), the daemon `active (running)`
+  two hours later. The DSP read `sns_reg_config`, then the whole `sns_secure_database.bin` (75 reads of 512 plus
+  121 bytes = 38521, the exported file's size), listed the registry and **kept it**: no `remove(` lines, the 343
+  entries still carry their Windows dates, the served JSON's mtime equals the stamp in the registry's
+  `sns_reg_config`. It then rewrote `parsed_file_list.csv` (15817 → 15478 bytes) and the secure database in one
+  38521-byte write (76 `write(5, ...)` lines, no "Large"/"Could not fetch" line). No ADSP crash, **no CDSP crash**
+  (the proxy's own probe found the sensors at 19.7 s, `sp11-sensors-wait` logged "already has the sensors, no
+  restart"). `monitor-sensor`: orientation `normal`, tilt `vertical` then `tilted-up` with the device upright, so
+  the mount matrix is right for landscape; light 18 lux; accelerometer/gyroscope/magnetometer/compass streams;
+  `ACCEL_MOUNT_MATRIX` visible on the udev node; SELinux enforcing, no AVC. Artefact: the check's `find -newer
+  tmpfiles.conf` said 0 although the DSP wrote, because the clock was two hours behind at boot (RTC/Windows
+  mismatch, see the diag notes) when the DSP wrote and the tmpfiles config was installed with the corrected clock
+  minutes earlier; the next check version should compare against `/run/sp11-sensors/attaches` (same clock
+  domain as the writes) and print the DSP's write activity (`openat(..., w`, `remove`, `rename`, `Could not`)
+  instead of head/tail only. Round-4's `remove(sns_secure_database.bin)` was therefore part of the re-parse the
+  mtime mismatch caused, not a per-boot habit.
+- Unknowns after the fifth run: the portrait orientations (x flip inferred, not yet reported), suspend/resume
+  with the writing daemon (the resume unit re-attaches; the DSP then checks its own persisted registry), whether
+  the CDSP assert stays away, AVCs beyond `qipcrtr_socket`.
+
 ## Bluetooth dual-boot pairings
 
 - Windows keeps LE bonds in `HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys\<adapter>\
@@ -552,8 +787,37 @@ passes against the 45 Beta live root; `35-verify-support-rpm.sh` passes on both 
 been rebuilt. 2.5 was rebuilt on 2026-09-19 with `sp11-selinux-restore` under the same version (never released
 before); the automatic restore was confirmed on the device the same day.
 
+### Sensors stack (2026-09-19)
+
+Built for Fedora 45 (`FEDORA_TARGET=beta`): `hexagonrpc-0.5.0-1.git598b591.sp11`, `libssc-0.4.4-2.git54dd13e.sp11`
+(+devel), `iio-sensor-proxy-3.9-3.sp11.1` (the mock chain built all three on the first run), `sp11-sensors-1.0-1`
+(this unit's registry: 345 files, 6 calibration overrides from `vendor\etc\sensors\config`, among them
+`factory_color_calibration.bin`, `tdm_uid.bin`, `acs_multiplier.bin` and the Surface accel/gyro calibration JSONs
+that replace the package's copies) and support RPM 2.6 (`sp11-diag` runs `sp11-sensors-check`; 35 passes on both
+paths). `46-verify-sensors-rpms.sh` passes against the 45 Beta live root; the RPMs were handed over. 1.0 ran on the device
+the same day (safe, no data; see the Sensors section); `sp11-sensors-1.1-1` with the initramfs module passes 46
+(75 checks, including a dracut image built from the root's own dracut and inspected with `lsinitrd`) and was
+handed over for the second round. 1.2 (round 3) ended in the ADSP crash loop described in the Sensors section.
+Round 4, `hexagonrpc-0.5.0-2` plus `sp11-sensors-1.4-1` (46: 104 checks, including the in-place upgrade from
+the round-3 packages), **produced sensor data on the device** on 2026-09-19: `ssccli` readings from the light
+sensor, accelerometer, gyroscope, magnetometer and compass, `monitor-sensor` with light, compass and an
+orientation (inverted, see the Sensors section), SELinux enforcing, no ADSP crash; the daemon stopped on the
+framework's first large write and the orientation needs the mount matrix. Round 5, `hexagonrpc-0.5.0-3` plus
+`sp11-sensors-1.6-1` (46: 128 checks, upgrade from round 4 included; 1.5 was replaced by 1.6 in the folder before
+any device run), **ran on the device on 2026-09-20**: daemon running for the whole session, registry from Windows
+accepted without a re-parse, the framework's secure database and file list written back, no ADSP or CDSP crash,
+orientation `normal` upright, all five sensors streaming, SELinux enforcing without AVC (details in the Sensors
+section). Portrait orientations and suspend/resume with this stack are not reported yet. The same morning the
+patch left the repository: `hexagonrpc-0.5.0-4.git7a7c4f1.sp11` is built from the owner's fork (branch
+`sp11-sensors`), 46 passes with it (125 checks, the upgrade from 0.5.0-3 with `sp11-sensors` 1.6 kept
+included), and against 0.5.0-3 the daemon's and the library's `.text` sections are byte-identical, the
+section list and sizes equal, only the build ids and rpm's package note differ; handed over as round 6
+(optional on the device, which runs the identical 0.5.0-3).
+
 ## References
 
 rjindael/fedora-surface-pro-11 (Fedora bring-up notes); ooaklee/linux-surface-pro-11-oe (kernel, audio,
 iptsd releases, ADRs); ooaklee/lexr.sh `internal/image/fedora/*.go` (remaster design reference);
+denisix/ubuntu-surface-pro-11 (`SENSORS.md`: the SSC sensor stack on an SP11 under Ubuntu); linux-msm/hexagonrpc;
+DylanVanAssche/libssc (codeberg);
 Fedora wiki "Snapdragon WoA Laptop Install"; Arch wiki "Bluetooth" (dual-boot pairing).

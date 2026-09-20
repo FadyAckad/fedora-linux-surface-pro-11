@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+# ExecCondition (as root) of hexagonrpcd-adsp-sensorspd.service on the Surface Pro 11: refuse to attach the file
+# server once the ADSP has crashed in this boot. The sensor framework aborts the whole ADSP when a file operation it
+# relies on fails (seen with refused writes: sns_registry_sensor.c:279), and udev starts this unit again after every
+# recovery, which turned one such failure into a crash loop. Exit 3 makes systemd skip the unit without a failure,
+# so Restart= does not re-run it (an ExecStartPre failure would be restarted until the start limit); a reboot clears
+# it. Also caps the attaches per boot.
+set -u
+if journalctl -k -b -q --no-pager -g 'crash detected in adsp' 2>/dev/null | grep -q .; then
+  logger -t sp11-sensors "not attaching hexagonrpcd: the ADSP crashed in this boot (journalctl -k -b -g 'crash detected'); reboot to try again"
+  exit 3
+fi
+mkdir -p /run/sp11-sensors
+n=0; [ -f /run/sp11-sensors/attaches ] && n=$(cat /run/sp11-sensors/attaches)
+n=$((n + 1)); echo "$n" > /run/sp11-sensors/attaches
+if [ "$n" -gt 12 ]; then
+  logger -t sp11-sensors "not attaching hexagonrpcd: $n attaches in this boot; reboot to try again"
+  exit 3
+fi
+exit 0

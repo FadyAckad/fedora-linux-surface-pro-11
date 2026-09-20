@@ -185,6 +185,40 @@ mock_rebuild() {
   printf '%s\n' "$RPM_DIR/$(basename "$built")"
 }
 
+# mock_chain SRPM... — build several SRPMs in the $MOCK_CONFIG buildroot in the given order (`mock --chain`): the
+# binary RPMs of each build enter a local repository the later builds resolve against, which is how
+# iio-sensor-proxy gets libssc-devel before either package exists in Fedora. Every binary RPM (subpackages
+# included) is copied into $RPM_DIR, replacing older builds of the same names. Needs createrepo_c on the host.
+mock_chain() {
+  local cfg="/etc/mock/$MOCK_CONFIG.cfg"
+  [ -f "$cfg" ] || die "no mock config $cfg (install mock-core-configs, or set MOCK_CONFIG)"
+  local resultdir="$WORK_DIR/mock-chain"
+  as_root rm -rf "$resultdir"; mkdir -p "$resultdir"
+  local -a mock=(mock)
+  case " $(id -nG) " in *" mock "*) ;; *) mock=(sudo mock) ;; esac
+  local -a args=(-r "$MOCK_CONFIG" --no-bootstrap-image --chain --localrepo "$resultdir" "$@")
+  local names; names=$(printf '%s ' "${@##*/}")
+  log "chain-building ${names}in the $MOCK_CONFIG buildroot (several minutes on the first run)"
+  if ! "${mock[@]}" "${args[@]}" >"$resultdir/mock.out" 2>&1; then
+    warn "mock failed with the default isolation; retrying with --isolation=simple"
+    as_root rm -rf "$resultdir/results"
+    "${mock[@]}" --isolation=simple "${args[@]}" >"$resultdir/mock-simple.out" 2>&1 \
+      || { f=$(find "$resultdir" -name build.log -newer "$resultdir/mock.out" 2>/dev/null | head -1 || true)
+           [ -n "$f" ] && tail -40 "$f" >&2; mock_tail "$resultdir"; die "mock chain build failed (logs in $resultdir)"; }
+  fi
+  local rpm name srpm
+  while IFS= read -r rpm; do
+    name=$(rpm -qp --qf '%{NAME}' "$rpm" 2>/dev/null) || die "cannot read $rpm"
+    rm -f "$RPM_DIR/$name"-[0-9]*.rpm
+    install -m 0644 "$rpm" "$RPM_DIR/$(basename "$rpm")"
+  done < <(find "$resultdir" -name "*.$FEDORA_ARCH.rpm" -o -name '*.noarch.rpm' | sort)
+  for srpm in "$@"; do
+    name=$(rpm -qp --qf '%{NAME}' "$srpm")
+    [ -n "$(rpm_of "$name")" ] || { mock_tail "$resultdir"; die "mock chain produced no $name binary RPM (logs in $resultdir)"; }
+    printf '%s\n' "$(rpm_of "$name")"
+  done
+}
+
 # Newest RPM of a package in $RPM_DIR, or empty. Never fails: callers test the result themselves.
 rpm_of() { ls -t "$RPM_DIR/$1"-[0-9]*.rpm 2>/dev/null | head -1 || true; }
 

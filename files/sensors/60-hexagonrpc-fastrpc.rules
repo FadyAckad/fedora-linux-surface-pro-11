@@ -1,0 +1,2 @@
+# hexagonrpcd runs as the fastrpc user: let it open the FastRPC nodes of the DSPs (misc devices, root-only by default).
+SUBSYSTEM=="misc", KERNEL=="fastrpc-*", GROUP="fastrpc", MODE="0660"

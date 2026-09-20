@@ -1,0 +1,108 @@
+%global commit @COMMIT@
+%global debug_package %{nil}
+%global _build_id_links none
+
+Name:           hexagonrpc
+Version:        @VERSION@
+Release:        @RPMREL@%{?dist}
+Summary:        FastRPC file server for Qualcomm Hexagon DSPs (hexagonrpcd)
+License:        GPL-3.0-or-later
+URL:            https://github.com/linux-msm/hexagonrpc
+Source0:        hexagonrpc-%{commit}.tar.gz
+Source1:        hexagonrpc.sysusers.conf
+Source2:        60-hexagonrpc-fastrpc.rules
+# Registry writes for the Snapdragon Sensor Core (fopen for writing, fwrite, fremove, ftrunc, frename, fsync),
+# and unsupported requests answered with an error instead of ending the session: the sensor framework aborts
+# the whole ADSP when its registry directory refuses a write (seen on the Surface Pro 11, 2026-09-19).
+ExclusiveArch:  aarch64
+
+BuildRequires:  gcc
+BuildRequires:  meson
+BuildRequires:  ninja-build
+BuildRequires:  pkgconf-pkg-config
+# sscregistrygen: sensor registry files generated from JSON sensor configuration
+BuildRequires:  json-c-devel
+BuildRequires:  systemd-rpm-macros
+Requires:       systemd
+Requires:       systemd-udev
+%{?sysusers_requires_compat}
+
+%description
+hexagonrpcd answers the FastRPC calls a Qualcomm DSP makes back to the CPU: the
+"reverse tunnel" through which the DSP's sensor (and audio) firmware reads its
+configuration, registry and platform identity as files. It attaches to the root
+or the sensors protection domain of the ADSP or SDSP and serves a directory tree
+(hexagonrpcd -R, /usr/share/qcom/<soc>/<vendor>/<device> by convention).
+Commit %{commit} of the project's fork of linux-msm/hexagonrpc (branch
+sp11-sensors: upstream 598b591 plus the sensor framework's write support, the
+listener's large-buffer fetch and the registry's parent directory, meant for
+upstream). This build adds the fastrpc system user the units run as and a udev
+rule that lets it open the FastRPC nodes.
+
+%prep
+%autosetup -n hexagonrpc-%{commit}
+
+%build
+# verbose: log every request the DSP makes (the only view into the sensor framework's start-up)
+%meson -Dhexagonrpcd_verbose=true
+%meson_build
+
+%install
+%meson_install
+# meson installs the units under libdir, which is /usr/lib64 on aarch64; Fedora's unit directory is
+# /usr/lib/systemd/system.
+if [ -d %{buildroot}%{_libdir}/systemd/system ]; then
+  install -d %{buildroot}%{_unitdir}
+  mv %{buildroot}%{_libdir}/systemd/system/*.service %{buildroot}%{_unitdir}/
+  rmdir -p --ignore-fail-on-non-empty %{buildroot}%{_libdir}/systemd/system
+fi
+# Upstream builds the registry generator but does not install it.
+install -D -m 0755 %{_vpath_builddir}/tools/sscregistrygen %{buildroot}%{_bindir}/sscregistrygen
+# No headers are installed, so the development symlink has nothing to serve.
+rm -f %{buildroot}%{_libdir}/libhexagonrpc.so
+install -D -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/hexagonrpc.conf
+install -D -m 0644 %{SOURCE2} %{buildroot}%{_udevrulesdir}/60-hexagonrpc-fastrpc.rules
+
+%pre
+%sysusers_create_compat %{SOURCE1}
+
+%post
+%systemd_post hexagonrpcd-adsp-rootpd.service hexagonrpcd-adsp-sensorspd.service hexagonrpcd-sdsp.service
+
+%preun
+%systemd_preun hexagonrpcd-adsp-rootpd.service hexagonrpcd-adsp-sensorspd.service hexagonrpcd-sdsp.service
+
+%postun
+%systemd_postun_with_restart hexagonrpcd-adsp-rootpd.service hexagonrpcd-adsp-sensorspd.service hexagonrpcd-sdsp.service
+
+%files
+%license COPYING
+%doc README.md
+%{_bindir}/hexagonrpcd
+%{_bindir}/sscregistrygen
+%{_libexecdir}/hexagonrpc/
+%{_libdir}/libhexagonrpc.so.*
+%{_mandir}/man1/hexagonrpcd.1*
+%{_unitdir}/hexagonrpcd-adsp-rootpd.service
+%{_unitdir}/hexagonrpcd-adsp-sensorspd.service
+%{_unitdir}/hexagonrpcd-sdsp.service
+%{_sysusersdir}/hexagonrpc.conf
+%{_udevrulesdir}/60-hexagonrpc-fastrpc.rules
+
+%changelog
+* Sun Sep 20 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+- Built from the project's fork of hexagonrpc (branch sp11-sensors: upstream 598b591 plus the four commits the
+  0.5.0-2 and 0.5.0-3 patch consisted of); no patch, same code as 0.5.0-3
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 0.5.0-3.git598b591.sp11
+- Fetch request input buffers longer than the 256 bytes next2 inlines (adsp_listener_get_in_bufs2), which the
+  framework's file writes need; map /persist/sensors/registry as a whole to DIR/sensors/persist when that
+  directory exists, so the framework's temporary file next to its registry can be created and renamed into it
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 0.5.0-2.git598b591.sp11
+- Serve the sensor framework's registry writes (fopen w/a/+, fwrite, fremove, ftrunc, frename, fsync), answer
+  unsupported requests instead of quitting, log every request (verbose build)
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 0.5.0-1.git598b591.sp11
+- Package upstream hexagonrpc for the Surface Pro 11 sensors stack: fastrpc system user, udev access rule,
+  units under /usr/lib/systemd/system, sscregistrygen installed

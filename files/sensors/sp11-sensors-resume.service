@@ -1,0 +1,13 @@
+[Unit]
+Description=Surface Pro 11: re-attach the sensors FastRPC daemon after resume
+# hexagonrpcd's stock unit conflicts with suspend.target, so it is stopped before the system sleeps, and nothing
+# starts it again: Restart= does not apply to a unit stopped by a conflict.
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+ConditionPathExists=/dev/fastrpc-adsp
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart hexagonrpcd-adsp-sensorspd.service
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

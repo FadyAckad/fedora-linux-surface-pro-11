@@ -7,7 +7,7 @@ require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
 
 # Bump whenever anything under files/ or the generated payload changes, so `dnf upgrade` picks it up.
-VERSION="2.5"
+VERSION="2.6"
 
 CACHED=$(rpm_of sp11-surface-support)
 if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
