@@ -1,0 +1,162 @@
+#!/usr/bin/python3
+# Surface Pro 11: ask the Surface Aggregator (SAM) directly what it knows about the keyboard cover, the way the
+# kernel's tablet-mode switch driver does, but from user space through /dev/surface/aggregator
+# (surface_aggregator_cdev), so the answer does not depend on which driver path the kernel wired up:
+#   - KIP cover state (target category 0x0e, command 0x1d): what surface_aggregator_tabletsw's KIP switch polls,
+#   - POS posture sources and the posture of each (0x26, commands 0x01/0x02): what the same driver's POS variant
+#     uses on the Surface Pro 12,
+#   - the current state of the kernel's tablet-mode switch input device (EVIOCGSW).
+# With --watch SECONDS it also subscribes to KIP and POS events and prints every event that arrives while the
+# keyboard is folded, detached or attached. Read-only towards the EC: the requests are the driver's own queries.
+# Usage: sudo python3 sp11-sam-posture [--watch SECONDS]
+import ctypes, fcntl, os, select, struct, subprocess, sys, time
+
+DEV = "/dev/surface/aggregator"
+TC_SAM, TC_KIP, TC_POS, TID_SAM = 0x01, 0x0e, 0x26, 0x01
+REQ_HAS_RESPONSE = 0x01
+EVENT_SEQUENCED = 0x01
+KIP_COVER = {1: "disconnected", 2: "closed", 3: "laptop", 4: "folded-canvas", 5: "folded-back", 6: "book"}
+POS_COVER = KIP_COVER
+POS_SLS = {0: "closed", 1: "laptop", 2: "slate", 3: "tablet"}
+POS_SOURCES = {0: "type-cover", 3: "SLS"}
+TABLET_KIP = {1, 4, 5, 6}
+
+
+def ioc(direction, typ, nr, size):
+    return (direction << 30) | (size << 16) | (ord(typ) << 8) | nr
+
+
+IOC_WRITE, IOC_READ = 1, 2
+SSAM_CDEV_REQUEST = ioc(IOC_WRITE | IOC_READ, "\xa5", 1, 40)
+SSAM_CDEV_NOTIF_REGISTER = ioc(IOC_WRITE, "\xa5", 2, 5)
+SSAM_CDEV_NOTIF_UNREGISTER = ioc(IOC_WRITE, "\xa5", 3, 5)
+SSAM_CDEV_EVENT_ENABLE = ioc(IOC_WRITE, "\xa5", 4, 7)
+SSAM_CDEV_EVENT_DISABLE = ioc(IOC_WRITE, "\xa5", 5, 7)
+
+
+def request(fd, tc, cid, payload=b"", resp_cap=64, iid=0):
+    """One SAM request; returns (status, response bytes)."""
+    pbuf = ctypes.create_string_buffer(payload, max(len(payload), 1))
+    rbuf = ctypes.create_string_buffer(resp_cap)
+    req = bytearray(struct.pack("<BBBBHhQH6xQH6x", tc, TID_SAM, cid, iid, REQ_HAS_RESPONSE, 0,
+                                ctypes.addressof(pbuf), len(payload), ctypes.addressof(rbuf), resp_cap))
+    fcntl.ioctl(fd, SSAM_CDEV_REQUEST, req, True)
+    status = struct.unpack_from("<h", req, 6)[0]
+    length = struct.unpack_from("<H", req, 32)[0]
+    return status, bytes(rbuf.raw[:length])
+
+
+def hexs(b):
+    return " ".join(f"{x:02x}" for x in b) or "(empty)"
+
+
+def ensure_device():
+    if not os.path.exists(DEV):
+        subprocess.run(["modprobe", "surface_aggregator_cdev"], check=False)
+        for _ in range(20):
+            if os.path.exists(DEV):
+                break
+            time.sleep(0.1)
+    if not os.path.exists(DEV):
+        sys.exit(f"{DEV} is missing: is surface_aggregator_cdev loaded (dmesg | grep -i aggregator)?")
+
+
+def switch_state():
+    """Current state of the kernel's tablet-mode switch (SW_TABLET_MODE = bit 1 of the EVIOCGSW bitmap)."""
+    name, handlers = None, None
+    for line in open("/proc/bus/input/devices"):
+        if line.startswith("N: Name="):
+            name = line.split("=", 1)[1].strip().strip('"')
+        elif line.startswith("H: Handlers="):
+            handlers = line.split("=", 1)[1].split()
+        elif line.strip() == "" and name and "Tablet Mode Switch" in name and handlers:
+            ev = [h for h in handlers if h.startswith("event")]
+            if ev:
+                node = f"/dev/input/{ev[0]}"
+                with open(node, "rb") as f:
+                    buf = bytearray(8)
+                    fcntl.ioctl(f, ioc(IOC_READ, "E", 0x1b, 8), buf, True)
+                state = (buf[0] >> 1) & 1
+                print(f"kernel switch '{name}' ({node}): SW_TABLET_MODE={state} ({'tablet' if state else 'laptop'})")
+                return
+            name, handlers = None, None
+        if line.strip() == "":
+            name, handlers = None, None
+    print("kernel switch: no input device named '... Tablet Mode Switch'")
+
+
+def query(fd):
+    st, r = request(fd, TC_KIP, 0x1d, resp_cap=8)
+    if st == 0 and r:
+        print(f"KIP cover state (0x0e/0x1d): status {st}, raw {hexs(r)} -> {KIP_COVER.get(r[0], '<unknown>')}"
+              f"{' (tablet mode)' if r[0] in TABLET_KIP else ''}")
+    else:
+        print(f"KIP cover state (0x0e/0x1d): status {st}, raw {hexs(r)}")
+    st, r = request(fd, TC_POS, 0x01, resp_cap=64)
+    print(f"POS sources (0x26/0x01): status {st}, raw {hexs(r)}")
+    if st == 0 and len(r) >= 4:
+        count = struct.unpack_from("<I", r, 0)[0]
+        ids = [struct.unpack_from("<I", r, 4 + 4 * i)[0] for i in range(min(count, (len(r) - 4) // 4))]
+        print(f"  {count} source(s): {ids}")
+        for sid in ids:
+            st2, r2 = request(fd, TC_POS, 0x02, payload=struct.pack("<I", sid), resp_cap=8)
+            val = struct.unpack_from("<I", r2, 0)[0] if st2 == 0 and len(r2) >= 4 else None
+            names = POS_SLS if sid == 3 else POS_COVER
+            print(f"  posture of source {sid} ({POS_SOURCES.get(sid, 'unknown')}) (0x26/0x02): status {st2}, "
+                  f"raw {hexs(r2)}" + (f" -> {names.get(val, '<unknown>')}" if val is not None else ""))
+    switch_state()
+
+
+def watch(fd, seconds):
+    descs = []
+    for tc in (TC_KIP, TC_POS):
+        fcntl.ioctl(fd, SSAM_CDEV_NOTIF_REGISTER, struct.pack("<iB", 1, tc))
+        desc = struct.pack("<BBBBBBB", TC_SAM, TID_SAM, 0x0b, 0x0c, tc, 0, EVENT_SEQUENCED)
+        fcntl.ioctl(fd, SSAM_CDEV_EVENT_ENABLE, desc)
+        descs.append((tc, desc))
+    print(f"watching KIP and POS events for {seconds}s: fold, detach or attach the keyboard now")
+    end = time.monotonic() + seconds
+    try:
+        while time.monotonic() < end:
+            ready, _, _ = select.select([fd], [], [], max(0.0, end - time.monotonic()))
+            if not ready:
+                continue
+            data = os.read(fd, 4096)
+            off = 0
+            while off + 6 <= len(data):
+                tc, tid, cid, iid, length = struct.unpack_from("<BBBBH", data, off)
+                payload = data[off + 6:off + 6 + length]
+                what = ""
+                if tc == TC_KIP and cid == 0x1d and payload:
+                    what = f" KIP cover state -> {KIP_COVER.get(payload[0], '<unknown>')}"
+                elif tc == TC_POS and cid == 0x03:
+                    what = " POS posture changed"
+                print(f"{time.strftime('%H:%M:%S')} event tc=0x{tc:02x} tid=0x{tid:02x} cid=0x{cid:02x} "
+                      f"iid=0x{iid:02x} payload {hexs(payload)}{what}")
+                off += 6 + length
+    finally:
+        for tc, desc in descs:
+            fcntl.ioctl(fd, SSAM_CDEV_EVENT_DISABLE, desc)
+            fcntl.ioctl(fd, SSAM_CDEV_NOTIF_UNREGISTER, struct.pack("<iB", 1, tc))
+
+
+def main():
+    if os.geteuid() != 0:
+        sys.exit("run as root: sudo python3 sp11-sam-posture [--watch SECONDS]")
+    seconds = 0
+    if len(sys.argv) >= 3 and sys.argv[1] == "--watch":
+        seconds = int(sys.argv[2])
+    ensure_device()
+    fd = os.open(DEV, os.O_RDWR)
+    try:
+        query(fd)
+        if seconds:
+            watch(fd, seconds)
+            print("after watching:")
+            query(fd)
+    finally:
+        os.close(fd)
+
+
+if __name__ == "__main__":
+    main()

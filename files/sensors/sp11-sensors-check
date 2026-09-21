@@ -18,12 +18,19 @@ sec "sensors: ADSP and FastRPC"; run ls -l /dev/fastrpc-adsp /dev/fastrpc-cdsp
 run sh -c 'for r in /sys/class/remoteproc/remoteproc*; do printf "%s %s %s\n" "$r" "$(cat "$r/name")" "$(cat "$r/state")"; done'
 run udevadm info /sys/class/misc/fastrpc-adsp
 sec "sensors: hexagonrpcd (root-side instance)"; run systemctl status hexagonrpcd-adsp-sensorspd.service --no-pager -l
-# The DSP's requests: the first 300 lines (attach, configuration, registry check) and the last 80 (what it did
-# last, and why the daemon stopped if it did).
+# systemd reports ~620-640 MB for the daemon after the boot's first attach (flat for hours, ~0.2 MB after a resume's
+# re-attach): whether that is anonymous memory, page cache, kernel memory or a DSP memory map request (apps_mem).
+run sh -c 'cg=/sys/fs/cgroup/system.slice/hexagonrpcd-adsp-sensorspd.service; echo "memory.current $(cat "$cg/memory.current")"; grep -E "^(anon|file|kernel|kernel_stack|pagetables|percpu|sock|vmalloc|shmem|file_mapped|file_dirty|slab|slab_reclaimable|slab_unreclaimable) " "$cg/memory.stat"'
+run sh -c 'p=$(systemctl show -p MainPID --value hexagonrpcd-adsp-sensorspd.service); [ "${p:-0}" != 0 ] || { echo "daemon not running"; exit 0; }; grep -E "^(VmPeak|VmSize|VmLck|VmPin|VmRSS|RssAnon|RssFile|RssShmem)" "/proc/$p/status"; echo "mappings: $(wc -l < "/proc/$p/maps")"; awk "\$6 != \"\" && \$6 !~ /\\.so|hexagonrpcd|^\\[(stack|vdso|vvar|vsyscall)\\]/" "/proc/$p/maps" | head -n 12'
+run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | grep -E '^mmap\(|Memory map failed|Unsupported mmap' | head -n 20 | grep . || echo 'no memory map request from the DSP in this boot'"
+# The DSP's requests: what it wrote, removed or renamed and every refusal (the reads are hundreds of lines), then
+# the first 120 lines (attach, configuration, registry check) and the last 40 (what it did last, and why the
+# daemon stopped if it did).
 run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | wc -l"
-run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | head -n 300"
-run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | tail -n 80"
-run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | grep -cE '^(openat|write|remove|rename|truncate)' || echo 0"
+run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | grep -E '^(openat\(.*, (w|a|r\+|w\+|a\+)b?\)|remove|rename|truncate|close\(|Could not|Unsupported|Refusing|Starting|Large)' | grep -vE '^close\(' | uniq -c | head -n 120"
+run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | grep -cE '^write\(' || echo 0"
+run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | head -n 120"
+run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | tail -n 40"
 run cat /run/sp11-sensors/attaches
 run systemctl status sp11-sensors-online.service --no-pager -l; run journalctl -b --no-pager -t sp11-sensors -n 20
 run ls -la @PAYLOAD_DIR@/sensors @PAYLOAD_DIR@/sensors/registry-parent @PAYLOAD_DIR@/socinfo
@@ -32,7 +39,10 @@ run sh -c 'ls @PAYLOAD_DIR@/sensors/registry | wc -l'
 # DIR marker), persist/registry the registry copy; the find lists what the DSP wrote since the package was installed.
 run ls -la /var/lib/sp11/hexagonrpc /var/lib/sp11/hexagonrpc/sensors /var/lib/sp11/hexagonrpc/sensors/persist
 run sh -c 'ls -la /var/lib/sp11/hexagonrpc/sensors/persist/registry | head -n 8; ls /var/lib/sp11/hexagonrpc/sensors/persist/registry | wc -l'
-run sh -c 'find /var/lib/sp11/hexagonrpc/sensors/persist -newer /usr/lib/tmpfiles.d/sp11-sensors.conf -type f | wc -l; find /var/lib/sp11/hexagonrpc/sensors/persist -newer /usr/lib/tmpfiles.d/sp11-sensors.conf -type f | head -n 20'
+# Files the DSP wrote since the daemon's attach in this boot. The reference is the guard's attach marker, written
+# seconds before the DSP writes with the same clock: the clock is hours behind at boot until NTP corrects it
+# (RTC set by Windows), so a file installed with the corrected clock is no usable reference.
+run sh -c 'ref=/run/sp11-sensors/attaches; [ -f "$ref" ] || ref=/usr/lib/tmpfiles.d/sp11-sensors.conf; echo "reference: $ref"; find /var/lib/sp11/hexagonrpc/sensors/persist -newer "$ref" -type f | wc -l; find /var/lib/sp11/hexagonrpc/sensors/persist -newer "$ref" -type f -printf "%TY-%Tm-%Td %TH:%TM %s %p\n" | head -n 20'
 run sh -c 'stat -c "%Y %n" /var/lib/sp11/hexagonrpc/sensors/config/8380_crd_lsm6dsv_display.json; grep -o "\"8380_crd_lsm6dsv_display.json\":{[^}]*}" /var/lib/sp11/hexagonrpc/sensors/persist/registry/sns_reg_config'
 sec "sensors: QRTR services"; run qrtr-lookup
 sec "sensors: readings (ssccli, up to 5 s each; no line = the registry lookup hung and timeout killed it)"
@@ -42,3 +52,18 @@ run journalctl -b --no-pager -u iio-sensor-proxy -n 40
 run timeout 5 monitor-sensor
 sec "sensors: SELinux"; run getenforce; run sh -c "semodule -l | grep -E '^sp11' || echo 'no sp11 module loaded'"
 run sh -c "journalctl -k -b --no-pager -g 'avc:  denied' | grep -E 'iiosensorproxy|hexagonrpc|fastrpc|qipcrtr' | tail -n 40"
+# GNOME shows the auto-rotate toggle only while mutter's panel-orientation-managed is true: touch mode (a
+# touchscreen, and a tablet-mode switch that is on, or no switch and no pointer device such as the keyboard's
+# touchpad, attached or over Bluetooth) plus iio-sensor-proxy's accelerometer plus the built-in panel. The kernel
+# registers "Microsoft Surface KIP Tablet Mode Switch" for this machine (surface_aggregator_tabletsw); whether it
+# exists and flips with the keyboard folded or detached is what this section shows. Run it in each keyboard state.
+sec "tablet mode (what GNOME needs for the auto-rotate toggle)"
+run sh -c "awk 'BEGIN{RS=\"\"} /B: SW=[0-9a-f]*[1-9a-f]/ {print; print \"\"}' /proc/bus/input/devices | grep -E '^(N|H|B: EV|B: SW)' || echo 'no input device with a switch (no tablet-mode switch)'"
+run sh -c "grep -E '^N: ' /proc/bus/input/devices"
+run sh -c "lsmod | grep -E '^surface_(aggregator|hid)' || echo 'no surface_aggregator modules loaded'"
+run sh -c "journalctl -k -b --no-pager | grep -iE 'surface_aggregator|ssam|tablet|cover state|posture' | tail -n 40"
+run sh -c "command -v libinput >/dev/null && libinput list-devices | grep -E '^(Device|Kernel|Capabilities|Tablet-mode)' || echo 'libinput not installed (sudo dnf install libinput-utils for libinput list-devices / debug-events)'"
+run sh -c "busctl --system get-property net.hadess.SensorProxy /net/hadess/SensorProxy net.hadess.SensorProxy HasAccelerometer"
+# mutter's property lives on the logged-in user's session bus; asked as that user when the check runs under sudo.
+run sh -c 'u=${SUDO_USER:-}; uid=$(id -u "$u" 2>/dev/null); if [ -n "$u" ] && [ -S "/run/user/$uid/bus" ]; then runuser -u "$u" -- env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" gdbus call --session --dest org.gnome.Mutter.DisplayConfig --object-path /org/gnome/Mutter/DisplayConfig --method org.freedesktop.DBus.Properties.Get org.gnome.Mutter.DisplayConfig PanelOrientationManaged; else echo "no session bus for ${u:-the calling user} (run from a terminal in the desktop session, with sudo)"; fi'
+run sh -c "bluetoothctl devices Connected 2>/dev/null || echo 'bluetoothctl unavailable'"

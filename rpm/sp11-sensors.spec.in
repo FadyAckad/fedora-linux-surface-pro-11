@@ -100,7 +100,26 @@ fi
 /etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf
 
 %changelog
-* Sat Sep 19 2026 SP11 build <sp11@localhost> - @VERSION@-1
+* Mon Sep 21 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- sp11-sensors-wait no longer restarts iio-sensor-proxy: a sensor type the proxy lacks (usually the compass,
+  published after its probe) is picked up by sending the proxy a udev "add" event for the FastRPC node, repeated
+  with a growing delay; the CDSP firmware had asserted during both boot-time restarts seen, while the proxy tore
+  its sensor streams down
+- sp11-sensors-check: the daemon's memory broken down (cgroup memory.stat, process status and mappings, the DSP's
+  memory map requests)
+
+* Mon Sep 21 2026 SP11 build <sp11@localhost> - 1.8-1
+- sp11-sensors-wait also waits for the compass (libssc's rotation-vector sensor, which comes up after the
+  physical sensors) and restarts iio-sensor-proxy when it lacks the accelerometer, the light sensor or the
+  compass; the proxy's single probe at boot had found no compass on two of three boots
+
+* Sun Sep 20 2026 SP11 build <sp11@localhost> - 1.7-1
+- sp11-sensors-check: a "tablet mode" section (switch input devices, Surface Aggregator modules and kernel
+  lines, libinput capabilities, iio-sensor-proxy's HasAccelerometer, mutter's PanelOrientationManaged, connected
+  Bluetooth devices) for the missing auto-rotate toggle; the DSP's write activity summarised instead of buried in
+  the log's head and tail; "files the DSP wrote" measured against the attach marker (same clock domain)
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 1.6-1
 - sns_reg_version and parsed_file_list.csv beside the registry copy (sensors/persist), where Windows keeps them
   and where the framework looks for them (served among the entries, it deleted them and tried to create
   sns_reg_version); the payload carries them in sensors/registry-parent

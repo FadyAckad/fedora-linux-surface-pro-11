@@ -94,6 +94,10 @@ check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-sensors"
 check as_root sh -c "chroot '$M' /usr/bin/dnf --dump-main-config 2>/dev/null | grep -E '^excludepkgs' | grep -q 'kernel-uki-'"
 check as_root sh -c "chroot '$M' /usr/bin/dnf --dump-main-config 2>/dev/null | grep -E '^excludepkgs' | grep -q 'iio-sensor-proxy'"
 for s in sp11-sensors-wait sp11-sensors-check; do check inroot /usr/bin/bash -n "/usr/libexec/sp11/$s"; done
+# The helper hands late sensors to the running proxy through a udev "add" event and never restarts it: the CDSP
+# firmware asserted while the proxy tore its sensor streams down (1.8, and 1.4 before it).
+check as_root grep -q 'udevadm trigger --action=add' "$M/usr/libexec/sp11/sp11-sensors-wait"
+check as_root sh -c "! grep -qE 'systemctl .*(restart|stop)' '$M/usr/libexec/sp11/sp11-sensors-wait'"
 
 ## 3b. The working directory the daemon serves (created by %post through tmpfiles): links into the package, a
 ##     registry copy the daemon's user can write, and the guard that keeps a DSP crash from becoming a loop.

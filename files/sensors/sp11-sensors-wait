@@ -1,36 +1,81 @@
 #!/usr/bin/bash
-# Wait until the ADSP's Snapdragon Sensor Core actually serves sensor data, then restart iio-sensor-proxy so its
-# SSC drivers find the sensors. The proxy probes them on the udev "add" of /dev/fastrpc-adsp, before the DSP has
-# read the registry through hexagonrpcd; a probe that early finds nothing, and the proxy does not look again. The
-# QMI service (400) is registered as soon as the framework starts, registry or not, so the probe reads a sensor:
-# ssccli prints "<Sensor> sensor measurement: ..." once the light sensor answers, and hangs in the registry lookup
-# otherwise (killed by timeout). Run by sp11-sensors-online.service.
+# Wait until the ADSP's Snapdragon Sensor Core actually serves sensor data, then make sure iio-sensor-proxy has found
+# the sensors, without restarting it. The proxy probes them once, on the udev "add" of /dev/fastrpc-adsp, when the DSP
+# may not have read its registry yet; the QMI service (400) is registered as soon as the framework starts, registry
+# or not, so readiness is a reading: ssccli prints "<Sensor> sensor measurement: ..." once a sensor answers, and hangs
+# in the registry lookup otherwise (killed by timeout). Run by sp11-sensors-online.service.
+#
+# With a registry that needs no re-parse the proxy's own probe finds the accelerometer and the light sensor, but
+# usually not the compass: libssc builds it from the DSP's rotation-vector fusion sensor, which the framework
+# publishes a few seconds after the physical sensors. Up to 1.8 the proxy was restarted to probe again; the CDSP
+# firmware asserted (sleep_statsi.c:537) within 60-130 ms of both boot-time restarts seen, while the proxy was
+# tearing its sensor streams down, and a restart also drops every client's claim. The proxy probes again, for the
+# sensor types it lacks and one per event, when it receives an "add" event for the node, and its probe only looks
+# the sensor up, without enabling a stream. So this sends it that event (a synthetic uevent), repeated with a growing
+# delay until the proxy has all three sensors or the time is up. systemd starts the node's SYSTEMD_WANTS units again
+# on an "add": the event is sent only while hexagonrpcd and the proxy run, and this unit's own start job merges with
+# the run in progress.
 set -u
-LIMIT=${SP11_SENSORS_WAIT:-120}               # seconds
-PROBE_SENSOR=${SP11_SENSORS_PROBE:-light}
-# The proxy's own probe on the udev "add" succeeds when the framework is up within the second (a registry that needs
-# no re-parse); a restart then only closes and reopens every sensor stream, so it is skipped when the proxy already
-# exposes an accelerometer and a light sensor (on this machine only the Sensor Core provides them).
-proxy_has_sensors() {
-  local p
-  for p in HasAccelerometer HasAmbientLight; do
-    busctl --system get-property net.hadess.SensorProxy /net/hadess/SensorProxy net.hadess.SensorProxy "$p" 2>/dev/null \
-      | grep -q '^b true$' || return 1
-  done
+LIMIT=${SP11_SENSORS_WAIT:-120}               # seconds, for the light reading and the proxy's sensors together
+NODE=/sys/class/misc/fastrpc-adsp
+PROXY=iio-sensor-proxy.service
+DAEMON=hexagonrpcd-adsp-sensorspd.service
+
+serves() { timeout 8 stdbuf -oL ssccli --sensor "$1" --timeout 4 2>/dev/null | grep -q 'sensor measurement:'; }
+proxy_has() { # OBJECT INTERFACE PROPERTY
+  busctl --system get-property net.hadess.SensorProxy "$1" "$2" "$3" 2>/dev/null | grep -q '^b true$'
 }
-while :; do
-  if timeout 8 stdbuf -oL ssccli --sensor "$PROBE_SENSOR" --timeout 4 2>/dev/null | grep -q 'sensor measurement:'; then
-    if proxy_has_sensors; then
-      logger -t sp11-sensors "Snapdragon Sensor Core serves the $PROBE_SENSOR sensor after ${SECONDS}s; iio-sensor-proxy already has the sensors, no restart"
-    else
-      logger -t sp11-sensors "Snapdragon Sensor Core serves the $PROBE_SENSOR sensor after ${SECONDS}s; restarting iio-sensor-proxy"
-      systemctl try-restart iio-sensor-proxy.service || :
-    fi
-    exit 0
-  fi
+missing_in_proxy() {
+  local m=""
+  proxy_has /net/hadess/SensorProxy net.hadess.SensorProxy HasAccelerometer || m="$m accelerometer"
+  proxy_has /net/hadess/SensorProxy net.hadess.SensorProxy HasAmbientLight || m="$m light"
+  proxy_has /net/hadess/SensorProxy/Compass net.hadess.SensorProxy.Compass HasCompass || m="$m compass"
+  echo "${m# }"
+}
+# Up to 3 s for the proxy to pick up what it lacked (an SSC sensor's lookup takes well under a second).
+proxy_complete() {
+  local i
+  for i in 1 2 3 4 5 6; do
+    sleep 0.5
+    missing=$(missing_in_proxy)
+    [ -z "$missing" ] && return 0
+  done
+  return 1
+}
+
+until serves light; do
   if [ "$SECONDS" -ge "$LIMIT" ]; then
-    logger -t sp11-sensors "no reading from the $PROBE_SENSOR sensor within ${LIMIT}s: the sensor framework did not initialise with a file server attached (see sp11-sensors-check: boot timeline, hexagonrpcd log)"
+    logger -t sp11-sensors "no reading from the light sensor within ${LIMIT}s: the sensor framework did not initialise with a file server attached (see sp11-sensors-check: boot timeline, hexagonrpcd log)"
     exit 1
   fi
   sleep 2
 done
+ready="Snapdragon Sensor Core serves light after ${SECONDS}s"
+
+missing=$(missing_in_proxy)
+if [ -z "$missing" ]; then
+  logger -t sp11-sensors "$ready; iio-sensor-proxy has the accelerometer, the light sensor and the compass"
+  exit 0
+fi
+lacked=$missing; probes=0; delay=2
+while :; do
+  if ! systemctl -q is-active "$PROXY"; then
+    # Not running (it exits when its probe finds nothing): starting it tears nothing down.
+    systemctl --no-block start "$PROXY" || :
+  elif systemctl -q is-active "$DAEMON"; then
+    timeout 20 udevadm trigger --action=add --settle "$NODE" && probes=$((probes + 1))
+  else
+    logger -t sp11-sensors "$ready; iio-sensor-proxy lacks: $missing; hexagonrpcd is not running, no re-probe"
+    exit 0
+  fi
+  proxy_complete && break
+  [ "$SECONDS" -lt "$LIMIT" ] || break
+  sleep "$delay"
+  [ "$delay" -ge 16 ] || delay=$((delay * 2))
+done
+if [ -z "$missing" ]; then
+  logger -t sp11-sensors "$ready; iio-sensor-proxy lacked: $lacked; complete after $probes re-probe(s) through udev, at ${SECONDS}s"
+else
+  logger -t sp11-sensors "$ready; iio-sensor-proxy still lacks: $missing after $probes re-probe(s) through udev within ${LIMIT}s (lacked: $lacked); not restarted"
+fi
+exit 0

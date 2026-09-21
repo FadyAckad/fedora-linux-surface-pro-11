@@ -1,8 +1,9 @@
 #!/usr/bin/bash
 # Step 3: produce the kernel-sp11 RPM (kernel image, modules, Denali DTBs).
 #   KERNEL_MODE=build    compile natively from ooaklee's source tarball with ooaklee's annotations config,
-#                        plus the kernel.org stable patch KERNEL_STABLE_VERSION and the config policy
-#                        fragment (KERNEL_CONFIG_REV: Fedora's LSM stack, no Ubuntu-only modules) when set
+#                        plus the kernel.org stable patch KERNEL_STABLE_VERSION and, with KERNEL_SP11_REV set, this
+#                        repository's config policy fragment (Fedora's LSM stack, no Ubuntu-only modules) and
+#                        source patches (files/$KERNEL_PATCH_DIR)
 #   KERNEL_MODE=prebuilt repackage ooaklee's released .deb payload
 . "$(dirname "$0")/lib.sh"
 require_cmd make gcc python3 depmod tar ar rpmbuild zstd xz patch
@@ -48,7 +49,7 @@ stage_common() {
   # (A path filter on the module root, not a find in kernel/ubuntu: that directory is absent once the policy is
   # on, and a find on a missing directory fails, which under pipefail ends the script without a message.)
   local ubuntu_mods; ubuntu_mods=$(find "$MODDIR/kernel" -path '*/kernel/ubuntu/*' -name '*.ko*' | wc -l)
-  if [ "$ubuntu_mods" -gt 0 ] && [ -n "$KERNEL_CONFIG_REV" ]; then
+  if [ "$ubuntu_mods" -gt 0 ] && [ -n "$KERNEL_SP11_REV" ]; then
     die "$ubuntu_mods Ubuntu-only module(s) under kernel/ubuntu in the payload"
   elif [ "$ubuntu_mods" -gt 0 ]; then
     warn "$ubuntu_mods Ubuntu-only module(s) under kernel/ubuntu in the payload (ooaklee's config as published)"
@@ -57,6 +58,48 @@ stage_common() {
   dtb_compat=$(fdtget -t s "$MODDIR/dtb/$SP11_DTB" / compatible 2>/dev/null || true)
   [[ $dtb_compat == *microsoft,denali-oled* ]] || die "DTB compatible check failed: '$dtb_compat'"
   log "payload staged: $(du -sh "$PAYLOAD" | cut -f1), $(find "$MODDIR/kernel" -name '*.ko*' | wc -l) modules, DTB compatible: $dtb_compat"
+}
+
+# This repository's source patches (files/$KERNEL_PATCH_DIR/*.patch, name order, part of KERNEL_SP11_REV). The tree
+# keeps copies of the set it carries in .sp11-patches/: an unchanged set is left alone, a changed one is taken out
+# again (patch -R, newest first) before the current set goes in, so a built tree stays built and make recompiles
+# only what the patches touch. KERNEL_SP11_REV= takes every patch out (ooaklee's release as published).
+apply_local_patches() {
+  local src=$1 dir="$1/.sp11-patches" plog="$KDIR/local-patches.log" want=() have=() p i same=1
+  if [ -n "$KERNEL_SP11_REV" ]; then
+    for p in "$FILES_DIR/$KERNEL_PATCH_DIR"/*.patch; do [ -f "$p" ] && want+=("$p"); done
+  fi
+  if [ -d "$dir" ]; then
+    for p in "$dir"/*.patch; do [ -f "$p" ] && have+=("$p"); done
+  fi
+  if [ "${#want[@]}" -eq "${#have[@]}" ]; then
+    for i in "${!want[@]}"; do
+      if [ "$(basename "${want[$i]}")" != "$(basename "${have[$i]}")" ] || ! cmp -s "${want[$i]}" "${have[$i]}"; then
+        same=0; break
+      fi
+    done
+    if [ "$same" = 1 ]; then
+      [ "${#want[@]}" -eq 0 ] || log "local patches already in the tree: $(for p in "${want[@]}"; do basename "$p"; done | tr '\n' ' ')"
+      return 0
+    fi
+  fi
+  : >"$plog"
+  # -R with --forward: a hunk that is not applied is an error, never a silent forward application.
+  for (( i=${#have[@]}-1; i>=0; i-- )); do
+    patch -d "$src" -p1 -R --batch --forward --fuzz=0 --no-backup-if-mismatch <"${have[$i]}" >>"$plog" 2>&1 \
+      || die "cannot take $(basename "${have[$i]}") out of $src again (log: $plog); delete the tree to start over"
+    rm -f "${have[$i]}"
+    log "local patch taken out: $(basename "${have[$i]}")"
+  done
+  [ "${#want[@]}" -gt 0 ] || { rmdir "$dir" 2>/dev/null || true; return 0; }
+  mkdir -p "$dir"
+  for p in "${want[@]}"; do
+    patch -d "$src" -p1 --batch --forward --fuzz=0 --no-backup-if-mismatch <"$p" >>"$plog" 2>&1 \
+      || { grep -E 'FAILED|Reversed|can.t find|malformed' "$plog" | head -20 >&2 || true
+           die "$(basename "$p") does not apply to $src (log: $plog)"; }
+    cp "$p" "$dir/"
+    log "local patch applied: $(basename "$p")"
+  done
 }
 
 build_from_source() {
@@ -83,6 +126,7 @@ build_from_source() {
   elif [ ! -f "$src/Makefile" ]; then
     log "extracting kernel source"; mkdir -p "$KDIR/src"; tar -xzf "$tarball" -C "$KDIR/src"
   fi
+  apply_local_patches "$src"
   [ -f "$src/debian.$KERNEL_FLAVOUR/config/annotations" ] || die "no debian.$KERNEL_FLAVOUR/config/annotations in source"
   cd "$src"
   local localversion="${KERNEL_ABI#"$KERNEL_BUILD_VERSION"}"   # e.g. -jg-0sp11v23-qcom-x1e
@@ -95,11 +139,11 @@ build_from_source() {
   scripts/config --disable LOCALVERSION_AUTO
   scripts/config --set-str VERSION_SIGNATURE "SP11 $KERNEL_ABI (ooaklee ${KERNEL_SOURCE_COMMIT:0:12}${KERNEL_STABLE_VERSION:+ + stable $KERNEL_STABLE_VERSION}, built on Fedora $(rpm -E %{fedora}))"
   scripts/config --disable CRYPTO_FIPS
-  if [ -n "$KERNEL_CONFIG_REV" ]; then
+  if [ -n "$KERNEL_SP11_REV" ]; then
     # Config policy (Fedora's LSM stack, Ubuntu-only modules off) as a Kconfig fragment: -m merges it into
     # .config without running make, olddefconfig below resolves the dependencies, and the fragment is asserted
     # against the result (merge_config.sh checks its own values only when it runs make itself).
-    log "merging config policy rev $KERNEL_CONFIG_REV: files/$KERNEL_CONFIG_FRAGMENT"
+    log "merging config policy (SP11 revision $KERNEL_SP11_REV): files/$KERNEL_CONFIG_FRAGMENT"
     scripts/kconfig/merge_config.sh -m .config "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" >"$KDIR/config-merge.log" 2>&1 \
       || { cat "$KDIR/config-merge.log" >&2; die "merge_config.sh failed"; }
   fi
@@ -109,9 +153,9 @@ build_from_source() {
   make -s syncconfig
   [ "$(make -s kernelrelease)" = "$KERNEL_ABI" ] || die "kernelrelease '$(make -s kernelrelease)' != '$KERNEL_ABI'"
   check_config .config
-  if [ -n "$KERNEL_CONFIG_REV" ]; then
+  if [ -n "$KERNEL_SP11_REV" ]; then
     config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" .config || die "config policy did not survive olddefconfig"
-    log "config policy rev $KERNEL_CONFIG_REV holds: $(sed -n 's/^CONFIG_LSM=//p' .config)"
+    log "config policy (SP11 revision $KERNEL_SP11_REV) holds: $(sed -n 's/^CONFIG_LSM=//p' .config)"
   fi
 
   log "building kernel $KERNEL_ABI with $KERNEL_JOBS jobs (log: $KDIR/build.log)"
@@ -168,7 +212,8 @@ RPM=$(build_rpm "$SPEC_DIR/kernel-sp11.spec.in" kernel-sp11 "$KDIR" \
   ABI="$KERNEL_ABI" KVER="$KERNEL_BUILD_VERSION" KREL="$KERNEL_RPM_RELEASE" PAYLOAD="$PAYLOAD" \
   MODE="$KERNEL_MODE" COMMIT="$KERNEL_SOURCE_COMMIT" RELEASE_TAG="$KERNEL_RELEASE_TAG" \
   STABLE="${KERNEL_STABLE_VERSION:+, kernel.org stable patch-$KERNEL_STABLE_VERSION}" \
-  POLICY="${KERNEL_CONFIG_REV:+, config policy rev $KERNEL_CONFIG_REV: Fedora LSM stack, no Ubuntu-only modules}")
+  POLICY="${KERNEL_SP11_REV:+, SP11 revision $KERNEL_SP11_REV: Fedora LSM stack, no Ubuntu-only modules$(
+    for p in "$FILES_DIR/$KERNEL_PATCH_DIR"/*.patch; do [ -f "$p" ] && printf ', %s' "$(basename "$p" .patch)"; done)}")
 rpm -qp --provides "$RPM" | grep -x 'kernel-uname-r' >/dev/null || die "RPM lacks kernel-uname-r provide"
 rpm -qpl "$RPM" | grep -x "/boot/vmlinuz-$KERNEL_ABI" >/dev/null || die "RPM lacks /boot/vmlinuz-$KERNEL_ABI"
 log "kernel RPM: $RPM ($(du -h "$RPM" | cut -f1))"

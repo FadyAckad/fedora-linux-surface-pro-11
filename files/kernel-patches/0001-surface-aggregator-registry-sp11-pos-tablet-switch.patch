@@ -1,0 +1,34 @@
+platform/surface: aggregator_registry: Use the POS tablet switch on the Surface Pro 11
+
+The Surface Pro 11 registers the KIP tablet-mode switch, which reads the
+keyboard cover state once at probe (KIP 0x0e, command 0x1d) and then waits
+for the KIP cover-state event with the same command id. This machine's
+Surface Aggregator firmware never sends that event. Watched through
+/dev/surface/aggregator while the Flex Keyboard was detached, re-attached,
+folded back and unfolded, it sent a POS posture event (category 0x26,
+command 0x03, payload: source, previous posture, new posture) for every
+change and KIP events only with command 0x2c. Both the KIP cover-state
+query and the POS posture query return the right state at any time
+(laptop, disconnected, folded-back), but the KIP switch never re-reads it,
+so SW_TABLET_MODE stays at whatever it was at boot, the desktop never
+enters tablet mode and hides its auto-rotation control.
+
+Use the POS switch instead, as the Surface Pro 12" does: it asks the
+aggregator for its posture sources (one here: the type cover) and the
+posture of each, and re-reads them on every POS posture event.
+
+While the keyboard is being attached the type-cover posture reads 0x00 for
+a few seconds before the real state; the POS driver logs it as an unknown
+posture and treats it as tablet mode, which is the mode the device is
+already in while the keyboard is detached.
+
+--- a/drivers/platform/surface/surface_aggregator_registry.c
++++ b/drivers/platform/surface/surface_aggregator_registry.c
+@@ -431,7 +431,7 @@
+ 	&ssam_node_hid_kip_touchpad,
+ 	&ssam_node_hid_kip_fwupd,
+ 	&ssam_node_hid_sam_sensors,
+-	&ssam_node_kip_tablet_switch,
++	&ssam_node_pos_tablet_switch,
+ 	NULL,
+ };
