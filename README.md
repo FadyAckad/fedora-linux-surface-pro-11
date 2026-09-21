@@ -271,8 +271,8 @@ sudo dnf install ./hexagonrpc-*.rpm ./libssc-0*.rpm ./iio-sensor-proxy-*.rpm ./s
 ```
 
 The framework re-reads its registry every time the file server attaches and writes into it while doing so, so
-`hexagonrpcd` is built with a patch that serves those writes (upstream refuses them, and this firmware then
-aborts the ADSP) into a copy of the registry under `/var/lib/sp11/hexagonrpc/sensors/persist`; `sudo
+`hexagonrpcd` is built from this project's fork, which serves those writes (upstream refuses them, and this
+firmware then aborts the ADSP) into a copy of the registry under `/var/lib/sp11/hexagonrpc/sensors/persist`; `sudo
 sp11-sensors-reset` rebuilds that copy from the package. The framework compares the modification time of every
 configuration file with the stamp it recorded when it parsed the file, so the package ships the files with
 Windows' times. A guard on the daemon's unit stops it from attaching again after an ADSP
@@ -414,9 +414,10 @@ nothing third-party is stored in the repository:
 - Wi-Fi board data: `board-2.bin` from Fedora's `atheros-firmware`, extracted with `ath12k-bdencoder`
   from [qca/qca-swiss-army-knife](https://github.com/qca/qca-swiss-army-knife).
 - Sensors: [linux-msm/hexagonrpc](https://github.com/linux-msm/hexagonrpc) (GPL-3.0-or-later), built from
-  [this project's fork](https://github.com/FadyAckad/hexagonrpc), branch `sp11-sensors`: upstream plus four
+  [this project's fork](https://github.com/FadyAckad/hexagonrpc), branch `sp11-sensors`: upstream plus five
   commits (the sensor framework's registry writes, requests longer than 256 bytes, the registry's parent
-  directory; meant for upstream, see its issue #19 and pull request #21),
+  directory, and the fixes those write paths needed; meant for upstream, see its issue #19 and pull
+  request #21),
   [DylanVanAssche/libssc](https://codeberg.org/DylanVanAssche/libssc) (GPL-3.0-or-later) and Fedora's
   `iio-sensor-proxy` source RPM (GPL-3.0-or-later), the latter two unmodified; the approach follows
   [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The sensor configuration

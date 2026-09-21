@@ -154,6 +154,9 @@ check as_root sh -c "grep -q 'Could not write file' '$M/usr/bin/hexagonrpcd'"
 check as_root sh -c "grep -q 'Could not fetch large input buffers' '$M/usr/bin/hexagonrpcd'"
 check as_root sh -c "! grep -q \"Large (>256B) input buffers aren't implemented\" '$M/usr/bin/hexagonrpcd'"
 check as_root sh -c "grep -q '/sensors/persist/' '$M/usr/bin/hexagonrpcd'"
+# Release 6 probes the registry itself, not just its parent: a persist directory without one would otherwise
+# hide the packaged registry behind a directory nothing can create at runtime.
+check as_root sh -c "grep -q '/sensors/persist/registry' '$M/usr/bin/hexagonrpcd'"
 check as_root test ! -e "$M/usr/lib/dracut/modules.d/95sp11-sensors"
 
 ## 4. Payload: what the DSP will read, readable by the fastrpc user.
@@ -246,6 +249,7 @@ if [ -n "${SENSORS_PREVIOUS_RPMS:-}" ]; then
   check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-sensors"
   check as_root sh -c "grep -q 'Could not remove' '$M/usr/bin/hexagonrpcd'"
   check as_root sh -c "grep -q 'Could not fetch large input buffers' '$M/usr/bin/hexagonrpcd'"
+  check as_root sh -c "grep -q '/sensors/persist/registry' '$M/usr/bin/hexagonrpcd'"
   check as_root test -x "$M/usr/libexec/sp11/sp11-sensors-guard"
   check as_root test -x "$M/usr/libexec/sp11/sp11-sensors-reset"
   check as_root sh -c "chroot '$M' /usr/bin/rpm -qf /usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-sp11.conf | grep -q '^sp11-sensors-'"

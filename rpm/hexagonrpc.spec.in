@@ -11,9 +11,10 @@ URL:            https://github.com/linux-msm/hexagonrpc
 Source0:        hexagonrpc-%{commit}.tar.gz
 Source1:        hexagonrpc.sysusers.conf
 Source2:        60-hexagonrpc-fastrpc.rules
-# Registry writes for the Snapdragon Sensor Core (fopen for writing, fwrite, fremove, ftrunc, frename, fsync),
-# and unsupported requests answered with an error instead of ending the session: the sensor framework aborts
-# the whole ADSP when its registry directory refuses a write (seen on the Surface Pro 11, 2026-09-19).
+# There is no patch: the fork carries the registry writes the Snapdragon Sensor Core needs (fopen for writing,
+# fwrite, fremove, ftrunc, frename, fsync) and answers unsupported requests with an error instead of ending the
+# session; the sensor framework aborts the whole ADSP when its registry directory refuses a write (seen on the
+# Surface Pro 11, 2026-09-19).
 ExclusiveArch:  aarch64
 
 BuildRequires:  gcc
@@ -35,9 +36,10 @@ or the sensors protection domain of the ADSP or SDSP and serves a directory tree
 (hexagonrpcd -R, /usr/share/qcom/<soc>/<vendor>/<device> by convention).
 Commit %{commit} of the project's fork of linux-msm/hexagonrpc (branch
 sp11-sensors: upstream 598b591 plus the sensor framework's write support, the
-listener's large-buffer fetch and the registry's parent directory, meant for
-upstream). This build adds the fastrpc system user the units run as and a udev
-rule that lets it open the FastRPC nodes.
+listener's large-buffer fetch, the registry's parent directory and the fixes
+those write paths needed, meant for upstream). This build adds the fastrpc
+system user the units run as and a udev rule that lets it open the FastRPC
+nodes.
 
 %prep
 %autosetup -n hexagonrpc-%{commit}
@@ -62,6 +64,11 @@ install -D -m 0755 %{_vpath_builddir}/tools/sscregistrygen %{buildroot}%{_bindir
 rm -f %{buildroot}%{_libdir}/libhexagonrpc.so
 install -D -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/hexagonrpc.conf
 install -D -m 0644 %{SOURCE2} %{buildroot}%{_udevrulesdir}/60-hexagonrpc-fastrpc.rules
+
+%check
+# Upstream's unit tests, two of which compile the files this fork changes (iobuffer.c; hexagonfs.c and
+# hexagonfs_mapped.c), so a regression in the branch fails the build instead of reaching the DSP.
+%meson_test
 
 %pre
 %sysusers_create_compat %{SOURCE1}
@@ -90,7 +97,19 @@ install -D -m 0644 %{SOURCE2} %{buildroot}%{_udevrulesdir}/60-hexagonrpc-fastrpc
 %{_udevrulesdir}/60-hexagonrpc-fastrpc.rules
 
 %changelog
-* Sun Sep 20 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+* Mon Sep 21 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+- Fixes to the write paths the branch added: hexagonfs_close destroys a descriptor only on its last reference
+  (a walk ending on ".", ".." or the search directory hands out a second file number for the same descriptor,
+  so the close in create/unlink/rename freed one still held elsewhere) and deinit closes descendants before the
+  root; the empty-directory backend answers write and truncate with -ENOENT instead of dereferencing a NULL
+  context; outbufs_calculate_size no longer pads zero-length buffers outbufs_encode never writes, and
+  alloc_outbufs4 skips the method id an extended method carries in the first primitive word; "+" no longer
+  implies O_CREAT and falls back to a read-only open on an unwritable tree; stat reports the write bit only
+  when the backing file has it; mapped writes loop until done; the persist layout is probed at
+  DIR/sensors/persist/registry rather than at its parent
+- Run upstream's unit tests in the buildroot (%%check)
+
+* Sun Sep 20 2026 SP11 build <sp11@localhost> - 0.5.0-4.git7a7c4f1.sp11
 - Built from the project's fork of hexagonrpc (branch sp11-sensors: upstream 598b591 plus the four commits the
   0.5.0-2 and 0.5.0-3 patch consisted of); no patch, same code as 0.5.0-3
 

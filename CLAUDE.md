@@ -681,7 +681,9 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
   on 2026-09-20 (head 7a7c4f1, the four commits with the owner as author and committer, no other trailer); since
   then `HEXAGONRPC_REPO`/`HEXAGONRPC_COMMIT` point at the fork, `Patch0` and the patch file are gone, the release
   is `4.git7a7c4f1.sp11` (the numeric part must rise: rpm compares `git<hash>` as a string), and step 46's
-  upgrade section covers 0.5.0-3 → 0.5.0-4 with `sp11-sensors` 1.6 kept.
+  upgrade section covers 0.5.0-3 → 0.5.0-4 with `sp11-sensors` 1.6 kept. A fifth commit followed the same day
+  (head `79d1bed`, release `6.git79d1bed.sp11`): fixes to the write paths the other four added, on the device
+  since 2026-09-21 — see the round-7 bullets below.
 - Fifth device run (hexagonrpc 0.5.0-3 + `sp11-sensors` 1.6, 2026-09-20 00:17, check at 00:20): **the stack
   works as designed.** Node at 17.9 s, attach at 18.5 s (guard 0, attach count 1), the daemon `active (running)`
   two hours later. The DSP read `sns_reg_config`, then the whole `sns_secure_database.bin` (75 reads of 512 plus
@@ -702,6 +704,49 @@ dosfstools and python3-hivex, which the stock WSL image lacks.
 - Unknowns after the fifth run: the portrait orientations (x flip inferred, not yet reported), suspend/resume
   with the writing daemon (the resume unit re-attaches; the DSP then checks its own persisted registry), whether
   the CDSP assert stays away, AVCs beyond `qipcrtr_socket`.
+- Round 7 (hexagonrpc 0.5.0-6, `sp11-sensors` unchanged): the write support of rounds 4 and 5 had defects that
+  review found afterwards, none of which the device ran. `hexagonfs_close` destroyed a descriptor while a
+  second file number still referenced it (a walk ending on `.`, `..` or the search directory hands one out),
+  which is exactly what the close inside create/unlink/rename freed, and `fastrpc_apps_std_deinit` ascended
+  from the root although destroying a descriptor walks its `->up` chain; `hexagonfs_mapped_or_empty_ops`
+  pointed `.write`/`.truncate` at the implementations that dereference a NULL context, so a write to an absent
+  mapped directory dereferenced NULL instead of returning `-ENOENT`; `outbufs_calculate_size` padded
+  zero-length buffers `outbufs_encode` never writes (an overstated length and uninitialised bytes on the wire)
+  and `alloc_outbufs4` did not skip the method id an extended method carries in the first primitive word;
+  `'+'` implied `O_CREAT`; `stat` claimed the write bit for read-only files, which sends the DSP down a write
+  path that can only fail; a short `write(2)` was reported as an error; and the persist layout was probed at
+  `DIR/sensors/persist` rather than at the registry inside it, so a persist directory without one would hide
+  the packaged registry behind a tree nothing can create at runtime. `rpm/hexagonrpc.spec.in` gained a
+  `%check` running upstream's three unit tests in the buildroot (two of them compile the changed files:
+  `iobuffer.c`, and `hexagonfs.c` with `hexagonfs_mapped.c`), and step 46 asserts the new probe constant in
+  the daemon. Nothing under `files/sensors/` had to change — the tmpfiles file already creates
+  `…/sensors/persist/registry`, which is what the stricter probe needs — so the rebuilt `sp11-sensors` is
+  payload-identical (`rpm -qp --dump`: same paths, sizes and digests) to the one on the device and is not
+  handed over. The fork's commit was amended the same evening (2026-09-20 22:28) before anything was handed
+  over (head `79d1bed`, comment wording only, no code line changed), hence release 6 rather than 5.
+- Round 7 result (hexagonrpc 0.5.0-6 on the device, 2026-09-21, checks at 10:00 and, after three
+  suspend/resume cycles, 10:03): **the write paths hold, and the stack survives suspend.** The daemon started
+  at 19.1 s; the DSP read `sns_reg_config`, kept the registry (no `remove(` line) and, all within a second of
+  the attach, made the same per-boot writes Windows makes: the `DIR` marker, `parsed_file_list.csv` (15478
+  bytes), `sns_secure_database.bin` (38521 bytes, three times), `sns_ccd.json.ccd_te0_sensor0` (815 bytes) and
+  `qsh_camera.dbg_flags` (295 bytes). The last two carry 2026-09-19 dates in the Windows export while the
+  other `sns_ccd`/`qsh_camera` entries date from 2026-06-02, so Windows refreshes them on every boot as well.
+  Refused with ENOENT, the DSP continuing past each: `oemconfig.so` and `sns_tppe.so` (DSP libraries, which
+  hexagonrpcd deliberately does not serve) and `c:/Data/test/cam_registry_dump.txt` (a camera debug dump to a
+  Windows path); no `Unsupported`, `Refusing` or `Large` line. All five sensors streamed, `monitor-sensor`
+  reported orientation `normal`, tilt and light, SELinux enforcing without an AVC for the stack's domains, no
+  ADSP crash. Suspend/resume (open since the fifth run): the daemon stopped with each suspend
+  (`Conflicts=suspend.target`) and `sp11-sensors-resume` restarted it (attach count 4); on those re-attaches
+  the DSP made no file request at all (263 `write(` lines in both checks, no file newer than the attach
+  marker), because it does its registry work once per ADSP boot and the ADSP stays up through suspend; after
+  the third resume all five sensors streamed again, no ADSP crash. One CDSP crash, `sleep_statsi.c:537` at
+  149.95 s, recovered in 136 ms, before any suspend and ~130 s after the daemon's last request; through the
+  boot clock's two-hour offset it falls within about a second of the first check closing its magnetometer
+  stream and opening the compass stream. It is the same assert as in the fourth device run (130 ms after
+  iio-sensor-proxy's restart closed every stream) and in round 3, and the fifth run's check ran the same
+  streams without it: a CDSP firmware fault triggered intermittently by sensor streams starting or stopping on
+  the ADSP, not by the daemon or by suspend. Nothing on Linux uses the CDSP (`/dev/fastrpc-cdsp` has no
+  client) and no stream was interrupted; tracked, not fixed.
 
 ## Bluetooth dual-boot pairings
 
@@ -813,6 +858,15 @@ patch left the repository: `hexagonrpc-0.5.0-4.git7a7c4f1.sp11` is built from th
 included), and against 0.5.0-3 the daemon's and the library's `.text` sections are byte-identical, the
 section list and sizes equal, only the build ids and rpm's package note differ; handed over as round 6
 (optional on the device, which runs the identical 0.5.0-3).
+Round 7 (2026-09-21): `hexagonrpc-0.5.0-6.git79d1bed.sp11` alone — fixes to the write paths of rounds 4 and 5
+(descriptor lifetimes, the write operations of an absent mapped directory, the encoded output buffers, the `+`
+mode, the reported write bit, short writes, and the persist probe), with upstream's unit tests now run in the
+buildroot (`%check`, 3/3). 45+46 pass with no failure (127 `ok` lines; earlier rounds' counts predate the two
+checks added here and are not comparable), the upgrade from 0.5.0-4 with the `sp11-sensors` package kept
+included; the rebuilt package is payload-identical to the installed one, so only the daemon was handed over.
+Ran on the device on 2026-09-21: registry kept, every per-boot write served, all five sensors streaming, and
+intact through three suspend/resume cycles (the DSP makes no file request on a re-attach); one CDSP
+`sleep_statsi.c:537` assert at a sensor stream change, recovered in 136 ms, not caused by the daemon.
 
 ## References
 
