@@ -469,8 +469,10 @@ kernel.org's `sha256sums.asc`) or clear it.
   `sp11-sam-posture`, an unpackaged probe of the Surface Aggregator's cover and posture state).
 - `images/`: the screenshot above.
 - `LICENSE`: GPL-3.0-or-later for the repository's own content (see License and credits).
-- `CLAUDE.md`: working notes with verified facts about the hardware, the Fedora media and pipeline
-  pitfalls.
+- `CLAUDE.md`: entry point of the working notes (the index of `docs/`, rules for every session, references).
+- `docs/`: the working notes by topic (`pipeline.md`, `hardware.md`, `kernel.md`, `fedora-media.md`,
+  `sensors.md`, `verified.md`): verified facts about the hardware, the Fedora media and the pipeline, its
+  pitfalls, and what has been confirmed on the device, by date.
 - `.gitattributes`: LF line endings for every file; the payload scripts break with CRLF.
 - `build/`: caches, work trees, RPMs and output ISOs (git-ignored). `build/hardware.env`,
   `build/bt-pairings/` and `build/sensors/` hold your unit's identity, pairing keys and sensor calibration;

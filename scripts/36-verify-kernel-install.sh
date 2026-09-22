@@ -97,8 +97,8 @@ as_root rm -f "$M/.autorelabel"
 as_root mkdir -p "$M/boot/loader/entries" "$M/boot/grub2"
 as_root tee "$M/etc/kernel/install.conf" >/dev/null <<<"initrd_generator=none"
 # kernel-install exits non-zero in a chroot (95-set-boot-entry.install wants the entry's initramfs, which this
-# entry is written without, see CLAUDE.md) although 20-grub.install has written the entry; the RPM's %posttrans
-# ignores the status the same way.
+# entry is written without, see docs/pipeline.md) although 20-grub.install has written the entry; the RPM's
+# %posttrans ignores the status the same way.
 in_root /usr/bin/kernel-install add "$PREV_ABI" "/usr/lib/modules/$PREV_ABI/vmlinuz" >"$T/kernel-install-prev.log" 2>&1 \
   || warn "kernel-install add returned non-zero for the previous kernel (log: $T/kernel-install-prev.log)"
 as_root rm -f "$M/etc/kernel/install.conf"
