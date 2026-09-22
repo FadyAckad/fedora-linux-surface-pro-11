@@ -5,25 +5,33 @@ Target hardware. Re-verify anything that depends on a newer Fedora, GRUB, Anacon
 
 ## Repository
 
-- `sp11.conf`: every version, URL, regex and boot-policy string; scripts source it via `scripts/lib.sh`.
-- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00–50 and then
-  `35-verify-support-rpm.sh`, which needs the live root 50 extracts (step 30 also runs it itself whenever one is
-  already there, and warns when it is not); `60-verify-rootfs.sh` checks the remastered root;
-  `70-export-bt-pairings.sh` is a separate tool.
+- `sp11.conf`: every version (but the support RPM's, `VERSION=` in step 30), URL, regex, boot-policy string and
+  content pin; scripts source it via `scripts/lib.sh`.
+- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30, 40
+  and 50 and then `35-verify-support-rpm.sh`, which needs the live root 50 extracts (step 30 also runs it itself
+  whenever one is already there, and warns when it is not); `60-verify-rootfs.sh` (optional, not in `build-all.sh`)
+  checks the remastered root; `70-export-bt-pairings.sh` is a separate tool.
 - `35-verify-support-rpm.sh` installs the freshly built support RPM in an overlay of the live root, with a real ext4
   `/boot` loop and the `grub2-probe`/`grub2-mkrelpath` stub, on both paths it reaches a machine: `rpm -U` with
-  scriptlets (what `dnf upgrade` does) and `rpm -U --noscripts` plus explicit helper runs (what step 50 does). It
-  asserts that every boot-policy value in `sp11.conf` reaches `/etc/default/grub` and the generated menu. The update
-  path first stages a deliberately wrong policy (`GRUB_GFXMODE=640x480`, empty `GRUB_FONT`, `GRUB_TIMEOUT=99`, font
-  deleted from `/boot`), so a package that installs without applying the policy cannot pass. Verified as a negative
-  control: with the pre-2.4 `%posttrans` the update path fails seven checks while the live path still passes, which
-  is exactly how the bug presented. The update path also seeds what an installer without SELinux leaves behind
+  scriptlets over the version the live root carries (what `dnf upgrade` does; after step 50 that is the RPM under
+  test, so the install is a reinstall with `--replacepkgs`, which runs the same `%posttrans` and triggers — a plain
+  `rpm -U` of an installed NVR is refused, which made the step fail at the end of every `build-all.sh` until
+  2026-09-22; `SUPPORT_PREVIOUS_RPM=<rpm>` installs that build first, for a real upgrade) and `rpm -U --noscripts`
+  plus explicit helper runs (what step 50 does, plus `sp11-grub-modules`). It asserts that the GRUB policy values in
+  `sp11.conf` (device tree, mode, terminal, timeout, font) reach `/etc/default/grub` and, on the update path, the
+  generated menu (the live root has no menu). The update path first stages a deliberately wrong policy
+  (`GRUB_GFXMODE=640x480`, empty `GRUB_FONT`, `GRUB_TIMEOUT=99`, font deleted from `/boot`), so a package that
+  installs without applying the policy cannot pass. Verified as a negative control when the check was written: with
+  the pre-2.4 `%posttrans` the update path failed seven checks while the live path still passed, which is exactly
+  how the bug presented. The update path also seeds what an installer without SELinux leaves behind
   (`selinux=0` in `/etc/kernel/cmdline` and `GRUB_CMDLINE_LINUX`, `SELINUX=disabled`) and asserts `%posttrans` undid
   it, followed by a negative control with the config line alone, which `sp11-selinux-restore` must leave untouched.
 - `36-verify-kernel-install.sh` (standalone, not in `build-all.sh`: after a full pipeline run the live root already
   carries the kernel under test) installs the freshly built `kernel-sp11` RPM into an overlay of the live root the
   way `dnf install` does on an installed system — `rpm -i` with scriptlets, next to the kernel already there — with
-  a real ext4 `/boot` and the step-35 grub2 stubs, then the support RPM with `rpm -U`. It asserts both packages, the
+  a real ext4 `/boot` and the step-35 grub2 stubs, then the support RPM with `rpm -U` (left out when the live root
+  already carries that version, as dnf leaves an installed package out of the transaction;
+  `SUPPORT_PREVIOUS_RPM=<rpm>` installs that build beforehand). It asserts both packages, the
   BLS entry (`linux`, `initrd`, `devicetree /dtb-<abi>/…`, every `SP11_ARGS_INSTALLED`, no live-only argument),
   `saved_entry` naming the new entry, the previous kernel's files, the dracut initramfs (new module tree, Adreno
   microcode), the regenerated menu, the config policy in the shipped `config`, the sysctl file under a kernel
@@ -38,13 +46,15 @@ Target hardware. Re-verify anything that depends on a newer Fedora, GRUB, Anacon
   the config, so the previous kernel's entry is written with the argument; the checks assert the plugin removed it
   from both entries, the cmdline file and `/etc/default/grub`, restored `SELINUX=enforcing` and created
   `/.autorelabel`.
-- Sensors stack, outside `build-all.sh` (see the Sensors section): `45-build-sensors-rpms.sh` builds `hexagonrpc`,
-  `libssc` and `iio-sensor-proxy` with `mock --chain` (`mock_chain` in `lib.sh`; always mock, so the host never gets
+- Sensors stack (see the Sensors section; `build-all.sh` runs 45 before 50 and 46 after 35 since 2026-09-22, and
+  step 50 installs the four RPMs into the live root): `45-build-sensors-rpms.sh` builds `hexagonrpc`, `libssc` and
+  `iio-sensor-proxy` with `mock --chain` (`mock_chain` in `lib.sh`; always mock, so the host never gets
   unpackaged libraries and iio-sensor-proxy resolves `libssc-devel` from the chain's local repo) and `sp11-sensors`
   (files only, `build_rpm`); the chain is skipped while its RPMs are current, `FORCE=1` rebuilds. When step 50's
   live root exists it then runs `46-verify-sensors-rpms.sh`: an overlay install of the four into the live root with
   scriptlets (runtime dependencies from `SENSORS_DEPS_PKGS`, matched by capability because F45 ships `protobuf-c` as
-  `protobuf3-c`), linkage, units, rules, the drop-in and a guard run, CIL module, sysusers, merged dnf excludes, the
+  `protobuf3-c`), linkage, units, rules, the drop-in and a guard run, the initramfs trigger (no dracut in the
+  scriptlets), CIL module, sysusers, merged dnf excludes, the
   payload and its mtimes against the registry's stamps, the working directory with a write as the `fastrpc` user,
   the daemon's strings, the wait helper's re-probe, erase; with `SENSORS_PREVIOUS_RPMS="<earlier RPMs>"` also the
   in-place upgrade from those, with the daemon's unit masked the way a crash loop was stopped.
@@ -55,8 +65,8 @@ Target hardware. Re-verify anything that depends on a newer Fedora, GRUB, Anacon
   the live GRUB menu template, `README-iso.txt.in` (the note inside the ISO; it carries the redistribution warning
   and credits), `kernel-sp11-fedora.config`, the kernel config policy fragment, and `kernel-patches/`, the kernel
   source patches (both build inputs of step 20, part of `KERNEL_SP11_REV`, not payload). `files/sensors/`: payload
-  of `sp11-sensors` (udev, systemd, tmpfiles, sysusers, SELinux and dnf files, the helper scripts) and the
-  unpackaged `sp11-sam-posture` probe.
+  of `sp11-sensors` (udev, systemd, tmpfiles, SELinux and dnf files, the helper scripts), hexagonrpc's sysusers
+  entry and udev rule (packaged by `hexagonrpc.spec.in`), and the unpackaged `sp11-sam-posture` probe.
 - The repo is public under GPL-3.0-or-later (`LICENSE`; the support RPM's `License:` tag must agree). Tracked files
   carry no per-unit identifiers: Bluetooth/Wi-Fi/peripheral addresses, firmware versions, local paths and the
   owner's name stay out of `CLAUDE.md`, `README.md`, `files/` and `scripts/`. Per-unit values live in
@@ -71,13 +81,23 @@ Target hardware. Re-verify anything that depends on a newer Fedora, GRUB, Anacon
   `.sha256`, pairing tarball), `bt-pairings/` (exported hive; secret), `sensors/` (this unit's sensor registry
   export; private), `hardware.env`.
 - Bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the support payload changes, so `dnf upgrade` works
-  on the installed system. Its `%posttrans` runs `sp11-grub-defaults` and then regenerates `grub.cfg`. The helper
-  call is not optional: up to 2.3 the scriptlet only ran grub2-mkconfig, which rebuilt the menu from the *previous*
-  `/etc/default/grub`, so a changed policy value installed but never reached the machine (nothing else applies it on
-  an installed system — the kernel-install plugin runs only on a kernel install, `sp11-first-boot` only once).
-  `35-verify-support-rpm.sh` guards this. Steps 20/30/40 skip only when the cached RPM matches (kernel ABI file
-  list; support `%{VERSION}` and the `.fc<release>` dist tag; iptsd version-release and commit), so a bump or a
-  `FEDORA_RELEASE` switch triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec.
+  on the installed system. Its `%posttrans` runs `sp11-selinux-restore`, `sp11-grub-defaults` and then, when a
+  `grub.cfg` exists, regenerates it. The helper call is not optional: up to 2.3 the scriptlet only ran
+  grub2-mkconfig, which rebuilt the menu from the *previous* `/etc/default/grub`, so a changed policy value
+  installed but never reached the machine (nothing else applies it on an installed system — the kernel-install
+  plugin runs only on a kernel install, `sp11-first-boot` only once). `35-verify-support-rpm.sh` guards this. Steps
+  20/30/40/45 skip when the cached RPM matches (kernel ABI file list, so a `FEDORA_RELEASE` switch reuses the other
+  release's kernel RPM, whose payload is release-independent; support `%{VERSION}` and the `.fc<release>` dist tag;
+  iptsd version-release and commit; the sensors chain's version-release), so a bump or a release switch triggers
+  the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec. The bump rules are enforced since
+  2026-09-22: steps 30 and 45 record a hash of the payload inputs in the RPM description (`Inputs:`,
+  `inputs_sha256` in `lib.sh`: the payload files, the spec template, the sp11.conf values rendered, for 45 also the
+  registry export and the DriverStore package) and die when the cached RPM of the same version was built from other
+  inputs, `FORCE=1` or not; an RPM built before that is accepted with a warning. Step 20 pins each kernel
+  revision's content in `sp11.conf` (`KERNEL_SP11_REV_SHA256`, `kernel_rev_sha256`: the revision number, the
+  fragment's effective lines, each patch's diff) and dies before its cache check when the files or the number
+  differ, printing the value to set after a bump; a revision number therefore always means one content
+  (`KERNEL_CONFIG_REV=1` used to build revision 1 with revision 2's patch, and did so during the 2026-09-22 tests).
   `build_rpm` and `mock_rebuild` delete every older RPM of the same name, so `build/rpms/` holds one release's set;
   copy it aside (`build/rpms-fc<release>/`) before switching. The support payload is byte-identical across releases
   (2.2 fc44 and fc45 compared); only the dist tag differs.
@@ -166,7 +186,8 @@ which the stock WSL image lacks.
   ship unnoticed). The revision goes into the ABI (`…0sp11v23.2-qcom-x1e`) and the RPM release (`sp11v23.2`); bump
   it with every change to the fragment or the patches: `kernel-sp11` is install-only, and a same-ABI rebuild would
   own the same `/boot` and module paths as the installed package, so RPM refuses it; a new ABI also keeps the
-  previous kernel in GRUB as the fallback. `make kernelrelease` is a no-sync-config target and `setlocalversion`
+  previous kernel in GRUB as the fallback; the content pin above makes step 20 refuse the mismatch. `make
+  kernelrelease` is a no-sync-config target and `setlocalversion`
   reads `include/config/auto.conf`, so on a built tree the ABI check needs `make syncconfig` first (step 20 does).
 - Why the LSM policy is a config change and not a source change (measured 2026-09-18 against pristine kernel.org
   7.2.5, rebuilt from `linux-7.2.tar.xz` plus the pinned `patch-7.2.5.xz`): ooaklee's tree modifies 433 upstream
@@ -178,8 +199,8 @@ which the stock WSL image lacks.
   nothing else from `debian*/`). Ubuntu SAUCE that stays compiled under any config: `fs/proc/version_signature.o`
   (gated on `BOOT_CONFIG`, which Fedora sets too) and `drivers/firmware/efi/secureboot.o` (on `EFI`); AppArmor
   references outside `security/apparmor` are `#ifdef CONFIG_SECURITY_APPARMOR`. Fedora's own aarch64 config already
-  sets 20 of the 24 `REQUIRED_OPTS`; the missing four are ooaklee-only drivers, so a Fedora-config base (not done)
-  would have to re-add them explicitly and re-validate every hardware function.
+  sets every `REQUIRED_OPTS` entry but four ooaklee-only drivers (the list has 21 entries), so a Fedora-config base
+  (not done) would have to re-add them explicitly and re-validate every hardware function.
 - SELinux on a system that ran the AppArmor kernels: with SELinux inactive nothing labels new files (no
   `security.selinux` xattr from the kernel, no setfilecon from rpm), so everything created since the installation is
   unlabeled. Fedora handles this itself: `selinux-autorelabel-mark.service` (`policycoreutils`, enabled by preset,
@@ -212,7 +233,9 @@ which the stock WSL image lacks.
   enforcing) and the automatic path were both confirmed on the tested unit on 2026-09-19: the relabel boot happened,
   and the system has run enforcing since with no kernel AVC and the pen daemon, the Bluetooth address helper and the
   audio stack working. Media built with the SELinux kernel should not have the problem (the live session runs
-  enforcing, so Anaconda keeps the default), but no such ISO has been built or booted yet.
+  enforcing, so Anaconda keeps the default); confirmed with the first such ISO (45 Beta 1.3, kernel v23.2, support
+  2.6, built on 2026-09-22 with `--mkfs-time` and the sensors stack), installed on the tested unit the same day: the
+  live session ran enforcing and the installation came up enforcing, without `selinux=0` or a relabel boot.
 - 7.2.5 applies to v23 without a reject (one fuzz-1 hunk in `nvme/host/tcp.c`) and touches none of the drivers
   ooaklee's SP11 patches change (GPI DMA, spi-geni, Denali DTS, `sound/soc/qcom`, soundwire, `drivers/input`,
   `platform/surface`). Against the 7.2.0 build: the same 7816 module names, byte-identical Denali DTBs, and a config
@@ -239,6 +262,15 @@ which the stock WSL image lacks.
   whenever another `kernel-sp11` stayed installed and left the BLS entry and `/boot/dtb-<ver>` behind. RPMs built
   before that (the 7.2.0 package on existing installs) keep the guard: removing one next to a newer SP11 kernel
   needs `kernel-install remove <abi>` first.
+- dnf removes such a kernel on its own: `installonly_limit` is 3 and `installonlypkgs` includes
+  `installonlypkg(kernel)` (both in the 45 Beta root's `dnf --dump-main-config`), so the fourth `kernel-sp11`
+  install (v23.2 on 2026-09-21, next to 7.2.0, 7.2.5 and v23.1) erases the oldest in the same transaction, keeping
+  the running one; with the 7.2.0 package's guarded `%preun` that leaves its BLS entry, DTB directory and initramfs
+  behind, a menu entry that cannot boot. Not verified on the device from the host (`rpm -q kernel-sp11`,
+  `ls /boot/loader/entries`); `kernel-install remove 7.2.0-jg-0sp11v23-qcom-x1e` cleans up after the fact. Each
+  SP11 kernel keeps roughly 200 MB in `/boot` (step 36 sizes its loop at 768 MB for two); a full `/boot` makes
+  dracut fail inside `kernel-install`, whose status the spec ignores (`|| :`, as Fedora does), so the package
+  installs without an entry and only the transaction's output says so: `df -h /boot` before a kernel install.
 - A chroot test of that path needs a real filesystem at `/boot` (an ext4 loop image; `mkfs.ext4` from the root,
   since the host has no e2fsprogs): on an overlay root `grub2-editenv` fails with
   `failed to get canonical path of overlay`, so `saved_entry` never changes. The step 60 simulation does not check
@@ -282,10 +314,11 @@ which the stock WSL image lacks.
   nothing else is readable by GRUB, and 00_header's own fallback would otherwise land on
   `/usr/share/grub/unicode.pf2`, which is not. A `GRUB_FONT` naming a missing file makes 00_header run `grub2-probe`
   on it and grub2-mkconfig fails outright, so `sp11-grub-defaults` writes an empty `GRUB_FONT=` (the supported
-  opt-out) whenever the copy into `/boot/grub2/fonts/` did not happen. Verified so far only off-hardware: a real
+  opt-out) whenever the copy into `/boot/grub2/fonts/` did not happen. Verified off-hardware first: a real
   `grub2-mkconfig` (2.12-76.fc45) in an overlay of the remastered root with an ext4 loop at `/boot` exits 0 and
-  emits `search --fs-uuid` + `if loadfont /grub2/fonts/sp11-console.pf2` with `set gfxmode=2880x1920,auto`. How it
-  actually reads on the panel, and whether the firmware GOP offers 2880x1920, is not confirmed.
+  emits `search --fs-uuid` + `if loadfont /grub2/fonts/sp11-console.pf2` with `set gfxmode=2880x1920,auto`.
+  Confirmed on the panel by the owner with support RPM 2.5 (2026-09-18): the menu is legible with the large font;
+  which mode the firmware GOP picked (2880x1920 or the `auto` fallback) was not recorded.
 - `insmod NAME` resolves `$prefix/arm64-efi/NAME.mod`; on installed Fedora `$prefix` is `/boot/grub2` (set by
   `gen_grub_cfgstub`, which Anaconda calls to write the ESP stub `EFI/fedora/grub.cfg`:
   `search --fs-uuid <boot uuid>`, then `configfile $prefix/grub.cfg`). The stub names a single /boot, so a second
@@ -331,7 +364,10 @@ which the stock WSL image lacks.
 - `15-sp11-surface.install` runs before `20-grub.install`: `sp11-grub-defaults` (the single writer of the
   `/etc/default/grub` policy, also used by `sp11-first-boot`, the support RPM's `%posttrans` and `50-build-iso.sh`)
   sets `GRUB_DEVICETREE` and the display settings, the plugin appends the SP11 arguments to `/etc/kernel/cmdline`
-  (rewritten after `/etc/default/grub`, so 20-grub does not rerun mkconfig) and removes the Anaconda denylist before
+  (rewritten after `/etc/default/grub`, so 20-grub does not rerun mkconfig — unless `sp11-selinux-restore` acts,
+  which edits `/etc/default/grub` last; 20-grub's sync then rewrites the cmdline and every entry from
+  `GRUB_CMDLINE_LINUX`, which carried the SP11 arguments on the tested unit since its first boot, so nothing was
+  lost when the restore ran on 2026-09-19; left as is) and removes the Anaconda denylist before
   Anaconda's initramfs rebuild. Anaconda's last grub2-mkconfig still strips the SP11-only arguments from the entry
   (the soundwire argument; on 44 also `systemd.tpm2_wait=0`), and on BTRFS the GRUB settings as well, so the first
   boot runs without them until `sp11-first-boot` (`grubby --update-kernel=ALL --args`, which also updates
@@ -343,6 +379,12 @@ which the stock WSL image lacks.
 - `mkfs.erofs -Ededupe` is single-threaded in erofs-utils 1.9.4 (hours).
   `-Efragments -C1048576 --workers=N -zlzma,level=6` takes ~5 min and is only slightly larger. Use `--file-contexts`
   from the root's own SELinux policy.
+- `mkfs.erofs -T` alone implies `--all-time`: every file gets the build time, and Anaconda's `rsync -t` copies
+  that onto the installed system. Every ISO up to 2026-09-21 was built that way, so on the tested unit
+  `ls -l /usr/bin/bash` shows the ISO's build date, Python recompiles its timestamp-checked bytecode (7985 of the
+  live root's 8178 `.pyc` files) at every start of an unprivileged process, and `rpm -V` flags the times; no
+  malfunction. Step 50 passes `--mkfs-time` since 2026-09-22 and asserts that `/usr/lib/os-release` keeps its
+  time from the source image.
 - In a chroot without udev, `lsblk` reports empty PARTTYPE/FSTYPE; use `blkid -c /dev/null -o device -t TYPE=vfat`
   and `blkid -p -s PART_ENTRY_TYPE -o value DEV` instead.
 - `grep -q` at the end of a pipeline under `pipefail` fails spuriously (SIGPIPE); use `grep ... >/dev/null`.
@@ -367,7 +409,7 @@ which the stock WSL image lacks.
   against; a daemon that cannot load makes udev's `check-device` fail, so no `sp11-iptsd@` unit starts.
   `LIVE_EXTRA_PKGS` in `sp11.conf` lists packages to download (`10-fetch-sources.sh` → `build/cache/rpm-deps`) and
   install first; `50-build-iso.sh` runs `rpm -U --test` and `--help` on the iptsd binaries; `60-verify-rootfs.sh`
-  repeats both checks and `ldd`s the shipped binaries.
+  repeats the `--test` install, `ldd`s the shipped binaries and runs `sp11-iptsd-check-device --help`.
 
 ## Fedora 45 differences (verified 2026-09-16 against 45 Beta 1.3)
 
@@ -377,9 +419,10 @@ which the stock WSL image lacks.
   `FEDORA_RELEASE` differs from `rpm -E %{fedora}`; `mock_rebuild` in `lib.sh` passes `--no-bootstrap-image` (no
   container pull, so podman stays out of the dependency set) and retries once with `--isolation=simple` for WSL.
   `sp11-bt-set-addr` is libc-only and `kernel-sp11` is `AutoReqProv: no`, so iptsd is the only cross-release
-  package.
+  package of the ISO; the sensors chain (hexagonrpc, libssc, iio-sensor-proxy) is built by mock for the target
+  release as well.
 - `rpm/sp11-iptsd.spec.in` must carry `BuildRequires: cmake`: meson locates Microsoft.GSL only through its CMake
-  config. The host build masked this because `00-setup-host.sh` installs cmake for other reasons.
+  config. The host build masked this because `00-setup-host.sh` installs cmake as an iptsd build dependency.
 - The boot kernel on aarch64 is owned by `kernel-uki-dtbloader`, not `kernel-core` (Workstation Live installs no
   `kernel-core` at all). Not new in 45: Koji's package list of the 44 1.7 Workstation image shows the same set
   (`kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`, no `kernel-core`). It provides
@@ -500,7 +543,10 @@ which the stock WSL image lacks.
   itself, kept byte for byte); step 75 exports them with the entries and step 45 moves them to the payload's
   `sensors/registry-parent/` (served among the entries, the DSP deleted them as stale and tried to create
   `sns_reg_version` again). `Start-Process -Verb RunAs` on a cancelled UAC prompt returns no process object, so
-  `exit $p.ExitCode` is 0: step 75 treats that as failure explicitly.
+  `exit $p.ExitCode` is 0: steps 70 and 75 treat that as failure explicitly, with the status caught on the pipeline
+  itself (`… | sed >&2 || rc=$?`): under errexit and pipefail a `$PIPESTATUS` check after a failed pipeline is never
+  reached (75 exited without its message until 2026-09-22). Both derive the Windows temp directory from
+  `$env:USERNAME`, which names the profile directory on this unit; a renamed account would not, and the die says so.
 - What the framework does when the file server attaches (the daemon's request log, `-Dhexagonrpcd_verbose=true`, run
   under `stdbuf -oL`: the log is on stdout, which is fully buffered on the journal socket otherwise). It asks for
   `oemconfig.so` (refused; not needed: the framework parses the JSONs itself, contrary to denisix's note that the
@@ -566,11 +612,14 @@ which the stock WSL image lacks.
   server unconditionally: `python3-devel`, `protobuf-compiler` for `protoc`, `protobuf-c-compiler` for
   `protoc-gen-c`; the spec deletes the installed mock server; Codeberg serves `git fetch --depth 1 origin <sha>`
   only with the full hash). `iio-sensor-proxy` = Fedora's SRPM of the target release with `-Dssc-support=enabled`,
-  release `<fedora>.sp11.1` (step 45 refuses an SRPM with patches: refresh the template). `sp11-sensors`: payload
-  under `/usr/share/qcom/x1e80100/Microsoft/denali-oled` (`files/sensors/` plus this unit's registry of 343 entries,
-  its two parent-directory files and 6 calibration overrides from `vendor\etc\sensors\config`) with Windows'
-  modification times (`install -p`, `source_date_epoch_from_changelog 0` and `clamp_mtime_to_source_date_epoch 0` in
-  the spec; the JSONs carry 1747743184, the Surface calibration overrides 1789827151, the registry's stamps; step 46
+  release `<fedora>.sp11.1` (step 45 refuses an SRPM with patches, and since 2026-09-22 one whose spec differs from
+  the copy the template was made from, `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`: refresh the template, then the pin).
+  `sp11-sensors`: payload under `/usr/share/qcom/x1e80100/Microsoft/denali-oled` (the DriverStore package's 65 JSONs
+  and `golden_color_calibration.bin`, its `json.lst`, `sns_reg_config` and platform files converted to LF, plus this
+  unit's registry of 343 entries, its two parent-directory files and 6 calibration overrides from
+  `vendor\etc\sensors\config`; `files/sensors/` installs elsewhere) with Windows' modification times (`install -p`,
+  `source_date_epoch_from_changelog 0` and `clamp_mtime_to_source_date_epoch 0` in the spec; the JSONs carry their
+  own times, 1747743181 to 1747743185, the Surface calibration overrides 1789827151, the registry's stamps; step 46
   compares two of them).
 - Runtime design: udev `SYSTEMD_WANTS` on the `fastrpc-adsp` misc device starts `hexagonrpcd-adsp-sensorspd.service`
   and `sp11-sensors-online.service` (the stock `[Install]` stays unused: the node exists only after the ADSP
@@ -588,9 +637,11 @@ which the stock WSL image lacks.
   parent-directory files beside it; `C` keeps the mtimes. `sp11-sensors-reset` rebuilds the copy, effective at the
   next boot (the framework reads its registry once per ADSP boot). The tmpfiles run is in `%posttrans`, not `%post`:
   on an upgrade `%post` runs while the previous release's payload is still in place and the copy took stale files
-  along (caught by step 46's upgrade section); `%posttrans` also removes the 1.3/1.4 copy at `sensors/registry` and
-  regenerates the running kernel's initramfs, which takes the 1.1/1.2 hook (`95sp11-sensors`) out (hence the spec's
-  `Requires: dracut`). `sp11-sensors-resume.service` restarts the daemon `After=suspend.target` (the stock unit has
+  along (caught by step 46's upgrade section); `%posttrans` also removes the 1.3/1.4 copy at `sensors/registry`. A
+  `%triggerpostun -- sp11-sensors < 1.3` regenerates the running kernel's initramfs when a 1.1/1.2 package is
+  upgraded away, which takes their hook (`95sp11-sensors`) out (hence the spec's `Requires: dracut`); 1.3 to 1.9 ran
+  that dracut in `%posttrans` on every install. `sp11-sensors-resume.service` restarts the daemon
+  `After=suspend.target` (the stock unit has
   `Conflicts=suspend.target`, and nothing restarts a conflict-stopped unit; `sleep.target` is the wrong anchor, it
   is active before the suspend). `sp11-sensors-wait` (the online unit, `TimeoutStartSec=5min`) waits for a light
   reading and then hands iio-sensor-proxy what its own probe missed without restarting it (see the compass bullet
@@ -598,6 +649,17 @@ which the stock WSL image lacks.
   (verified with `dnf --dump-main-config` in the 45 Beta root: kernel list plus iio-sensor-proxy), and the exclusion
   also filters a local RPM of the package ("from @commandline is filtered out by exclude filtering"): the four RPMs
   go in one transaction, a later SP11 build of the proxy needs `--setopt=disable_excludes='*'`.
+- In the ISO since 2026-09-22: step 50 installs the four RPMs into the live root with `--noscripts` and applies the
+  scriptlet effects itself (`systemd-sysusers hexagonrpc.conf`, `semodule -i sp11-sensors.cil`,
+  `systemd-tmpfiles --create sp11-sensors.conf`, all in the chroot with `/dev`, `/proc` and `/sys` bound), asserts
+  the user, the module, the fastrpc-owned registry copy and a live initramfs without the stack, and puts the RPMs
+  under `/sp11/rpms`. The live session never starts hexagonrpcd or the online unit (no `fastrpc-adsp` node while the
+  ADSP is blacklisted), and the SSC iio-sensor-proxy without sensors behaves as the stock build; Anaconda's rsync
+  carries the policy store, `/etc/passwd` with `fastrpc` and the registry copy, so the installed system runs the
+  stack from its first boot. Step 46 installs with `--replacepkgs` (a reinstall after step 50) and the previous
+  release with `--oldpackage`; step 60 checks the packages, the user, the module, the copy's mtime and the
+  initramfs. The 45 Beta Workstation root provides every runtime dependency (`protobuf3-c` for `protobuf-c`);
+  step 50 tests them by capability and installs missing ones from `build/cache/rpm-deps`, as it does for iptsd's.
 - ADSP safety: nothing in the stack writes `/sys/class/remoteproc/*/state` (step 45 greps the stage for it;
   `sp11-sensors-check` only reads it). hexagonrpcd only attaches to the existing sensors PD (`INIT_ATTACH_SNS`),
   never creates a PD (`-c`) nor supplies DSP libraries (`dsp/` absent → empty), and serves the files taken from
@@ -660,7 +722,8 @@ which the stock WSL image lacks.
   instead, `udevadm trigger --action=add --settle /sys/class/misc/fastrpc-adsp`, until the proxy reports
   `HasAccelerometer`, `HasAmbientLight` and `HasCompass` (object `/net/hadess/SensorProxy/Compass`, interface
   `net.hadess.SensorProxy.Compass`), polling for 3 s after each event and waiting 2, 4, 8, then 16 s between them,
-  within 120 s: iio-sensor-proxy 3.9's `sensor_changes` answers an `add` by probing, for each sensor type it lacks,
+  within 120 s (the limit is checked before the back-off sleep, so one more event can follow it): iio-sensor-proxy
+  3.9's `sensor_changes` answers an `add` by probing, for each sensor type it lacks,
   the first driver that matches the device (one type per event) and leaves existing sensors and their clients alone,
   and its SSC discovery only looks the sensor up (libssc `*_new_sync` plus `*_close_sync`, no stream enabled). On
   the host's systemd 259 a synthetic `add` for a device that is already there starts the device's `SYSTEMD_WANTS`
@@ -771,7 +834,8 @@ on the 45 Beta install. Confirmed working by the owner: Bluetooth, touchscreen, 
 speakers, microphone, GPU acceleration, keyboard/touchpad, battery, Flatpak, the Windows GRUB entry, the keyboard
 and pen pairings shared with Windows, backlight control (brightness slider) and multi-touch
 (rjindael/fedora-surface-pro-11's HID-over-SPI patches give single touch only). 7.2.5 is the build default since
-then; a 45 Beta ISO with this kernel was built on 2026-09-18 but has not been booted.
+then; a 45 Beta ISO with this kernel was built on 2026-09-18 (never booted) and one with revision 2 on 2026-09-22,
+installed on the tested unit (see below).
 
 ### Kernel config policy rev 1, SELinux (2026-09-18)
 
@@ -783,7 +847,8 @@ kernel AVC. Off-hardware before the hand-off: the shipped config differs from th
 and what it pulls in (`SECURITY_APPARMOR*` off, `IGH_ECAT*` off, `SECURITY_IPE` on with its verity properties,
 `DEFAULT_SECURITY_SELINUX`, `CONFIG_LSM`, `ZSTD_COMPRESS` y→m because AppArmor's `EXPORT_BINARY` had selected it
 built-in, plus `LOCALVERSION`/`VERSION_SIGNATURE`); 7816 modules (`ec_master` gone, `zstd_compress` new); both
-Denali DTBs byte-identical to the AppArmor build; steps 36 and 35 pass. The ISO has not been rebuilt.
+Denali DTBs byte-identical to the AppArmor build; steps 36 and 35 pass. The ISO was rebuilt on 2026-09-22 with
+revision 2 (next section).
 
 ### Kernel SP11 revision 2, tablet mode (2026-09-21)
 
@@ -792,16 +857,32 @@ against revision 1: the same 7816 module names, identical DTBs, a config that di
 `LOCALVERSION`/`VERSION_SIGNATURE`, and at section level only `surface_aggregator_registry.ko` changed (its
 `.rela.data`: the SP11 group's switch entry now points at the POS node) besides version strings and `kheaders.ko`.
 On the device the POS tablet-mode switch follows the keyboard, and with the sensors stack GNOME's auto-rotation
-works (see the Sensors section).
+works (see the Sensors section). A 45 Beta 1.3 ISO with this kernel, support 2.6, the `--mkfs-time` fix and the
+sensors stack inside was built on 2026-09-22 (sha256 `121e542a…be65`, after a first build of the day without the
+stack; `build-all.sh` took 11 min with everything cached, 35 passed on its reinstall branch, 46 reinstalling over
+the root, 60 its 87 checks) and installed fresh on the tested unit the same day (next section).
+
+### Fedora 45 Beta Workstation from the revision-2 ISO (2026-09-22)
+
+Fresh installation from the ISO built on 2026-09-22 (sha256 `121e542a…be65`: kernel v23.2, support RPM 2.6, iptsd
+3.1.0-3, the sensors stack, `--mkfs-time`). The owner reports every check of the hand-off list passing: the live
+session and the installed system run SELinux enforcing without `selinux=0` or a relabel boot (the first media built
+with the SELinux kernel), package file times instead of the ISO's build date, the seven packages installed, the
+sensors stack active from the first boot without a separate install (`sp11-sensors-check`, auto-rotation), the
+pairing import, the Windows entry, `dnf upgrade --refresh` without a stock kernel, and the README's feature table.
 
 ### Sensors stack (2026-09-19 to 2026-09-21)
 
 On the 45 Beta install: `hexagonrpc-0.5.0-6.git79d1bed.sp11`, `libssc-0.4.4-2.git54dd13e.sp11`,
 `iio-sensor-proxy-3.9-3.sp11.1` and `sp11-sensors-1.9-1` (fc45); support RPM 2.6 adds `sp11-sensors-check` to
-`sp11-diag`. Working: readings from the light sensor, accelerometer, gyroscope, magnetometer and compass (`ssccli`),
+`sp11-diag`. `sp11-sensors-1.10-1` (2026-09-22: the initramfs is regenerated by a trigger only when a 1.1/1.2
+package is upgraded away, `sp11-sensors-reset` says the copy is read at the next boot, comments) is verified in the
+chroot (step 46: 131 checks, the upgrade from 1.9 included) and on the device since the 2026-09-22 installation
+from the ISO. Working:
+readings from the light sensor, accelerometer, gyroscope, magnetometer and compass (`ssccli`),
 `monitor-sensor` with orientation, tilt, light and compass, GNOME's auto-rotation, suspend and resume, SELinux
 enforcing without an AVC for the stack's domains, no ADSP crash since the write support. Not reported: automatic
-screen brightness. Step 46 passes for this set (129 checks, the upgrade from 1.8 included). The history is at the
+screen brightness. Step 46 passed for this set (129 checks, the upgrade from 1.8 included). The history is at the
 end of the Sensors section.
 
 ## References

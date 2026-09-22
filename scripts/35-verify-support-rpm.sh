@@ -1,11 +1,15 @@
 #!/usr/bin/bash
 # Step 4b: prove the freshly built sp11-surface-support RPM actually applies the boot policy from sp11.conf,
 # on both paths it reaches a machine by:
-#   update — `rpm -U` over the previously installed version with its scriptlets running, as `dnf upgrade`
-#            does on the installed system. This is the path that silently did nothing until the %posttrans
-#            learned to run sp11-grub-defaults: bumping a policy value in sp11.conf rebuilt grub.cfg from
-#            the *previous* /etc/default/grub, so the new policy never reached the machine.
-#   live   — `rpm -U --noscripts` plus the explicit helper runs, exactly what 50-build-iso.sh does.
+#   update — `rpm -U` over the version the live root carries with its scriptlets running, as `dnf upgrade`
+#            does on the installed system; after step 50 that is the RPM under test itself, and the install is
+#            then a reinstall (--replacepkgs), which runs the same %posttrans and triggers. This is the path that
+#            silently did nothing until the %posttrans learned to run sp11-grub-defaults: bumping a policy value
+#            in sp11.conf rebuilt grub.cfg from the *previous* /etc/default/grub, so the new policy never reached
+#            the machine. SUPPORT_PREVIOUS_RPM=<rpm> installs that version (with scriptlets) first, for a real
+#            upgrade from the last handed-over build.
+#   live   — `rpm -U --noscripts` plus the explicit helper runs, what 50-build-iso.sh does (plus sp11-grub-modules,
+#            which step 50 leaves to the installed system's Windows generator).
 # Both run in an overlay of the extracted live root, so the cached root is never modified. grub2 tooling
 # needs a real filesystem at /boot (an ext4 loop; mkfs.ext4 comes from the root, the host has no e2fsprogs)
 # and a grub2-probe/grub2-mkrelpath stub for the overlay root, which the real ones cannot canonicalise.
@@ -70,8 +74,9 @@ STUB
   as_root cp "$SRPM" "$M/tmp/"
 }
 
-# Every policy value in sp11.conf has to arrive in /etc/default/grub and, through grub2-mkconfig, in the
-# generated menu. Asserting both ends is what catches a policy change that installs but never applies.
+# The GRUB policy values (device tree, mode, terminal, timeout, font) have to arrive in /etc/default/grub and, on
+# the update path, through grub2-mkconfig in the generated menu (the live root has no menu; the installer writes
+# it). Asserting both ends is what catches a policy change that installs but never applies.
 assert_policy() {
   local what=$1 cfg="$M/etc/default/grub" menu="$M/boot/grub2/grub.cfg"
   log "$what: /etc/default/grub and the generated menu"
@@ -90,8 +95,16 @@ assert_policy() {
 
 ## 1. Update path: an installed system running the previous support RPM, with a deliberately wrong policy in
 ##    /etc/default/grub. `rpm -U` with scriptlets must put every value back and rebuild the menu from it.
-log "--- update path: rpm -U over $(as_root rpm --root "$BASE" -q sp11-surface-support) with scriptlets"
 setup
+if [ -n "${SUPPORT_PREVIOUS_RPM:-}" ]; then
+  [ -f "$SUPPORT_PREVIOUS_RPM" ] || die "no such RPM: $SUPPORT_PREVIOUS_RPM"
+  as_root cp "$SUPPORT_PREVIOUS_RPM" "$M/tmp/"
+  as_root chroot "$M" /usr/bin/rpm -U --oldpackage --replacepkgs --define '_pkgverify_level none' "/tmp/${SUPPORT_PREVIOUS_RPM##*/}" \
+    || die "rpm -U of ${SUPPORT_PREVIOUS_RPM##*/} failed in the chroot"
+fi
+FROM_NVR=$(as_root chroot "$M" /usr/bin/rpm -q sp11-surface-support)
+NVR=$(basename "$SRPM" .rpm)
+log "--- update path: rpm -U over $FROM_NVR with scriptlets"
 as_root chroot "$M" /usr/libexec/sp11/sp11-grub-defaults || die "the installed helper failed in the chroot"
 as_root install -d "$M/var/lib/sp11"; echo stale | as_root tee "$M/var/lib/sp11/first-boot.done" >/dev/null
 as_root sed -i -e 's|^GRUB_GFXMODE=.*|GRUB_GFXMODE=640x480|' -e 's|^GRUB_FONT=.*|GRUB_FONT=|' \
@@ -108,9 +121,15 @@ as_root rm -f "$M/.autorelabel"
 as_root chroot "$M" /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 \
   || die "grub2-mkconfig failed while staging the pre-upgrade state"
 as_root grep -qx 'GRUB_GFXMODE=640x480' "$M/etc/default/grub" || die "pre-upgrade state not staged"
-as_root chroot "$M" /usr/bin/rpm -U --define '_pkgverify_level none' "/tmp/${SRPM##*/}" \
-  || die "rpm -U of ${SRPM##*/} failed in the chroot"
-NVR=$(basename "$SRPM" .rpm)
+if [ "$FROM_NVR" = "$NVR" ]; then
+  # The live root carries the RPM under test (step 50 installed it): rpm refuses a plain -U of an installed NVR.
+  log "$NVR is already installed: reinstalling with --replacepkgs (same %posttrans and triggers)"
+  as_root chroot "$M" /usr/bin/rpm -U --replacepkgs --define '_pkgverify_level none' "/tmp/${SRPM##*/}" \
+    || die "rpm -U --replacepkgs of ${SRPM##*/} failed in the chroot"
+else
+  as_root chroot "$M" /usr/bin/rpm -U --define '_pkgverify_level none' "/tmp/${SRPM##*/}" \
+    || die "rpm -U of ${SRPM##*/} failed in the chroot"
+fi
 [ "$(as_root chroot "$M" /usr/bin/rpm -q sp11-surface-support)" = "$NVR" ] \
   || die "the chroot ended up with a different package than $NVR"
 assert_policy update
@@ -126,7 +145,8 @@ check as_root grep -qx 'SELINUX=disabled' "$M/etc/selinux/config"
 check as_root test ! -e "$M/.autorelabel"
 
 ## 2. Live path: what 50-build-iso.sh does to the live root — install without scriptlets, then run the
-##    helpers explicitly. Catches a payload whose helpers do not run in a root that has never booted.
+##    helpers explicitly (sp11-grub-modules as well, which step 50 leaves to the installed system). Catches a
+##    payload whose helpers do not run in a root that has never booted.
 log "--- live path: rpm -U --noscripts plus the explicit helper runs"
 setup
 as_root chroot "$M" /usr/bin/rpm -U --noscripts --replacefiles --replacepkgs --define '_pkgverify_level none' \
@@ -136,7 +156,7 @@ as_root chroot "$M" /usr/libexec/sp11/sp11-grub-defaults || die "sp11-grub-defau
 as_root chroot "$M" /usr/libexec/sp11/sp11-grub-modules || die "sp11-grub-modules failed in the live root"
 assert_policy live
 log "live path: shipped helpers"
-for h in sp11-first-boot sp11-grub-defaults sp11-grub-modules sp11-bt-apply sp11-ucm-apply \
+for h in sp11-first-boot sp11-grub-defaults sp11-grub-modules sp11-selinux-restore sp11-bt-apply sp11-ucm-apply \
          sp11-bt-import-pairings sp11-diag; do
   check as_root chroot "$M" /usr/bin/bash -n "/usr/libexec/sp11/$h"
 done

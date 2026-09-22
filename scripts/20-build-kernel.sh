@@ -13,6 +13,14 @@ PAYLOAD="$KDIR/payload"
 MODDIR="$PAYLOAD/usr/lib/modules/$KERNEL_ABI"
 mkdir -p "$KDIR"
 
+# The declared revision must be the content sp11.conf pins for it: kernel-sp11 is install-only, and the same ABI
+# rebuilt with another fragment or patch set would collide with the installed package instead of replacing it.
+if [ -n "$KERNEL_SP11_REV" ]; then
+  REV_SHA=$(kernel_rev_sha256)
+  [ "$REV_SHA" = "${KERNEL_SP11_REV_SHA256:-}" ] \
+    || die "files/$KERNEL_CONFIG_FRAGMENT and files/$KERNEL_PATCH_DIR/ do not match SP11 revision $KERNEL_SP11_REV (KERNEL_SP11_REV_SHA256 in sp11.conf); a changed fragment or patch set needs a new revision: bump KERNEL_SP11_REV and set KERNEL_SP11_REV_SHA256=$REV_SHA"
+fi
+
 CACHED=$(rpm_of kernel-sp11)
 if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
   if rpm -qpl "$CACHED" 2>/dev/null | grep -x "/boot/vmlinuz-$KERNEL_ABI" >/dev/null; then

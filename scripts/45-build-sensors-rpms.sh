@@ -1,8 +1,9 @@
 #!/usr/bin/bash
-# Step 4c (standalone; build-all.sh does not run it): build the sensors stack for the installed system. The
-# accelerometer, gyroscope, magnetometer and light sensor of the Surface Pro 11 sit behind the ADSP's Snapdragon
-# Sensor Core, so nothing here touches the kernel or the ISO (the live session runs without the ADSP). Four RPMs:
-#   hexagonrpc        upstream hexagonrpcd: serves the DSP's sensor framework its configuration and registry over FastRPC
+# Step 4d: build the sensors stack, which step 50 installs into the live root for the installed system (inert on the
+# live media, which runs without the ADSP). The accelerometer, gyroscope, magnetometer and light sensor of the
+# Surface Pro 11 sit behind the ADSP's Snapdragon Sensor Core, so nothing here touches the kernel. Four RPMs:
+#   hexagonrpc        hexagonrpcd from the project's fork (HEXAGONRPC_REPO): serves the DSP's sensor framework its
+#                     configuration and registry over FastRPC
 #   libssc (+devel)   upstream QMI client library and ssccli
 #   iio-sensor-proxy  Fedora's own source RPM of the target release, rebuilt with -Dssc-support=enabled
 #   sp11-sensors      this unit's payload (Windows sensor configuration, the registry exported by scripts/75, platform
@@ -32,17 +33,42 @@ have() { local r; r=$(rpm_of "$1"); [ -n "$r" ] && [ "$(rpm -qp --qf '%{VERSION}
 chain_current() { have hexagonrpc "$EXPECT_HEX" && have libssc "$EXPECT_SSC" && have libssc-devel "$EXPECT_SSC" && have iio-sensor-proxy "$EXPECT_ISP"; }
 
 SDIR="$BUILD_DIR/sensors"; REG="$SDIR/registry"; OVR="$SDIR/config-overrides"; SRC="$SDIR/SOURCES"
+FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
+[ -d "$FR" ] || die "Windows DriverStore not found at $FR"
+SNSCFG=$(find "$FR" -maxdepth 1 -type d -name "$SENSORS_SNSCFG_GLOB" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
+[ -n "$SNSCFG" ] || die "no $SENSORS_SNSCFG_GLOB package under $FR (the Windows sensor configuration)"
+# What the sp11-sensors payload is built from: its files under files/sensors/ (hexagonrpc's two files and the
+# unpackaged probe aside), the spec, this unit's registry export and the DriverStore package. Recorded in the RPM's
+# description; a same-version rebuild from other inputs is refused, because dnf would not install it.
+sensors_inputs() {
+  local -a in=("$SPEC_DIR/sp11-sensors.spec.in" "$REG" "$SNSCFG")
+  [ -d "$OVR" ] && in+=("$OVR")
+  printf '%s\n' "SENSORS_PAYLOAD_DIR=$SENSORS_PAYLOAD_DIR" "SNSCFG=$(basename "$SNSCFG")" \
+    | inputs_sha256 "${in[@]}" $(find "$FILES_DIR/sensors" -maxdepth 1 -type f \
+        ! -name hexagonrpc.sysusers.conf ! -name 60-hexagonrpc-fastrpc.rules ! -name sp11-sam-posture | sort)
+}
+INPUTS=""; [ -s "$REG/sns_reg_config" ] && INPUTS=$(sensors_inputs)
+recorded_inputs() { rpm -qp --qf '%{DESCRIPTION}' "$1" 2>/dev/null | sed -n 's/^Inputs: //p' | head -1 || true; }
+sensors_guard() {  # dies when the cached RPM of this version was built from other inputs, FORCE=1 or not
+  local r rec; r=$(rpm_of sp11-sensors); have sp11-sensors "$EXPECT_SEN" || return 0
+  rec=$(recorded_inputs "$r")
+  [ -z "$rec" ] || [ -z "$INPUTS" ] || [ "$rec" = "$INPUTS" ] \
+    || die "the sp11-sensors payload changed since $(basename "$r") was built, but SENSORS_VERSION is still $SENSORS_VERSION: bump it in sp11.conf (dnf ignores a same-version rebuild)"
+}
 sensors_current() {
   local r; r=$(rpm_of sp11-sensors); have sp11-sensors "$EXPECT_SEN" || return 1
-  [ -s "$REG/sns_reg_config" ] || return 1
+  [ -n "$INPUTS" ] || return 1
+  [ -z "$(recorded_inputs "$r")" ] || return 0   # same inputs: sensors_guard compared them
+  warn "cached $(basename "$r") was built before the inputs guard; deciding by modification times"
   [ -z "$(find "$REG" "$FILES_DIR/sensors" "$SPEC_DIR/sp11-sensors.spec.in" "$SP11_ROOT/sp11.conf" -newer "$r" 2>/dev/null | head -1)" ]
 }
+sensors_guard
 if [ "${FORCE:-0}" != 1 ] && chain_current && sensors_current; then
   log "sensors RPMs already built for Fedora $FEDORA_RELEASE (FORCE=1 to rebuild)"; exit 0
 fi
 
-## 1. Upstream sources: pinned checkouts (git archive) plus this repo's packaging additions, and Fedora's
-##    iio-sensor-proxy sources out of its source RPM.
+## 1. Sources: pinned checkouts (git archive; hexagonrpc from the project's fork) plus this repo's packaging
+##    additions, and Fedora's iio-sensor-proxy sources out of its source RPM.
 rm -rf "$SRC"; mkdir -p "$SRC"
 [ "$(git -C "$CACHE_DIR/hexagonrpc" rev-parse HEAD 2>/dev/null)" = "$HEXAGONRPC_COMMIT" ] || die "hexagonrpc checkout is not at $HEXAGONRPC_COMMIT (run scripts/10-fetch-sources.sh)"
 [ "$(git -C "$CACHE_DIR/libssc" rev-parse HEAD 2>/dev/null)" = "$LIBSSC_COMMIT" ] || die "libssc checkout is not at $LIBSSC_COMMIT (run scripts/10-fetch-sources.sh)"
@@ -51,6 +77,10 @@ git -C "$CACHE_DIR/libssc" archive --format=tar.gz --prefix="libssc-$LIBSSC_COMM
 install -m 0644 "$FILES_DIR/sensors/hexagonrpc.sysusers.conf" "$FILES_DIR/sensors/60-hexagonrpc-fastrpc.rules" "$SRC/"
 ( cd "$SRC" && rpm2cpio "$ISP_SRPM" | cpio -idm --quiet ) || die "cannot unpack $(basename "$ISP_SRPM")"
 [ -s "$SRC/iio-sensor-proxy-$ISP_VERSION.tar.bz2" ] || die "$(basename "$ISP_SRPM") does not carry iio-sensor-proxy-$ISP_VERSION.tar.bz2"
+# The template is Fedora's spec plus the SSC option and the release suffix: a spec Fedora changed (a build
+# requirement, a file, a scriptlet) must be merged into the template, not built around from the frozen copy.
+[ "$(sha256_of "$SRC/iio-sensor-proxy.spec")" = "$IIO_SENSOR_PROXY_BASE_SPEC_SHA256" ] \
+  || die "Fedora's iio-sensor-proxy.spec in $(basename "$ISP_SRPM") differs from the one rpm/iio-sensor-proxy.spec.in was derived from: diff $SRC/iio-sensor-proxy.spec against the template, refresh it, then set IIO_SENSOR_PROXY_BASE_SPEC_SHA256=$(sha256_of "$SRC/iio-sensor-proxy.spec") in sp11.conf"
 rm -f "$SRC/iio-sensor-proxy.spec"
 
 ## 2. hexagonrpc, libssc and iio-sensor-proxy, chained in the target release's buildroot
@@ -82,17 +112,14 @@ log "chain RPMs: $(basename "$RPM_HEX") $(basename "$RPM_SSC") $(basename "$RPM_
   || die "no exported sensor registry under $REG (run scripts/75-export-sensor-registry.sh, one UAC prompt); the chain RPMs above are kept"
 STAGE="$SDIR/stage"; rm -rf "$STAGE"; mkdir -p "$STAGE"
 P="$STAGE$SENSORS_PAYLOAD_DIR"
-FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
-[ -d "$FR" ] || die "Windows DriverStore not found at $FR"
-SNSCFG=$(find "$FR" -maxdepth 1 -type d -name "$SENSORS_SNSCFG_GLOB" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
-[ -n "$SNSCFG" ] || die "no $SENSORS_SNSCFG_GLOB package under $FR (the Windows sensor configuration)"
 install -d "$P/sensors/config" "$P/sensors/registry" "$P/socinfo"
 # Every JSON of the package (the framework reads the ones json.lst names; Windows' list is not exact: on this unit
 # it names one file twice and omits sns_cal.json, so the package's full set is the safe superset), and json.lst
-# byte for byte. Each listed file has to exist.
+# with its CRLF converted to LF. Each listed file has to exist.
 # Modification times are kept (-p, and the spec keeps rpm's clamping off): the framework records the mtime of
 # every file it parsed in its registry (sns_reg_config, one stamp per JSON, seen matching Windows' file times to
-# the second) and re-parses a file whose mtime differs, deleting its entries first.
+# the second); with none matching it discarded the registry and re-parsed everything (a partial mismatch has not
+# been seen).
 n_json=0
 for f in "$SNSCFG"/*.json; do install -p -m 0644 "$f" "$P/sensors/config/$(basename "$f")"; n_json=$((n_json + 1)); done
 [ "$n_json" -gt 0 ] || die "$(basename "$SNSCFG") holds no JSON sensor configuration"
@@ -182,7 +209,8 @@ fi
 ## 5. RPM
 log "building sp11-sensors RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-sensors.spec.in" sp11-sensors "$SDIR" \
-  STAGE="$STAGE" VERSION="$SENSORS_VERSION" SKU="$SP11_SKU" SNSCFG="$(basename "$SNSCFG")" PAYLOAD_DIR="$SENSORS_PAYLOAD_DIR")
+  STAGE="$STAGE" VERSION="$SENSORS_VERSION" SKU="$SP11_SKU" SNSCFG="$(basename "$SNSCFG")" PAYLOAD_DIR="$SENSORS_PAYLOAD_DIR" \
+  INPUTS="$INPUTS")
 rpm -qpl "$RPM" | grep -x "$SENSORS_PAYLOAD_DIR/sensors/registry/sns_reg_config" >/dev/null || die "sp11-sensors RPM lacks the registry"
 rpm -qpl "$RPM" | grep -x "$SENSORS_PAYLOAD_DIR/sensors/registry-parent/sns_reg_version" >/dev/null || die "sp11-sensors RPM lacks sns_reg_version beside the registry"
 ! rpm -qpl "$RPM" | grep -x "$SENSORS_PAYLOAD_DIR/sensors/registry/sns_reg_version" >/dev/null || die "sp11-sensors RPM still carries sns_reg_version among the registry entries"

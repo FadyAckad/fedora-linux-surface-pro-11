@@ -3,7 +3,7 @@
 # installed-system kernel-install hand-off in a chroot, with the inputs Anaconda leaves at that point, to prove the
 # BLS entry receives the Denali DTB and the SP11 kernel arguments.
 . "$(dirname "$0")/lib.sh"
-require_cmd dtc
+require_cmd dtc lsinitrd
 load_hardware
 ROOTFS="$WORK_DIR/iso/rootfs"; [ -d "$ROOTFS/usr/lib/modules/$KERNEL_ABI" ] || die "no remastered root at $ROOTFS (run scripts/50-build-iso.sh)"
 fail=0; check() { if "$@"; then log "ok: ${*: -1}"; else warn "FAIL: ${*: -1}"; fail=1; fi; }
@@ -45,6 +45,21 @@ stock=$(r find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' ! -name "vmlinuz-$KE
 bls=$(r find "$ROOTFS/boot/loader/entries" -name '*.conf' 2>/dev/null | wc -l); check test "$bls" -eq 0
 check r grep -q 'kernel-uki-\*' "$ROOTFS/etc/dnf/libdnf5.conf.d/90-sp11.conf"
 check r rpm --root "$ROOTFS" -q kernel-sp11 sp11-surface-support sp11-iptsd
+# The sensors stack is part of the media (inert here: no FastRPC node without the ADSP; active on the installed
+# system). Step 50 applied its scriptlet effects itself: the fastrpc user, the policy module, the registry copy.
+check r rpm --root "$ROOTFS" -q hexagonrpc libssc iio-sensor-proxy sp11-sensors
+for rpmf in "$(rpm_of hexagonrpc)" "$(rpm_of libssc)" "$(rpm_of iio-sensor-proxy)" "$(rpm_of sp11-sensors)"; do
+  check r rpm --root "$ROOTFS" -U --test --replacepkgs "$rpmf"
+done
+check r sh -c "rpm --root '$ROOTFS' -q --qf '%{RELEASE}\n' iio-sensor-proxy | grep -q '\.sp11\.'"
+check r chroot "$ROOTFS" /usr/bin/sh -c 'ldd /usr/libexec/iio-sensor-proxy | grep -q libssc.so.2'
+check r chroot "$ROOTFS" /usr/bin/getent passwd fastrpc
+check r sh -c "chroot '$ROOTFS' /usr/sbin/semodule -l | grep -qx sp11-sensors"
+check r test -s "$ROOTFS/var/lib/sp11/hexagonrpc/sensors/persist/registry/sns_reg_config"
+check test "$(r stat -c %Y "$ROOTFS/var/lib/sp11/hexagonrpc/sensors/persist/registry/tdm_uid.bin")" = "$(r stat -c %Y "$ROOTFS$SENSORS_PAYLOAD_DIR/sensors/registry/tdm_uid.bin")"
+check r grep -q 'iio-sensor-proxy' "$ROOTFS/etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf"
+check r test ! -e "$ROOTFS/usr/lib/dracut/modules.d/95sp11-sensors"
+check sh -c "! lsinitrd '$WORK_DIR/iso/initrd' | grep -qE 'sp11-sensors|hexagonrpc'"
 for rpmf in "$(rpm_of kernel-sp11)" "$(rpm_of sp11-surface-support)" "$(rpm_of sp11-iptsd)"; do
   check r rpm --root "$ROOTFS" -U --test --replacepkgs "$rpmf"
 done

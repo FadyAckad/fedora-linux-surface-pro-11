@@ -1,6 +1,7 @@
 #!/usr/bin/bash
 # Step 6: remaster the Fedora live ISO (FEDORA_EDITION: Workstation or a spin) for the Surface Pro 11.
-#   - extract the LZMA EROFS live root, install the kernel-sp11 / sp11-surface-support / sp11-iptsd RPMs
+#   - extract the LZMA EROFS live root, install the kernel-sp11 / sp11-surface-support / sp11-iptsd RPMs and the
+#     sensors stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors; inert on the live media, see below)
 #   - remove the stock kernel packages, generate a dracut-live initramfs for the SP11 kernel
 #   - repack the root as LZMA EROFS with SELinux labels, write a GRUB menu that loads the Denali OLED DTB
 #   - replay the source ISO's hybrid GPT/El Torito boot layout with xorriso
@@ -13,6 +14,14 @@ ISO="$CACHE_DIR/$FEDORA_ISO_NAME"; [ -s "$ISO" ] || die "missing $ISO (run scrip
 KRPM=$(rpm_of kernel-sp11);          [ -n "$KRPM" ] || die "kernel-sp11 RPM missing (run scripts/20-build-kernel.sh)"
 SRPM=$(rpm_of sp11-surface-support); [ -n "$SRPM" ] || die "sp11-surface-support RPM missing (run scripts/30-build-support-rpm.sh)"
 IRPM=$(rpm_of sp11-iptsd);           [ -n "$IRPM" ] || die "sp11-iptsd RPM missing (run scripts/40-build-iptsd-rpm.sh)"
+# The sensors stack (scripts/45): inert on the live media, where the ADSP is blacklisted and its FastRPC node never
+# appears (nothing starts hexagonrpcd or the online unit, and iio-sensor-proxy without sensors behaves as the stock
+# build); active on the installed system from its first boot.
+SENSOR_RPMS=()
+for n in hexagonrpc libssc iio-sensor-proxy sp11-sensors; do
+  r=$(rpm_of "$n"); [ -n "$r" ] || die "$n RPM missing (run scripts/75-export-sensor-registry.sh once, then scripts/45-build-sensors-rpms.sh)"
+  SENSOR_RPMS+=("$r")
+done
 [ "$SP11_DTB_SELECTED" = "$SP11_DTB" ] || die "hardware.env selects DTB $SP11_DTB_SELECTED, config expects $SP11_DTB"
 
 W="$WORK_DIR/iso"; ROOTFS="$W/rootfs"; OUT="$OUT_DIR/$OUTPUT_ISO_NAME"
@@ -86,8 +95,9 @@ log "live root: Fedora $ROOT_RELEASE"
 ##    (no --nodeps): a missing library would leave e.g. iptsd unable to start on the installed system.
 ##    Scriptlets are skipped; their effects are applied explicitly below.
 DEP_RPMS=()
-for pkg in $LIVE_EXTRA_PKGS; do
-  if as_root rpm --root "$ROOTFS" -q "$pkg" >/dev/null 2>&1; then continue; fi
+# By capability, not name (step 46's rule): Fedora 45 ships protobuf-c's library as protobuf3-c, which provides it.
+for pkg in $LIVE_EXTRA_PKGS $SENSORS_DEPS_PKGS; do
+  if as_root rpm --root "$ROOTFS" -q --whatprovides "$pkg" >/dev/null 2>&1; then continue; fi
   f=$(ls -t "$CACHE_DIR/rpm-deps/f$FEDORA_RELEASE/$pkg"-[0-9]*.rpm 2>/dev/null | head -1 || true)
   [ -n "$f" ] || die "missing dependency RPM for $pkg (run scripts/10-fetch-sources.sh)"
   DEP_RPMS+=("$f")
@@ -98,11 +108,12 @@ if [ ${#DEP_RPMS[@]} -gt 0 ]; then
     || { cat "$W/rpm-deps.log" >&2; die "dependency RPM install into live root failed"; }
 fi
 log "installing SP11 RPMs into the live root"
-as_root rpm --root "$ROOTFS" -U --test --replacepkgs "$KRPM" "$SRPM" "$IRPM" >"$W/rpm-test.log" 2>&1 \
-  || { cat "$W/rpm-test.log" >&2; die "SP11 RPMs have unmet dependencies in the live root (add the package to LIVE_EXTRA_PKGS)"; }
-as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacefiles --replacepkgs "$KRPM" "$SRPM" "$IRPM" >"$W/rpm-install.log" 2>&1 \
+as_root rpm --root "$ROOTFS" -U --test --replacepkgs "$KRPM" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-test.log" 2>&1 \
+  || { cat "$W/rpm-test.log" >&2; die "SP11 RPMs have unmet dependencies in the live root (add the package to LIVE_EXTRA_PKGS or SENSORS_DEPS_PKGS)"; }
+as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacefiles --replacepkgs "$KRPM" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-install.log" 2>&1 \
   || { cat "$W/rpm-install.log" >&2; die "rpm install into live root failed"; }
-as_root rpm --root "$ROOTFS" -q kernel-sp11 sp11-surface-support sp11-iptsd >/dev/null || die "RPMs not registered in the live root database"
+as_root rpm --root "$ROOTFS" -q kernel-sp11 sp11-surface-support sp11-iptsd hexagonrpc libssc iio-sensor-proxy sp11-sensors >/dev/null \
+  || die "RPMs not registered in the live root database"
 as_root chroot "$ROOTFS" /usr/libexec/sp11/sp11-ucm-apply || die "UCM matcher install failed"
 for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device; do
   as_root chroot "$ROOTFS" "$bin" --help >/dev/null 2>&1 || die "$bin cannot run in the live root (missing shared library?)"
@@ -179,6 +190,17 @@ restore_dropin() { [ -e "$DRACUT_DROPIN.live-off" ] && as_root mv -f "$DRACUT_DR
 cleanup_mounts() { restore_dropin; for m in run sys proc dev; do as_root umount -R "$ROOTFS/$m" 2>/dev/null || true; done; }
 trap cleanup_mounts EXIT
 for m in dev proc sys run; do as_root mount --rbind "/$m" "$ROOTFS/$m"; as_root mount --make-rslave "$ROOTFS/$m"; done
+# The sensors RPMs' scriptlet effects, skipped by --noscripts: the fastrpc user the units run as (hexagonrpc %pre),
+# the policy module for iio-sensor-proxy's QRTR sockets (sp11-sensors %post) and the directory hexagonrpcd serves,
+# with the writable registry copy (sp11-sensors %posttrans, tmpfiles). Anaconda's rsync carries all three over.
+as_root chroot "$ROOTFS" /usr/bin/systemd-sysusers /usr/lib/sysusers.d/hexagonrpc.conf || die "systemd-sysusers failed for hexagonrpc.conf"
+as_root chroot "$ROOTFS" /usr/bin/getent passwd fastrpc >/dev/null || die "no fastrpc user in the live root"
+as_root chroot "$ROOTFS" /usr/sbin/semodule -i /usr/share/selinux/packages/sp11-sensors.cil || die "semodule -i sp11-sensors.cil failed in the live root"
+as_root chroot "$ROOTFS" /usr/sbin/semodule -l | grep -x sp11-sensors >/dev/null || die "sp11-sensors is not in the live root's policy store"
+as_root chroot "$ROOTFS" /usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/sp11-sensors.conf || die "systemd-tmpfiles failed for sp11-sensors.conf"
+[ "$(as_root chroot "$ROOTFS" /usr/bin/stat -c %U /var/lib/sp11/hexagonrpc/sensors/persist/registry/sns_reg_config 2>/dev/null)" = fastrpc ] \
+  || die "the registry copy under /var/lib/sp11/hexagonrpc is missing or not owned by fastrpc"
+[ -e "$ROOTFS/usr/lib/dracut/modules.d/95sp11-sensors" ] && die "a sensors dracut module is in the live root (sp11-sensors older than 1.3?)"
 PROFILE_OPT=""; [ -f "$ROOTFS/.profile" ] && PROFILE_OPT="--install /.profile"
 [ -f "$DRACUT_DROPIN" ] || die "missing $DRACUT_DROPIN (support RPM payload changed?)"
 [ -s "$ROOTFS$ZAP_FW" ] || die "missing GPU zap shader $ZAP_FW in the live root"
@@ -197,6 +219,7 @@ lsinitrd "$W/initrd" | grep "usr/lib/modules/$KERNEL_ABI/kernel/fs/erofs/erofs.k
 lsinitrd -m "$W/initrd" | grep -x fips >/dev/null && die "initramfs contains the fips module"
 lsinitrd "$W/initrd" | grep -F "${ZAP_FW#/}" >/dev/null || die "live initramfs lacks the GPU zap shader"
 lsinitrd "$W/initrd" | grep -F 'Denali/qcadsp8380.mbn' >/dev/null && die "live initramfs still carries the ADSP firmware"
+lsinitrd "$W/initrd" | grep -E 'sp11-sensors|hexagonrpc' >/dev/null && die "live initramfs carries files of the sensors stack"
 as_root rm -f "$ROOTFS/boot/initramfs-$KERNEL_ABI.img"
 cleanup_mounts; trap - EXIT
 [ -z "$(mounts_under "$ROOTFS")" ] || die "mounts still active under $ROOTFS (they would be packed into the image): $(mounts_under "$ROOTFS" | tr '\n' ' ')"
@@ -211,10 +234,18 @@ log "live initramfs: $(du -h "$W/initrd" | cut -f1), kernel: $(du -h "$W/vmlinuz
 CONTEXTS="$ROOTFS/etc/selinux/targeted/contexts/files/file_contexts"; [ -s "$CONTEXTS" ] || die "missing $CONTEXTS"
 log "repacking live root as LZMA EROFS (workers: $(nproc))"
 rm -f "$W/remastered.erofs"
-as_root mkfs.erofs -zlzma,level=6 -C1048576 -Efragments --workers="$(nproc)" -T "$SOURCE_DATE_EPOCH" \
+# -T alone implies --all-time (erofs-utils 1.9.4): every file would carry the build time, Anaconda's rsync -t would
+# copy that onto the installed system, and Fedora's timestamp-checked Python bytecode would be stale everywhere
+# (the images built up to 2026-09-21 have this). --mkfs-time stamps the superblock only; the files keep the times
+# the extracted root preserved and rpm set.
+as_root mkfs.erofs -zlzma,level=6 -C1048576 -Efragments --workers="$(nproc)" -T "$SOURCE_DATE_EPOCH" --mkfs-time \
   --file-contexts="$CONTEXTS" "$W/remastered.erofs" "$ROOTFS" >"$W/mkfs-erofs.log" 2>&1 || { tail -10 "$W/mkfs-erofs.log" >&2; die "mkfs.erofs failed"; }
 as_root chown "$(id -u):$(id -g)" "$W/remastered.erofs"
 dump.erofs -s "$W/remastered.erofs" | grep 'compr_algs: *lzma' >/dev/null || die "remastered image is not LZMA-compressed"
+# A file the remaster never touches must keep its time from the source image.
+erofs_mtime() { dump.erofs --path=/usr/lib/os-release "$1" 2>/dev/null | sed -n 's/^Timestamp: *//p' | head -1 || true; }
+[ -n "$(erofs_mtime "$W/live.erofs")" ] && [ "$(erofs_mtime "$W/remastered.erofs")" = "$(erofs_mtime "$W/live.erofs")" ] \
+  || die "file times did not survive the repack: /usr/lib/os-release is '$(erofs_mtime "$W/remastered.erofs")' in the remastered image, '$(erofs_mtime "$W/live.erofs")' in the source"
 log "remastered root: $(du -h "$W/remastered.erofs" | cut -f1)"
 
 ## 7. GRUB menu and /sp11 payload
@@ -224,7 +255,7 @@ render "$FILES_DIR/grub-live.cfg.in" "$W/grub.cfg" RELEASE="$MEDIA_LABEL" ABI="$
   GFXMODE_FALLBACK="$GRUB_GFXMODE_FALLBACK_VALUE" VOLID="$VOLID" ARGS_INSTALLED="$SP11_ARGS_INSTALLED" \
   ARGS_LIVE="$SP11_ARGS_LIVE_ONLY" DTB="$DTB_ISO" KERNEL="$KERNEL_ISO" INITRD="$INITRD_ISO"
 grep -q 'fips=1' "$W/grub.cfg" && die "grub.cfg enables FIPS"
-rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "$KRPM" "$SRPM" "$IRPM" "$W/sp11/rpms/"
+rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "$KRPM" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" "$W/sp11/rpms/"
 render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" \
   COMMIT="${KERNEL_SOURCE_COMMIT:0:12}${KERNEL_STABLE_VERSION:+ + kernel.org stable $KERNEL_STABLE_VERSION}" \
   MODE="$KERNEL_MODE" DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE" \

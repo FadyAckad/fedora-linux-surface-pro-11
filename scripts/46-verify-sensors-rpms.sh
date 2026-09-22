@@ -1,8 +1,9 @@
 #!/usr/bin/bash
-# Step 4d: prove the sensors RPMs (scripts/45) install into the live root the way `dnf install` does on the installed
+# Step 4e: prove the sensors RPMs (scripts/45) install into the live root the way `dnf install` does on the installed
 # system and hold together: dependencies, linkage against the target release's libraries, the units, udev rules,
 # the SELinux module, the fastrpc user, the merged dnf exclusions and the payload. Runs in an overlay of the
-# extracted live root, so the cached root is never modified. What only the device can show (the DSP accepting the
+# extracted live root (which carries the stack itself since step 50 installs it), so the cached root is never
+# modified. What only the device can show (the DSP accepting the
 # registry, sensor data, orientation) is not covered: see sp11-sensors-check on the installed system.
 . "$(dirname "$0")/lib.sh"
 require_cmd rpm findmnt
@@ -49,10 +50,12 @@ setup_overlay
 declare -a IN=(); mapfile -t IN < <(stage_rpms "${DEPS[@]}" "${RPMS[@]}")
 
 ## 1. Install as dnf would: dependency check, then the real transaction with scriptlets (sysusers, semodule).
+##    Step 50 installs the same set into the live root, so after an ISO build this is a reinstall (--replacepkgs,
+##    which runs the same scriptlets); on a root without the stack it is the plain install.
 log "--- install into an overlay of the live root: ${#DEPS[@]} dependency RPM(s) + ${#RPMS[@]} sensors RPMs"
-inroot /usr/bin/rpm -U --test --define '_pkgverify_level none' "${IN[@]}" \
+inroot /usr/bin/rpm -U --test --replacepkgs --define '_pkgverify_level none' "${IN[@]}" \
   || die "the sensors RPMs have unmet dependencies in the live root (see above)"
-inroot /usr/bin/rpm -U --define '_pkgverify_level none' "${IN[@]}" || die "rpm -U of the sensors RPMs failed in the chroot"
+inroot /usr/bin/rpm -U --replacepkgs --define '_pkgverify_level none' "${IN[@]}" || die "rpm -U of the sensors RPMs failed in the chroot"
 for n in hexagonrpc libssc iio-sensor-proxy sp11-sensors; do check inroot /usr/bin/rpm -q "$n"; done
 check inroot /usr/bin/rpm -q --whatprovides 'libssc.so.2()(64bit)'
 
@@ -99,7 +102,7 @@ for s in sp11-sensors-wait sp11-sensors-check; do check inroot /usr/bin/bash -n 
 check as_root grep -q 'udevadm trigger --action=add' "$M/usr/libexec/sp11/sp11-sensors-wait"
 check as_root sh -c "! grep -qE 'systemctl .*(restart|stop)' '$M/usr/libexec/sp11/sp11-sensors-wait'"
 
-## 3b. The working directory the daemon serves (created by %post through tmpfiles): links into the package, a
+## 3b. The working directory the daemon serves (created by %posttrans through tmpfiles): links into the package, a
 ##     registry copy the daemon's user can write, and the guard that keeps a DSP crash from becoming a loop.
 log "--- working directory and guard"
 W="$M/var/lib/sp11/hexagonrpc"
@@ -151,7 +154,11 @@ check as_root sh -c "! grep -qE '^(ExecStartPre|RestartPreventExitStatus)=' '$M/
 check inroot /usr/libexec/sp11/sp11-sensors-guard
 check as_root test -s "$M/run/sp11-sensors/attaches"
 check inroot /usr/bin/bash -n /usr/libexec/sp11/sp11-sensors-reset
-# The daemon in the RPM carries the registry-write patch (a message only the patched apps_std prints).
+# The initramfs is regenerated only when a 1.1/1.2 package (the initramfs hook) is upgraded away, by a trigger; the
+# unconditional dracut run of 1.3-1.9's %posttrans must not come back.
+check as_root sh -c "! chroot '$M' /usr/bin/rpm -q --scripts sp11-sensors | grep -q 'dracut -f'"
+check as_root sh -c "chroot '$M' /usr/bin/rpm -q --triggers sp11-sensors | grep -q 'dracut -f'"
+# The daemon in the RPM carries the fork's registry writes (a message only its apps_std prints).
 check as_root sh -c "grep -q 'Could not remove' '$M/usr/bin/hexagonrpcd'"
 check as_root sh -c "grep -q 'Could not write file' '$M/usr/bin/hexagonrpcd'"
 # ... and release 3's listener (large input buffers) and builder (persist parent): messages only they print.
@@ -169,9 +176,9 @@ P="$M$SENSORS_PAYLOAD_DIR"
 # json.lst is Windows' list as shipped (it may name a file twice); the unique set is what has to exist.
 n_lst=$(as_root sh -c "tr -d '\r' < '$P/sensors/config/json.lst' | grep . | sort -u | wc -l"); n_json=$(as_root find "$P/sensors/config" -name '*.json' | wc -l)
 check test "$n_lst" -gt 0
-# The framework re-parses a configuration file whose mtime differs from the stamp its registry recorded for it
-# (registry/sns_reg_config, one entry per JSON), deleting the file's entries first: the served files must carry
-# Windows' modification times through the stage, the RPM (no clamping) and the install.
+# With no configuration file's mtime matching the stamp its registry recorded (registry/sns_reg_config, one entry
+# per JSON) the framework discarded the registry and re-parsed everything (a partial mismatch has not been seen):
+# the served files must carry Windows' modification times through the stage, the RPM (no clamping) and the install.
 for j in 8380_crd_lsm6dsv_display.json 8380_crd_tcs3430_0.json; do
   stamp=$(as_root sh -c "grep -o '\"$j\":{[^}]*}' '$P/sensors/registry/sns_reg_config'" | sed -n 's/.*"data":"\([0-9]*\)".*/\1/p')
   check test -n "$stamp"
@@ -226,7 +233,8 @@ if [ -n "${SENSORS_PREVIOUS_RPMS:-}" ]; then
   [ "${#NEW[@]}" -gt 0 ] || die "SENSORS_PREVIOUS_RPMS names no package of the current set"
   setup_overlay
   declare -a OLD_IN=(); mapfile -t OLD_IN < <(stage_rpms "${DEPS[@]}" "${KEEP[@]}" "${PREV[@]}")
-  inroot /usr/bin/rpm -U --define '_pkgverify_level none' "${OLD_IN[@]}" || die "rpm -U of the previous release failed in the chroot"
+  # --oldpackage: the previous release is older than what the live root carries since step 50.
+  inroot /usr/bin/rpm -U --oldpackage --replacepkgs --define '_pkgverify_level none' "${OLD_IN[@]}" || die "rpm -U of the previous release failed in the chroot"
   for f in "${PREV[@]}"; do check inroot /usr/bin/rpm -q "$(rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}' "$f")"; done
   as_root test -e "$M/usr/lib/dracut/modules.d/95sp11-sensors" && log "  the previous release carries the initramfs hook; the upgrade must take it out"
   # The owner's state after a crash loop: the unit masked. An admin's symlink in /etc, which rpm must leave alone.
@@ -243,7 +251,7 @@ if [ -n "${SENSORS_PREVIOUS_RPMS:-}" ]; then
   check as_root sh -c "! grep -qE '^(ExecStartPre|RestartPreventExitStatus)=' '$M/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-sp11.conf'"
   check as_root test -f "$M/usr/lib/tmpfiles.d/sp11-sensors.conf"
   check inroot /usr/bin/test -f /var/lib/sp11/hexagonrpc/sensors/config/json.lst
-  # The working copy moved from sensors/registry (1.3, 1.4) to sensors/persist/registry; %post removes the old one.
+  # The working copy moved from sensors/registry (1.3, 1.4) to sensors/persist/registry; %posttrans removes the old one.
   check as_root test -s "$W/sensors/persist/registry/sns_reg_config"
   check as_root test ! -e "$W/sensors/registry"
   check as_root sh -c "grep -q '^version=' '$W/sensors/persist/sns_reg_version'"

@@ -36,6 +36,7 @@ data, Bluetooth public-address service, kernel-install boot policy plugin
 Windows Boot Manager, a dnf exclusion of the stock kernel packages, the first-boot
 finalizer, and the SELinux restore for installations the live installer disabled it on.
 The firmware is proprietary and must not be redistributed.
+Inputs: @INPUTS@
 
 %prep
 %build

@@ -26,7 +26,7 @@ Requires:       qrtr
 Requires:       systemd
 Requires:       systemd-udev
 Requires:       policycoreutils
-# stdbuf (line-buffered daemon log) and the initramfs module
+# stdbuf (line-buffered daemon log); dracut for the trigger below, which takes the 1.1/1.2 initramfs hook out
 Requires:       coreutils
 Requires:       dracut
 Requires:       sp11-surface-support >= 2.0
@@ -45,6 +45,7 @@ dnf exclusion that keeps the SSC-enabled iio-sensor-proxy, and sp11-sensors-chec
 The configuration and registry files are Microsoft/Qualcomm proprietary and must
 not be redistributed. Reboot after installing: the framework reads the registry
 only when the ADSP boots.
+Inputs: @INPUTS@
 
 %prep
 %build
@@ -66,8 +67,12 @@ fi
 # 1.4 kept the copy at sensors/registry, which nothing serves any more.
 rm -rf /var/lib/sp11/hexagonrpc/sensors/registry
 /usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/sp11-sensors.conf >/dev/null 2>&1 || :
-# 1.1 and 1.2 put an initramfs hook into the running kernel's initramfs (an early attach the framework turned out
-# not to need); regenerating it here takes that hook out again. Nothing to do in a live session or a build chroot.
+
+# 1.1 and 1.2 put an initramfs hook (95sp11-sensors) into the running kernel's initramfs, an early attach the
+# framework turned out not to need; regenerating the initramfs when one of them is upgraded away takes the hook
+# out. Up to 1.9 this ran in %%posttrans on every install: a full host-only dracut each time, for nothing. Nothing
+# to do in a live session or a build chroot.
+%triggerpostun -- sp11-sensors < 1.3
 if [ -f "/boot/initramfs-$(uname -r).img" ] && ! grep -qw rd.live.image /proc/cmdline 2>/dev/null; then
   /usr/bin/dracut -f --kver "$(uname -r)" >/dev/null 2>&1 || :
 fi
@@ -100,7 +105,14 @@ fi
 /etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf
 
 %changelog
-* Mon Sep 21 2026 SP11 build <sp11@localhost> - @VERSION@-1
+* Tue Sep 22 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- The initramfs is regenerated only when a 1.1 or 1.2 package (the initramfs hook) is upgraded away, by a
+  trigger, not on every install; sp11-sensors-reset says the rebuilt registry copy is read at the next boot;
+  comments in the daemon drop-in, the check and wait helpers match the current design (registry read once per
+  ADSP boot, POS tablet switch); the payload's inputs hash in the description (step 45 refuses a same-version
+  rebuild from other inputs)
+
+* Mon Sep 21 2026 SP11 build <sp11@localhost> - 1.9-1
 - sp11-sensors-wait no longer restarts iio-sensor-proxy: a sensor type the proxy lacks (usually the compass,
   published after its probe) is picked up by sending the proxy a udev "add" event for the FastRPC node, repeated
   with a growing delay; the CDSP firmware had asserted during both boot-time restarts seen, while the proxy tore

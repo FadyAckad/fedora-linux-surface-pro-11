@@ -13,11 +13,16 @@ Live session:  Wi-Fi, Bluetooth, GPU acceleration, touch and pen work. Audio and
 
 Installation:  run "Install to Hard Drive". The installed system boots this kernel with the Denali DTB;
                a one-shot service (sp11-first-boot) removes the live-only DSP blacklist on the first boot.
+Sensors:       hexagonrpcd, libssc and iio-sensor-proxy with its Qualcomm Sensor Core drivers, plus this unit's
+               sensor registry (sp11-sensors), are installed. They stay inactive on the live USB (the DSP is off)
+               and serve the accelerometer, light sensor and compass on the installed system.
 
 RPMs used to build this media are under /sp11/rpms.
 
-Redistribution: this media and the RPMs under /sp11/rpms contain proprietary Qualcomm firmware copied
-               from the Windows installation of the machine that built it. Do not pass them on; build
-               your own from the source repository instead.
+Redistribution: this media and the RPMs under /sp11/rpms contain proprietary Qualcomm firmware and the
+               sensor configuration and registry copied from the Windows installation of the machine that
+               built it. Do not pass them on; build your own from the source repository instead.
 Credits:       kernel ooaklee/linux_ms_dev_kit-sp11 (GPL-2.0); audio topology, UCM and pen integration
-               from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd; Fedora @EDITION@ Live.
+               from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd; sensors from
+               linux-msm/hexagonrpc (this project's fork), DylanVanAssche/libssc and Fedora's
+               iio-sensor-proxy; Fedora @EDITION@ Live.

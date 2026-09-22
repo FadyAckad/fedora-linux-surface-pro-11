@@ -6,17 +6,39 @@
 require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
 
-# Bump whenever anything under files/ or the generated payload changes, so `dnf upgrade` picks it up.
+# Bump with every change to the payload: the files this script installs from files/, the spec template and the
+# sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
+# rebuild the same version from other inputs.
 VERSION="2.6"
 
+# What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
+# file directly under files/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
+# values that reach sp11.env, the UCM matcher, the board data and the font. Recorded in the RPM's description.
+support_inputs() {
+  printf '%s\n' "SP11_DTB=$SP11_DTB" "SP11_ARGS_INSTALLED=$SP11_ARGS_INSTALLED" \
+    "SP11_ARGS_LIVE_ONLY=$SP11_ARGS_LIVE_ONLY" "GRUB_GFXMODE_VALUE=$GRUB_GFXMODE_VALUE" \
+    "GRUB_TIMEOUT_VALUE=$GRUB_TIMEOUT_VALUE" "GRUB_FONT_FILE=$GRUB_FONT_FILE" "GRUB_FONT_SIZE=$GRUB_FONT_SIZE" \
+    "GRUB_FONT_NAME=$GRUB_FONT_NAME" "UCM_SP11_REGEX=$UCM_SP11_REGEX" "WIFI_BOARD_ENTRY=$WIFI_BOARD_ENTRY" \
+    "AUDIO_RELEASE_TAG=$AUDIO_RELEASE_TAG" "BT_HELPER_SHA256=$BT_HELPER_SHA256" \
+    | inputs_sha256 "$SPEC_DIR/sp11-surface-support.spec.in" \
+        $(find "$FILES_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort)
+}
+INPUTS=$(support_inputs)
+
 CACHED=$(rpm_of sp11-surface-support)
-if [ -n "$CACHED" ] && [ "${FORCE:-0}" != 1 ]; then
+if [ -n "$CACHED" ]; then
   # The dist tag counts as well: switching FEDORA_RELEASE must not reuse the other release's package, whose
   # board.bin comes from that release's atheros-firmware and whose %{dist} names the wrong Fedora.
   case "$(rpm -qp --qf '%{VERSION} %{RELEASE}' "$CACHED" 2>/dev/null)" in
-    "$VERSION "*".fc$FEDORA_RELEASE") log "support RPM already built: $CACHED (FORCE=1 to rebuild)"; exit 0 ;;
+    "$VERSION "*".fc$FEDORA_RELEASE")
+      recorded=$(rpm -qp --qf '%{DESCRIPTION}' "$CACHED" 2>/dev/null | sed -n 's/^Inputs: //p' | head -1 || true)
+      if [ -n "$recorded" ] && [ "$recorded" != "$INPUTS" ]; then
+        die "the support payload changed since $(basename "$CACHED") was built, but VERSION is still $VERSION: bump VERSION in scripts/30-build-support-rpm.sh (dnf ignores a same-version rebuild)"
+      fi
+      [ -n "$recorded" ] || warn "cached $(basename "$CACHED") was built before the inputs guard; a changed payload at version $VERSION goes unnoticed until the next bump"
+      if [ "${FORCE:-0}" != 1 ]; then log "support RPM already built: $CACHED (FORCE=1 to rebuild)"; exit 0; fi ;;
+    *) log "cached $(basename "$CACHED") is not version $VERSION for Fedora $FEDORA_RELEASE; rebuilding" ;;
   esac
-  log "cached $(basename "$CACHED") is not version $VERSION for Fedora $FEDORA_RELEASE; rebuilding"
 fi
 
 SDIR="$BUILD_DIR/support"; STAGE="$SDIR/stage"
@@ -135,7 +157,7 @@ sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_window
 ## 7. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
-  STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG")
+  STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG" INPUTS="$INPUTS")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"
 

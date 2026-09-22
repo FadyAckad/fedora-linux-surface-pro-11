@@ -6,9 +6,9 @@
 # in the registry lookup otherwise (killed by timeout). Run by sp11-sensors-online.service.
 #
 # With a registry that needs no re-parse the proxy's own probe finds the accelerometer and the light sensor, but
-# usually not the compass: libssc builds it from the DSP's rotation-vector fusion sensor, which the framework
-# publishes a few seconds after the physical sensors. Up to 1.8 the proxy was restarted to probe again; the CDSP
-# firmware asserted (sleep_statsi.c:537) within 60-130 ms of both boot-time restarts seen, while the proxy was
+# on half of the boots seen not the compass: libssc builds it from the DSP's rotation-vector fusion sensor, which
+# the framework publishes a few seconds after the physical sensors. Up to 1.8 the proxy was restarted to probe
+# again; the CDSP firmware asserted (sleep_statsi.c:537) 58 and 130 ms into the two boot-time restarts seen, while the proxy was
 # tearing its sensor streams down, and a restart also drops every client's claim. The proxy probes again, for the
 # sensor types it lacks and one per event, when it receives an "add" event for the node, and its probe only looks
 # the sensor up, without enabling a stream. So this sends it that event (a synthetic uevent), repeated with a growing

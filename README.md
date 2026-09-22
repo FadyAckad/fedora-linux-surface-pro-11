@@ -20,7 +20,10 @@ kernel was updated to 7.2.5 with ooaklee's config. The build with Fedora's LSM s
 still works. The current default, `7.2.5-jg-0sp11v23.2-qcom-x1e`, adds the tablet-mode switch fix, which the
 auto-rotation and tablet-mode rows need, and runs on the same system. That installation had been installed
 with SELinux disabled (see Update an installed system); since 2026-09-19 it runs SELinux enforcing with no
-denials logged.
+denials logged. On 2026-09-22 the unit was reinstalled from the ISO built that day (kernel
+`7.2.5-jg-0sp11v23.2-qcom-x1e`, support RPM 2.6, the sensors stack included): every check of the hand-off list
+passed, including SELinux enforcing from the first boot without a relabel and the sensors without a separate
+install.
 
 | Feature | Fedora 44 Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.0 | Fedora 45 Beta Workstation, 7.2.5 |
 |---|:-:|:-:|:-:|
@@ -78,7 +81,9 @@ Requirements: WSL with Fedora 44 aarch64 on the Surface, Windows interop (`power
 scripts/build-all.sh
 ```
 
-Every step is idempotent and skips finished work; `FORCE=1` rebuilds a step. Two settings in
+Steps 1–7 skip finished work and `FORCE=1` rebuilds one; step 8 and the checks always run. Before the first ISO
+on a unit, run `scripts/75-export-sensor-registry.sh` once (one UAC prompt: the sensor registry the media
+carries). Two settings in
 `sp11.conf`, also accepted from the environment, select the source media:
 
 - `FEDORA_TARGET`: `ga` (default, a released Fedora), `beta` (`releases/test/<n>_Beta/`) or `nightly`
@@ -97,40 +102,54 @@ Steps:
 1. `scripts/00-setup-host.sh` installs the build dependencies and checks the host.
 2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, checks them
    against the supported models and writes `build/hardware.env`.
-3. `scripts/10-fetch-sources.sh` downloads and checksum-verifies the Fedora ISO, the kernel source, the
-   audio files, the pinned iptsd and OE checkouts, helper sources and the runtime packages the live
-   image lacks.
+3. `scripts/10-fetch-sources.sh` downloads and verifies the Fedora ISO, the kernel source and the stable
+   patch, the audio files, the pinned checkouts (iptsd, OE, hexagonrpc, libssc) and the Bluetooth helper
+   source, and fetches with dnf, per Fedora release and again with `FORCE=1`, `atheros-firmware`, the runtime
+   packages the live image may lack, the iio-sensor-proxy source RPM and the sensors' runtime dependencies.
 4. `scripts/20-build-kernel.sh` applies the stable update and the patches in `files/kernel-patches/` to
    ooaklee's source and compiles it with ooaklee's config plus the `files/kernel-sp11-fedora.config` policy
    (Fedora's LSM stack, no Ubuntu-only modules; about 45 min) into the `kernel-sp11` RPM.
    `KERNEL_MODE=prebuilt` repackages ooaklee's released 7.2.0 `.deb` payload instead (1 min, without the
-   stable update, the patches or the policy).
+   stable update, the patches or the policy). `sp11.conf` pins the content of the declared revision
+   (`KERNEL_SP11_REV_SHA256`); a changed fragment or patch set without a new revision stops the step.
 5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: firmware from the Windows DriverStore,
    audio topology and UCM, Wi-Fi board data, Bluetooth address service, boot policy (kernel-install plugin,
    dracut, sysctl and dnf settings), the Windows GRUB entry, the first-boot service, the SELinux restore,
    `sp11-bt-import-pairings` and `sp11-diag`. It rebuilds when its `VERSION=` or the target Fedora release
-   changes, and then runs `scripts/35-verify-support-rpm.sh` (see below) when a live root is there.
+   changes, refuses to rebuild the same version from a changed payload (the payload's hash is recorded in the
+   RPM), and then runs `scripts/35-verify-support-rpm.sh` (see below) when a live root is there.
 6. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface
    Pro 11 integration.
-7. `scripts/50-build-iso.sh` installs the RPMs into the live root, builds the live initramfs, writes the
-   GRUB menu and assembles the ISO, for example
+7. `scripts/45-build-sensors-rpms.sh` builds the sensors stack: `hexagonrpc`, `libssc` and the SSC-enabled
+   `iio-sensor-proxy` in a mock buildroot of the target release, and `sp11-sensors` from this unit's registry
+   export (step 75) and the Windows sensor configuration; it runs `scripts/46-verify-sensors-rpms.sh` when a
+   live root is there.
+8. `scripts/50-build-iso.sh` installs the seven RPMs into the live root (the sensors stack stays inert on the
+   live media), builds the live initramfs, writes the GRUB menu and assembles the ISO, for example
    `build/out/Fedora-Workstation-Live-44-1.7-SP11-7.2.5-jg-0sp11v23.2-qcom-x1e.aarch64.iso`, plus
    `.sha256`. The file name carries the edition, so images of different editions coexist.
 
 `build-all.sh` runs these steps (about an hour after the downloads, most of it the kernel; WSL has to keep
 running, or the kernel build stops and resumes on the next run), then `scripts/35-verify-support-rpm.sh`: in
 an overlay of the live root with a real ext4 `/boot`, it installs the support RPM the two ways it reaches a
-machine — `dnf upgrade` over the previous version with its scriptlets, and the scriptless live install step
-7 does — and checks that every boot-policy value in `sp11.conf` arrives in `/etc/default/grub` and in the
-menu grub2-mkconfig generates from it; the update path stages a deliberately wrong policy first, so a
-package that installs without applying it cannot pass. `scripts/36-verify-kernel-install.sh` (standalone,
-for a kernel RPM built for an existing installation) installs the kernel RPM the way `dnf install` does,
-next to the kernel already there and with its scriptlets, then the support RPM, and checks both packages,
-the boot entry with the Denali DTB, the initramfs and the kernel arguments, the new kernel as the saved GRUB
-default, the regenerated menu, and that removing the new kernel puts the previous one back.
-`scripts/60-verify-rootfs.sh` checks the root step 7 left behind: RPM dependencies, loadable binaries, the
-installer, the firmware against the device tree, the absence of the stock kernel, the boot entry and GRUB
-settings an installation would get (Denali DTB, kernel arguments) and the Windows GRUB entry.
+machine — with its scriptlets over the version the live root carries, as `dnf upgrade` does (after step 8 that
+is the same version, installed again with `--replacepkgs`; `SUPPORT_PREVIOUS_RPM=<rpm>` first installs an
+earlier build for a real upgrade), and the scriptless live install step 8 does — and checks that the GRUB
+policy values in `sp11.conf` (device tree, mode, terminal, timeout, font) arrive in `/etc/default/grub` and,
+on the update path, in the menu grub2-mkconfig generates from it; the update path stages a deliberately wrong
+policy first, so a package that installs without applying it cannot pass. `scripts/46-verify-sensors-rpms.sh`
+installs the sensors RPMs into an overlay of that root with their scriptlets (a reinstall after step 8) and
+checks linkage, units, rules, the policy module, the working directory and the payload;
+`SENSORS_PREVIOUS_RPMS=<rpms>` adds an upgrade from an earlier release.
+`scripts/36-verify-kernel-install.sh` (standalone, for a kernel RPM built for an existing installation)
+installs the kernel RPM the way `dnf install` does, next to the kernel already there and with its scriptlets,
+then the support RPM (left out when the live root already carries that version, as dnf leaves an installed
+package out), and checks both packages, the boot entry with the Denali DTB, the initramfs and the kernel
+arguments, the new kernel as the saved GRUB default, the regenerated menu, and that removing the new kernel
+puts the previous one back. `scripts/60-verify-rootfs.sh` (optional, not run by `build-all.sh`) checks the
+root step 8 left behind: RPM dependencies, loadable binaries, the installer, the firmware against the device
+tree, the absence of the stock kernel, the sensors stack, the boot entry and GRUB settings an installation
+would get (Denali DTB, kernel arguments) and the Windows GRUB entry.
 
 ## Install
 
@@ -145,14 +164,14 @@ settings an installation would get (Denali DTB, kernel arguments) and the Window
    Fedora installation on the machine: a second one takes over the GRUB menu and hides the first.
 6. Reboot without the USB and log in. On the first boot, a one-shot service enables the audio DSP, gives
    GRUB the Denali DTB, its display settings and the Windows entry, and rebuilds the initramfs. If audio is
-   not up yet, reboot once.
+   not up yet, reboot once. The sensors stack comes up with the DSP (auto-rotation, ambient light, compass).
 
 ## Update an installed system
 
 New support-RPM versions install over the old one. Copy the RPM from `build/rpms/` to Fedora and run:
 
 ```bash
-sudo dnf upgrade ./sp11-surface-support-<version>.fc<release>.aarch64.rpm
+sudo dnf upgrade ./sp11-surface-support-<version>-1.fc<release>.aarch64.rpm
 ```
 
 The package regenerates the GRUB menu itself; upgrading `sp11-iptsd` restarts the pen daemon. Rebuild
@@ -162,13 +181,24 @@ release at a time: copy them elsewhere before building for another release.
 A new `kernel-sp11` installs next to the current one, like Fedora's own kernels:
 
 ```bash
-sudo dnf install ./kernel-sp11-<version>.fc<release>.aarch64.rpm
+sudo dnf install ./kernel-sp11-<version>-sp11v23.<revision>.fc<release>.aarch64.rpm
 ```
 
 It gets its own boot entry with the Denali DTB and the kernel arguments and becomes the default; the
 previous kernel stays in the GRUB menu. Kernel RPMs built before 2026-09-17, such as the 7.2.0 one on
 existing installations, leave their boot entry behind when removed while another SP11 kernel stays, so run
-`sudo kernel-install remove 7.2.0-jg-0sp11v23-qcom-x1e` before `sudo dnf remove kernel-sp11-7.2.0`.
+`sudo kernel-install remove 7.2.0-jg-0sp11v23-qcom-x1e` before `sudo dnf remove kernel-sp11-7.2.0`. dnf also
+removes such a kernel on its own: its `installonly_limit` is 3, so installing a fourth `kernel-sp11` erases the
+oldest one in the same transaction (the running kernel is kept), and a pre-2026-09-17 package then leaves a
+boot entry whose files are gone. `ls /boot/loader/entries` shows it; the same `kernel-install remove` cleans
+it up after the fact. Each SP11 kernel keeps about 200 MB in `/boot` (image, device trees, an initramfs with
+the DSP firmware); check `df -h /boot` before installing another one, because a dracut failure inside the
+install leaves the new kernel without a boot entry and only the transaction's output says so.
+
+Installations made from ISOs built before 2026-09-22 carry the ISO's build date as the modification time of
+every file the installer copied (the remaster stamped the live image that way; `ls -l /usr/bin/bash` shows
+it). It costs a bytecode recompile at every Python start and `rpm -V` flags the times; nothing malfunctions,
+and updated packages and the next installation carry proper times.
 
 A kernel with Fedora's LSM stack (`7.2.5-jg-0sp11v23.1-qcom-x1e` and later) can run SELinux, which the
 earlier SP11 kernels left inactive. Systems installed from media with those earlier kernels were installed
@@ -246,15 +276,16 @@ running inside the ADSP firmware, and Windows reads them through a QMI client. T
 with free software: `hexagonrpcd` serves the framework its configuration and registry over FastRPC, `libssc`
 talks to it over QRTR, and upstream `iio-sensor-proxy` 3.9 has drivers for it that Fedora builds out only
 because `libssc` is not packaged in Fedora. The readings need no kernel change; GNOME's auto-rotation also
-needs the tablet-mode switch fix in `7.2.5-jg-0sp11v23.2-qcom-x1e`. The stack is packaged separately from
-the ISO and is for the installed system only (the live session runs without the ADSP). Confirmed on the
-tested unit: readings from the light sensor, accelerometer, gyroscope, magnetometer and compass, the
+needs the tablet-mode switch fix in `7.2.5-jg-0sp11v23.2-qcom-x1e`. The ISO carries the stack (inert on the
+live media, which runs without the ADSP; active on the installed system from its first boot) and its four RPMs
+under `/sp11/rpms`; the steps below build it and add or update it on an existing installation. Confirmed on
+the tested unit: readings from the light sensor, accelerometer, gyroscope, magnetometer and compass, the
 orientation and the compass in iio-sensor-proxy, and auto-rotation on the desktop.
 
-The steps build on a full `scripts/build-all.sh` run (host setup, downloads, and the live root the
-verification installs into). Export this unit's sensor registry and calibration from Windows (one UAC
-prompt: the ADSP wrote them under `DriverData\Qualcomm\fastRPC`, readable only elevated; per unit, keep them
-private):
+The steps build on a full `scripts/build-all.sh` run with the same `FEDORA_TARGET` (host setup, the downloads
+for that release, and the live root the verification installs into). Export this unit's sensor registry and
+calibration from Windows (one UAC prompt: the ADSP wrote them under `DriverData\Qualcomm\fastRPC`, readable
+only elevated; per unit, keep them private):
 
 ```bash
 scripts/75-export-sensor-registry.sh
@@ -270,7 +301,10 @@ FEDORA_TARGET=beta scripts/45-build-sensors-rpms.sh
 This builds `hexagonrpc` (from this project's fork, see License and credits), `libssc`, `iio-sensor-proxy`
 (Fedora's own source RPM with `-Dssc-support=enabled`) and `sp11-sensors` (the Windows sensor configuration,
 the registry, the platform identity, and the udev, systemd, SELinux and dnf files) and verifies them in the
-extracted live root. On Fedora, from the directory holding the RPMs:
+extracted live root. `SENSORS_VERSION` in `sp11.conf` versions `sp11-sensors`; a changed payload at the same
+version stops the step, and a change in Fedora's iio-sensor-proxy spec stops it until the template is
+refreshed. On an installed system that lacks the stack or runs an older build, from the directory holding
+the RPMs:
 
 ```bash
 sudo dnf install ./hexagonrpc-*.rpm ./libssc-0*.rpm ./iio-sensor-proxy-*.rpm ./sp11-sensors-*.rpm
@@ -353,12 +387,19 @@ device BlueZ knows, and the sensors stack when `sp11-sensors` is installed. It c
   unmet dependencies.
 - Stock kernel: the ISO build removes its packages from the live root, so the installer installs only
   the SP11 kernel, and `/etc/dnf/libdnf5.conf.d/90-sp11.conf` keeps dnf from bringing a stock kernel
-  back (`kernel`, `kernel-core`, `kernel-modules*`, `kernel-uki-*`;
+  back (`kernel`, `kernel-core`, `kernel-modules`, `kernel-modules-core`, `kernel-modules-extra`,
+  `kernel-modules-internal`, `kernel-uki-*`;
   `dnf --setopt=disable_excludes='*' ...` overrides it).
 - Firmware: only the five files the Denali device tree requests (ADSP and CDSP images with their
   device-tree blobs, GPU zap shader), under the names it requests them by.
 - Initramfs: the live one carries only the GPU zap shader; the ADSP/CDSP firmware (about 24 MiB) and the
   Adreno microcode go into the installed system's initramfs.
+- Live image: repacked as LZMA EROFS with the source image's file times (`mkfs.erofs --mkfs-time`; `-T` alone
+  stamps every file with the build time, which the installer then copies onto the installed system).
+- Sensors: the four RPMs of the stack are installed into the live root with their scriptlet effects applied
+  by the build (the `fastrpc` user, the SELinux module, the registry copy under `/var/lib/sp11/hexagonrpc`).
+  The live session never starts them (no FastRPC node while the ADSP is off); the installed system does on
+  its first boot.
 - Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth
   radio, so an external monitor or a USB Bluetooth dongle does not change the result.
 - Tablet mode: ooaklee's kernel, like mainline, gives the Surface Pro 11 the Surface Aggregator's KIP cover
@@ -373,10 +414,20 @@ Edit `sp11.conf`: `FEDORA_RELEASE` and `FEDORA_COMPOSE` (from the ISO file name)
 branch you build and, for a new kernel, `KERNEL_RELEASE_TAG`, `KERNEL_PKG_VERSION`,
 `KERNEL_UPSTREAM_VERSION`, `KERNEL_RPM_RELEASE` and `KERNEL_SOURCE_COMMIT` (all on the ooaklee release
 page). Then run `FORCE=1 scripts/build-all.sh`. Checksum-pinned downloads stay cached; the packages
-downloaded with dnf (`atheros-firmware`, the live-root dependencies) are cached per Fedora release and
-fetched again with `FORCE=1`. The ISO layout (volume id, marker file, kernel and initrd paths, font) is
-read from each ISO. The UCM matcher patch in `scripts/30-build-support-rpm.sh` expects ooaklee's v19c
-`x1e80100.conf` and stops the build if that file changes.
+downloaded with dnf (`atheros-firmware`, the live-root dependencies, the sensors sources) are cached per
+Fedora release and fetched again with `FORCE=1`. The ISO layout (volume id, marker file, kernel and initrd
+paths, font) is read from each ISO. Other values a release can touch, each of which stops the build rather
+than guessing:
+
+- a new kernel: the stable patch's `KERNEL_STABLE_SHA256` case line (a patch only fits its `X.Y.0` base),
+  `REQUIRED_OPTS` in `scripts/20-build-kernel.sh`, and the patches in `files/kernel-patches/`, applied with
+  fuzz 0;
+- a new Fedora: `rpm/iio-sensor-proxy.spec.in`, a copy of Fedora's spec whose source is pinned by
+  `IIO_SENSOR_PROXY_BASE_SPEC_SHA256` (refresh the template, then the pin), the package names in
+  `LIVE_EXTRA_PKGS` and `SENSORS_DEPS_PKGS`, the dracut module names in `LIVE_DRACUT_OMIT`
+  (`scripts/50-build-iso.sh`, Fedora 45's), the version floors in `rpm/sp11-sensors.spec.in`, and the UCM
+  matcher patch in `scripts/30-build-support-rpm.sh`, which expects ooaklee's v19c `x1e80100.conf` matcher
+  line.
 
 `KERNEL_STABLE_VERSION` (default 7.2.5) applies a kernel.org stable update on top of ooaklee's release in
 source builds; `sp11.conf` pins the checksum of each accepted version. The patched source gets a tree of
@@ -386,7 +437,10 @@ name order, and adds `.2` to the kernel version and the RPM release, so the resu
 `kernel-sp11-7.2.5-sp11v23.2` with the kernel version `7.2.5-jg-0sp11v23.2-qcom-x1e`. Revision 1 was the
 config policy alone; revision 2 adds the patch that gives the Surface Pro 11 a working tablet-mode switch.
 `kernel-sp11` is an install-only package, and a rebuild with the same version would own the same `/boot` and
-module paths as the installed one, so bump the revision with every change to the fragment or the patches.
+module paths as the installed one, so bump the revision with every change to the fragment or the patches:
+`sp11.conf` pins each revision's content (`KERNEL_SP11_REV_SHA256`: the revision number, the fragment's
+effective lines and the patches' diffs), and step 4 stops when the files and the revision disagree, printing
+the value for the new revision.
 The build tree keeps a copy of the patches it carries and exchanges them when the set changes, so a rebuild
 recompiles only what they touch. To build ooaklee's release unchanged (`7.2.0-jg-0sp11v23-qcom-x1e`,
 AppArmor, no patches):
@@ -403,15 +457,17 @@ kernel.org's `sha256sums.asc`) or clear it.
 
 ## Layout
 
-- `sp11.conf`: all versions, URLs, regexes and boot policy.
+- `sp11.conf`: versions (the support RPM's is `VERSION=` in `scripts/30-build-support-rpm.sh`), URLs, regexes,
+  boot policy and the content pins.
 - `scripts/`: numbered pipeline steps, `lib.sh` (helpers), `build-all.sh`, the pairing export, and the sensors
   stack outside the pipeline (`45`/`46` build and verify its RPMs, `75` exports the registry from Windows).
 - `rpm/`: spec templates for `kernel-sp11`, `sp11-surface-support`, `sp11-iptsd`, and for the sensors stack
   (`hexagonrpc`, `libssc`, `iio-sensor-proxy`, `sp11-sensors`).
 - `files/`: payload of the support RPM, the kernel config policy fragment, the kernel source patches
   (`files/kernel-patches/`), the live GRUB menu template, the README inside the ISO, and `files/sensors/`
-  (the files and helper scripts of `sp11-sensors`, and `sp11-sam-posture`, an unpackaged probe of the
-  Surface Aggregator's cover and posture state).
+  (the files and helper scripts of `sp11-sensors`, hexagonrpc's sysusers entry and udev rule, and
+  `sp11-sam-posture`, an unpackaged probe of the Surface Aggregator's cover and posture state).
+- `images/`: the screenshot above.
 - `LICENSE`: GPL-3.0-or-later for the repository's own content (see License and credits).
 - `CLAUDE.md`: working notes with verified facts about the hardware, the Fedora media and pipeline
   pitfalls.
@@ -446,7 +502,8 @@ nothing third-party is stored in the repository:
   [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The sensor configuration
   and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files copied from your own
   Windows installation at build time, like the firmware below.
-- Base media: Fedora Workstation live images. Bring-up notes: rjindael/fedora-surface-pro-11.
+- Base media: Fedora Workstation live images, or a spin (`FEDORA_EDITION`). Bring-up notes:
+  rjindael/fedora-surface-pro-11.
 - ADSP/CDSP/GPU firmware: proprietary Qualcomm and Microsoft files copied from your own Windows
   DriverStore at build time. Never part of this repository; see Status and scope.
 

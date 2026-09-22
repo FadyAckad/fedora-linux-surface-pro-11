@@ -54,7 +54,8 @@ if [ "${FORCE:-0}" = 1 ] || ! ls "$WIFI_DIR"/atheros-firmware-*.rpm >/dev/null 2
   rm -f "$WIFI_DIR"/atheros-firmware-*.rpm
   ( cd "$WIFI_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" atheros-firmware ) || die "dnf download atheros-firmware failed"
 fi
-## Runtime dependency RPMs for the live root (same repo state as the build host, so sonames match)
+## Runtime dependency RPMs for the live root, from the target release's repositories (their sonames have to match
+## the live root's libraries, not the host's)
 DEPS_DIR="$CACHE_DIR/rpm-deps/f$FEDORA_RELEASE"; mkdir -p "$DEPS_DIR"
 for pkg in $LIVE_EXTRA_PKGS; do
   if [ "${FORCE:-0}" = 1 ] || ! ls "$DEPS_DIR/$pkg"-[0-9]*.rpm >/dev/null 2>&1; then

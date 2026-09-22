@@ -1,11 +1,12 @@
 #!/usr/bin/bash
 # Rebuild the directory hexagonrpcd serves to the ADSP's sensor framework from the package's pristine files: after
 # a new registry export, or to discard what the DSP wrote (sensors/persist: the registry copy and whatever the
-# framework put next to it). The framework re-reads the registry on the next attach, which the restart below
-# provides. Usage: sudo sp11-sensors-reset
+# framework put next to it). The framework reads its registry once per ADSP boot, so the rebuilt copy takes effect
+# at the next boot; the daemon is stopped only to release the files. Usage: sudo /usr/libexec/sp11/sp11-sensors-reset
 set -eu
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
 systemctl stop hexagonrpcd-adsp-sensorspd.service
 rm -rf /var/lib/sp11/hexagonrpc/sensors/persist /var/lib/sp11/hexagonrpc/sensors/registry
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/sp11-sensors.conf
 systemctl start hexagonrpcd-adsp-sensorspd.service
+echo "registry copy rebuilt under /var/lib/sp11/hexagonrpc/sensors/persist; reboot to make the sensor framework read it"

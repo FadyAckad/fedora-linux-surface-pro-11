@@ -1,13 +1,13 @@
 #!/usr/bin/bash
 # Surface Pro 11 sensor stack check (Snapdragon Sensor Core on the ADSP): boot timeline, initramfs contents,
 # daemon, its file requests, QRTR service, one reading per sensor, iio-sensor-proxy, SELinux. Read-only; never
-# touches the remoteproc state (stopping the ADSP hard-resets the SoC). Usage: sudo sp11-sensors-check
+# touches the remoteproc state (stopping the ADSP hard-resets the SoC). Usage: sudo /usr/libexec/sp11/sp11-sensors-check
 # (sp11-diag runs it as one of its sections)
 set -u
 sec() { printf '\n===== %s =====\n' "$*"; }
 run() { printf '\n$ %s\n' "$*"; "$@" 2>&1 | head -n "${LINES_MAX:-200}"; }
 sec "sensors: packages"; run rpm -q hexagonrpc libssc iio-sensor-proxy sp11-sensors qrtr
-sec "sensors: boot timeline (the framework reads its files only while the ADSP boots)"
+sec "sensors: boot timeline (the framework reads its files on the first attach after the ADSP booted)"
 run sh -c "journalctl -b -k -o short-monotonic --no-pager | grep -iE 'remoteproc|fastrpc|qrtr|pd-mapper|sp11-sensors|hexagonrpcd|openat|opendir|oemconfig|Unsupported' | head -n 120"
 run sh -c "journalctl -b -o short-monotonic --no-pager | grep -iE 'dracut-pre-udev|Switching root|switch-root|cryptsetup|hexagonrpcd-adsp-sensorspd|sp11-sensors-online|iio-sensor-proxy' | head -n 60"
 # Per remote processor: the guard reacts to the ADSP only; the CDSP has crashed on its own (sleep_statsi.c:537).
@@ -35,8 +35,9 @@ run cat /run/sp11-sensors/attaches
 run systemctl status sp11-sensors-online.service --no-pager -l; run journalctl -b --no-pager -t sp11-sensors -n 20
 run ls -la @PAYLOAD_DIR@/sensors @PAYLOAD_DIR@/sensors/registry-parent @PAYLOAD_DIR@/socinfo
 run sh -c 'ls @PAYLOAD_DIR@/sensors/registry | wc -l'
-# The directory the daemon serves: sensors/persist is the DSP's /persist/sensors/registry (its temporary file, the
-# DIR marker), persist/registry the registry copy; the find lists what the DSP wrote since the package was installed.
+# The directory the daemon serves: sensors/persist is the DSP's /persist/sensors/registry (its temporary file lands
+# there), persist/registry the registry copy (the DIR marker is one of its entries); the find below lists what the
+# DSP wrote since this boot's attach.
 run ls -la /var/lib/sp11/hexagonrpc /var/lib/sp11/hexagonrpc/sensors /var/lib/sp11/hexagonrpc/sensors/persist
 run sh -c 'ls -la /var/lib/sp11/hexagonrpc/sensors/persist/registry | head -n 8; ls /var/lib/sp11/hexagonrpc/sensors/persist/registry | wc -l'
 # Files the DSP wrote since the daemon's attach in this boot. The reference is the guard's attach marker, written
@@ -45,7 +46,7 @@ run sh -c 'ls -la /var/lib/sp11/hexagonrpc/sensors/persist/registry | head -n 8;
 run sh -c 'ref=/run/sp11-sensors/attaches; [ -f "$ref" ] || ref=/usr/lib/tmpfiles.d/sp11-sensors.conf; echo "reference: $ref"; find /var/lib/sp11/hexagonrpc/sensors/persist -newer "$ref" -type f | wc -l; find /var/lib/sp11/hexagonrpc/sensors/persist -newer "$ref" -type f -printf "%TY-%Tm-%Td %TH:%TM %s %p\n" | head -n 20'
 run sh -c 'stat -c "%Y %n" /var/lib/sp11/hexagonrpc/sensors/config/8380_crd_lsm6dsv_display.json; grep -o "\"8380_crd_lsm6dsv_display.json\":{[^}]*}" /var/lib/sp11/hexagonrpc/sensors/persist/registry/sns_reg_config'
 sec "sensors: QRTR services"; run qrtr-lookup
-sec "sensors: readings (ssccli, up to 5 s each; no line = the registry lookup hung and timeout killed it)"
+sec "sensors: readings (ssccli, up to 8 s each; no line = the registry lookup hung and timeout killed it)"
 for s in light accelerometer gyroscope magnetometer compass; do run timeout 8 stdbuf -oL ssccli --sensor "$s" --timeout 5; done
 sec "sensors: iio-sensor-proxy"; run systemctl status iio-sensor-proxy.service --no-pager -l
 run journalctl -b --no-pager -u iio-sensor-proxy -n 40
@@ -54,9 +55,10 @@ sec "sensors: SELinux"; run getenforce; run sh -c "semodule -l | grep -E '^sp11'
 run sh -c "journalctl -k -b --no-pager -g 'avc:  denied' | grep -E 'iiosensorproxy|hexagonrpc|fastrpc|qipcrtr' | tail -n 40"
 # GNOME shows the auto-rotate toggle only while mutter's panel-orientation-managed is true: touch mode (a
 # touchscreen, and a tablet-mode switch that is on, or no switch and no pointer device such as the keyboard's
-# touchpad, attached or over Bluetooth) plus iio-sensor-proxy's accelerometer plus the built-in panel. The kernel
-# registers "Microsoft Surface KIP Tablet Mode Switch" for this machine (surface_aggregator_tabletsw); whether it
-# exists and flips with the keyboard folded or detached is what this section shows. Run it in each keyboard state.
+# touchpad, attached or over Bluetooth) plus iio-sensor-proxy's accelerometer plus the built-in panel. Kernel SP11
+# revision 2 registers "Microsoft Surface POS Tablet Mode Switch" for this machine (surface_aggregator_tabletsw; the
+# KIP switch of ooaklee's and mainline's registry never changes state on this firmware); whether it exists and
+# flips with the keyboard folded or detached is what this section shows. Run it in each keyboard state.
 sec "tablet mode (what GNOME needs for the auto-rotate toggle)"
 run sh -c "awk 'BEGIN{RS=\"\"} /B: SW=[0-9a-f]*[1-9a-f]/ {print; print \"\"}' /proc/bus/input/devices | grep -E '^(N|H|B: EV|B: SW)' || echo 'no input device with a switch (no tablet-mode switch)'"
 run sh -c "grep -E '^N: ' /proc/bus/input/devices"

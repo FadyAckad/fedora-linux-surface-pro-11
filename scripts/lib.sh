@@ -241,6 +241,40 @@ config_fragment_holds() {
   return $rc
 }
 
+# inputs_sha256 PATH... — one hash over every regular file below the given paths (content and path, the path
+# relative to the repository where it lies inside it, sorted, so the value is the same in every checkout) followed
+# by whatever lines stdin carries (values from sp11.conf). Steps 30 and 45 record it in the RPM they build and
+# refuse to rebuild the same version from other inputs: dnf ignores a same-version rebuild. Callers without extra
+# lines pass </dev/null.
+inputs_sha256() {
+  local p f
+  for p in "$@"; do [ -e "$p" ] || die "inputs_sha256: no such path: $p"; done
+  {
+    for p in "$@"; do
+      find "$p" -type f | LC_ALL=C sort | while IFS= read -r f; do
+        printf '%s  %s\n' "$(sha256_of "$f")" "${f#"$SP11_ROOT/"}"
+      done
+    done
+    cat
+  } | sha256sum | cut -d' ' -f1
+}
+
+# kernel_rev_sha256 — the content of the SP11 kernel revision: its number, the fragment's effective lines (as
+# config_fragment_holds reads them) and, per patch in name order, its name and the diff from its first "--- " line.
+# Comments and patch descriptions do not count. sp11.conf pins it as KERNEL_SP11_REV_SHA256; step 20 compares, so
+# neither the files nor the number can change alone.
+kernel_rev_sha256() {
+  local p
+  {
+    printf 'KERNEL_SP11_REV=%s\n' "$KERNEL_SP11_REV"
+    grep -E '^(CONFIG_[A-Za-z0-9_]+=|# CONFIG_[A-Za-z0-9_]+ is not set$)' "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" || true
+    for p in "$FILES_DIR/$KERNEL_PATCH_DIR"/*.patch; do
+      [ -f "$p" ] || continue
+      printf '== %s\n' "$(basename "$p")"; sed -n '/^--- /,$p' "$p"
+    done
+  } | sha256sum | cut -d' ' -f1
+}
+
 # mounts_under DIR — mount targets strictly below DIR, one per line (empty when none). `findmnt -R` only
 # descends from a mount point, so match the target prefix instead.
 mounts_under() { findmnt -rn -o TARGET | awk -v p="$1/" 'index($0, p) == 1'; }

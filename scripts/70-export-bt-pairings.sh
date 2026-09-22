@@ -10,7 +10,7 @@ load_hardware
 
 OUT="$BUILD_DIR/bt-pairings"; BUNDLE="$OUT_DIR/sp11-bt-pairings.tar.gz"
 WINTMP_WSL="$WINDOWS_ROOT/Users/$(powershell.exe -NoProfile -Command '$env:USERNAME' | tr -d '\r')/AppData/Local/Temp"
-[ -d "$WINTMP_WSL" ] || die "cannot locate the Windows temp directory under $WINDOWS_ROOT"
+[ -d "$WINTMP_WSL" ] || die "cannot locate the Windows temp directory ($WINTMP_WSL; the profile directory is assumed to be named after \$env:USERNAME)"
 WINTMP_WIN=$(wslpath -w "$WINTMP_WSL")
 HIVE_WIN="$WINTMP_WIN\\sp11-bthport-parameters.hiv"; HIVE_WSL="$WINTMP_WSL/sp11-bthport-parameters.hiv"
 LOG_WIN="$WINTMP_WIN\\sp11-regsave.log"
@@ -18,8 +18,11 @@ LOG_WIN="$WINTMP_WIN\\sp11-regsave.log"
 mkdir -p "$OUT"; rm -rf "$OUT"/*:*
 rm -f "$HIVE_WSL" "$OUT/bthport-parameters.hiv"
 log "exporting HKLM\\SYSTEM\\CurrentControlSet\\Services\\BTHPORT\\Parameters (accept the UAC prompt)"
-powershell.exe -NoProfile -Command "\$p = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-Command',\"reg save 'HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters' '$HIVE_WIN' /y *> '$LOG_WIN'\"; exit \$p.ExitCode" >/dev/null 2>&1 \
-  || die "elevation was refused or failed (UAC prompt cancelled?)"
+# A cancelled UAC prompt makes Start-Process fail without a process object, and `exit $p.ExitCode` is then 0; the
+# status is caught on the pipeline itself (errexit and pipefail).
+rc=0
+powershell.exe -NoProfile -Command "try { \$p = Start-Process -FilePath powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop -ArgumentList '-NoProfile','-Command',\"reg save 'HKLM\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters' '$HIVE_WIN' /y *> '$LOG_WIN'\" } catch { Write-Host \$_; exit 99 }; if (-not \$p) { exit 98 }; exit \$p.ExitCode" 2>&1 | tr -d '\r' | sed 's/^/  powershell: /' >&2 || rc=$?
+[ "$rc" -eq 0 ] || die "elevation was refused or reg save failed (exit $rc; UAC prompt cancelled?)"
 [ -s "$HIVE_WSL" ] || die "reg save produced no file; log: $(tr -d '\r\0' < "$WINTMP_WSL/sp11-regsave.log" 2>/dev/null)"
 mv -f "$HIVE_WSL" "$OUT/bthport-parameters.hiv"; rm -f "$WINTMP_WSL/sp11-regsave.log"
 chmod 0600 "$OUT/bthport-parameters.hiv"
