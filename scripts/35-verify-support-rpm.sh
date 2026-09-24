@@ -14,7 +14,7 @@
 # needs a real filesystem at /boot (an ext4 loop; mkfs.ext4 comes from the root, the host has no e2fsprogs)
 # and a grub2-probe/grub2-mkrelpath stub for the overlay root, which the real ones cannot canonicalise.
 . "$(dirname "$0")/lib.sh"
-require_cmd rpm losetup findmnt
+require_cmd rpm rpmbuild createrepo_c losetup findmnt
 load_hardware
 
 SRPM=$(rpm_of sp11-surface-support)
@@ -93,6 +93,57 @@ assert_policy() {
   fi
 }
 
+# The microphone gain step 30 inserts into ooaklee's SP11-HiFi.conf (UCM_MIC_GAIN) has to be in the installed
+# file on both paths.
+assert_ucm() {
+  local what=$1 hifi="$M/usr/share/alsa/ucm2/Qualcomm/x1e80100/SP11-HiFi.conf" d
+  log "$what: microphone gain in the installed UCM"
+  for d in 0 1; do
+    check as_root grep -qE "^[[:space:]]*cset \"name='TX_DEC$d Volume' $UCM_MIC_GAIN\"\$" "$hifi"
+  done
+}
+
+# The 3.x payload on either path: the stock-kernel repository override and the scmi-cpufreq load are there, and the
+# global dnf exclusion of 2.x is gone.
+assert_payload() {
+  local what=$1
+  log "$what: payload"
+  check as_root grep -qx 'excludepkgs=kernel,kernel-core,kernel-modules,kernel-modules-core,kernel-modules-extra,kernel-modules-internal,kernel-uki-\*' "$M/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo"
+  check as_root grep -qx 'scmi-cpufreq' "$M/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
+  check as_root test ! -e "$M/etc/dnf/libdnf5.conf.d/90-sp11.conf"
+  check as_root sh -c "! grep -q fips '$M/usr/lib/dracut/dracut.conf.d/90-sp11.conf'"
+  # 3.1's CDSP restart check is gone (kernel revision 3 lets the CDSP wake up; an upgrade from 3.1 must remove it).
+  check as_root test ! -e "$M/usr/libexec/sp11/sp11-cdsp-check"
+  check as_root test ! -e "$M/usr/lib/systemd/system/sp11-cdsp-check.service"
+  check as_root test ! -L "$M/usr/lib/systemd/system/multi-user.target.wants/sp11-cdsp-check.service"
+}
+
+# dnf5 with the override in place: a stock kernel offered by a configured repository is hidden, the same package as a
+# local RPM is not (that is how SP11 kernels are installed); a run with the excludes disabled proves the probe works.
+assert_dnf_override() {
+  local probe="$WORK_DIR/verify-support-probe" rpm out   # user-owned: $T is created by root
+  log "live path: dnf hides stock kernels in repositories, not local RPMs"
+  rm -rf "$probe"; mkdir -p "$probe"/{SPECS,repo}
+  printf '%s\n' 'Name: kernel-core' 'Version: 99.0' 'Release: 1' 'Summary: sp11 dnf exclusion probe' 'License: MIT' \
+    'BuildArch: noarch' '%description' 'probe' '%files' > "$probe/SPECS/probe.spec"
+  rpmbuild -bb --define "_topdir $probe" --define "_rpmdir $probe/repo" --define '_rpmfilename %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm' \
+    "$probe/SPECS/probe.spec" >"$probe/rpmbuild.log" 2>&1 || die "cannot build the dnf probe RPM"
+  createrepo_c -q "$probe/repo" || die "createrepo_c failed for the dnf probe"
+  as_root cp -a "$probe/repo" "$M/sp11-probe-repo"
+  printf '[sp11-probe]\nname=sp11 probe\nbaseurl=file:///sp11-probe-repo\ngpgcheck=0\nenabled=1\n' \
+    | as_root tee "$M/etc/yum.repos.d/sp11-probe.repo" >/dev/null
+  local dnf=(chroot "$M" /usr/bin/dnf5 -q --disablerepo='*' --enablerepo=sp11-probe --setopt=cachedir=/tmp/dnf-probe)
+  out=$(as_root "${dnf[@]}" repoquery --available kernel-core 2>&1 || true)
+  check test -z "$out"
+  out=$(as_root "${dnf[@]}" --setopt=disable_excludes='*' repoquery --available kernel-core 2>&1 || true)
+  check grep -q 'kernel-core-0:99.0-1.noarch' <<<"$out"
+  rpm=/sp11-probe-repo/kernel-core-99.0-1.noarch.rpm
+  out=$(as_root "${dnf[@]}" install --assumeno "$rpm" 2>&1 || true)
+  check grep -q 'kernel-core' <<<"$out"
+  check sh -c "! grep -qiE 'no match|excluded' <<<\"\$1\"" _ "$out"
+  rm -rf "$probe"
+}
+
 ## 1. Update path: an installed system running the previous support RPM, with a deliberately wrong policy in
 ##    /etc/default/grub. `rpm -U` with scriptlets must put every value back and rebuild the menu from it.
 setup
@@ -110,14 +161,6 @@ as_root install -d "$M/var/lib/sp11"; echo stale | as_root tee "$M/var/lib/sp11/
 as_root sed -i -e 's|^GRUB_GFXMODE=.*|GRUB_GFXMODE=640x480|' -e 's|^GRUB_FONT=.*|GRUB_FONT=|' \
                -e 's|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=99|' "$M/etc/default/grub"
 as_root rm -f "$M/boot/grub2/fonts/$GRUB_FONT_FILE"
-# Also what an installer that ran without SELinux leaves behind (selinux=0 and SELINUX=disabled); the
-# %posttrans has to undo it through sp11-selinux-restore.
-printf 'root=UUID=0000-test ro rhgb quiet selinux=0 clk_ignore_unused pd_ignore_unused\n' \
-  | as_root tee "$M/etc/kernel/cmdline" >/dev/null
-as_root sed -i '/^GRUB_CMDLINE_LINUX=/d' "$M/etc/default/grub"
-echo 'GRUB_CMDLINE_LINUX="rhgb quiet selinux=0"' | as_root tee -a "$M/etc/default/grub" >/dev/null
-as_root sed -i 's/^SELINUX=.*/SELINUX=disabled/' "$M/etc/selinux/config"
-as_root rm -f "$M/.autorelabel"
 as_root chroot "$M" /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 \
   || die "grub2-mkconfig failed while staging the pre-upgrade state"
 as_root grep -qx 'GRUB_GFXMODE=640x480' "$M/etc/default/grub" || die "pre-upgrade state not staged"
@@ -133,16 +176,8 @@ fi
 [ "$(as_root chroot "$M" /usr/bin/rpm -q sp11-surface-support)" = "$NVR" ] \
   || die "the chroot ended up with a different package than $NVR"
 assert_policy update
-log "update: the installer's SELinux disable is undone"
-check as_root sh -c "! grep -qw selinux=0 '$M/etc/kernel/cmdline'"
-check as_root sh -c "! grep -qw selinux=0 '$M/etc/default/grub'"
-check as_root grep -qx 'SELINUX=enforcing' "$M/etc/selinux/config"
-check as_root test -e "$M/.autorelabel"
-# Negative control: a system disabled by hand carries the config line alone and must stay untouched.
-as_root sed -i 's/^SELINUX=.*/SELINUX=disabled/' "$M/etc/selinux/config"; as_root rm -f "$M/.autorelabel"
-as_root chroot "$M" /usr/libexec/sp11/sp11-selinux-restore || die "sp11-selinux-restore failed on the negative control"
-check as_root grep -qx 'SELINUX=disabled' "$M/etc/selinux/config"
-check as_root test ! -e "$M/.autorelabel"
+assert_ucm update
+assert_payload update
 
 ## 2. Live path: what 50-build-iso.sh does to the live root — install without scriptlets, then run the
 ##    helpers explicitly (sp11-grub-modules as well, which step 50 leaves to the installed system). Catches a
@@ -155,8 +190,11 @@ as_root chroot "$M" /usr/libexec/sp11/sp11-ucm-apply || die "sp11-ucm-apply fail
 as_root chroot "$M" /usr/libexec/sp11/sp11-grub-defaults || die "sp11-grub-defaults failed in the live root"
 as_root chroot "$M" /usr/libexec/sp11/sp11-grub-modules || die "sp11-grub-modules failed in the live root"
 assert_policy live
+assert_ucm live
+assert_payload live
+assert_dnf_override
 log "live path: shipped helpers"
-for h in sp11-first-boot sp11-grub-defaults sp11-grub-modules sp11-selinux-restore sp11-bt-apply sp11-ucm-apply \
+for h in sp11-first-boot sp11-grub-defaults sp11-grub-modules sp11-bt-apply sp11-ucm-apply \
          sp11-bt-import-pairings sp11-diag; do
   check as_root chroot "$M" /usr/bin/bash -n "/usr/libexec/sp11/$h"
 done

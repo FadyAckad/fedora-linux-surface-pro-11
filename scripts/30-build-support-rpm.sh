@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # Step 4: build the sp11-surface-support RPM: device firmware from this machine's Windows installation,
 # ooaklee FullIO v19c audio files, Wi-Fi board data, Bluetooth address service, kernel-install boot
-# policy plugin, dracut policy and the first-boot finalizer.
+# policy plugin, dracut policy, the stock-kernel repository override and the first-boot finalizer.
 . "$(dirname "$0")/lib.sh"
 require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
@@ -9,17 +9,18 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from files/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="2.6"
+VERSION="3.2"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under files/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
-# values that reach sp11.env, the UCM matcher, the board data and the font. Recorded in the RPM's description.
+# values that reach sp11.env, the UCM matcher and microphone gain, the board data and the font. Recorded in the
+# RPM's description.
 support_inputs() {
   printf '%s\n' "SP11_DTB=$SP11_DTB" "SP11_ARGS_INSTALLED=$SP11_ARGS_INSTALLED" \
     "SP11_ARGS_LIVE_ONLY=$SP11_ARGS_LIVE_ONLY" "GRUB_GFXMODE_VALUE=$GRUB_GFXMODE_VALUE" \
     "GRUB_TIMEOUT_VALUE=$GRUB_TIMEOUT_VALUE" "GRUB_FONT_FILE=$GRUB_FONT_FILE" "GRUB_FONT_SIZE=$GRUB_FONT_SIZE" \
     "GRUB_FONT_NAME=$GRUB_FONT_NAME" "UCM_SP11_REGEX=$UCM_SP11_REGEX" "WIFI_BOARD_ENTRY=$WIFI_BOARD_ENTRY" \
-    "AUDIO_RELEASE_TAG=$AUDIO_RELEASE_TAG" "BT_HELPER_SHA256=$BT_HELPER_SHA256" \
+    "AUDIO_RELEASE_TAG=$AUDIO_RELEASE_TAG" "UCM_MIC_GAIN=$UCM_MIC_GAIN" "BT_HELPER_SHA256=$BT_HELPER_SHA256" \
     | inputs_sha256 "$SPEC_DIR/sp11-surface-support.spec.in" \
         $(find "$FILES_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort)
 }
@@ -60,7 +61,8 @@ for pair in qcadsp8380.mbn:qcadsp8380.mbn adsp_dtbs.elf:adsp_dtb.mbn qccdsp8380.
   log "firmware $dt <- ${src#"$FR"/}"
 done
 
-## 2. Audio: FullIO v19c topology + UCM (regex corrected for the 5G SKU and validated against this machine)
+## 2. Audio: FullIO v19c topology + UCM (regex corrected for the 5G SKU and validated against this machine; the
+##    internal microphone gain, which v19c leaves at the 0 dB reset value, set from UCM_MIC_GAIN)
 AUDIO_DIR="$CACHE_DIR/$AUDIO_RELEASE_TAG"
 ( cd "$AUDIO_DIR" && sha256sum -c --quiet SHA256SUMS ) || die "audio release checksum failure"
 install -D -m 0644 "$AUDIO_DIR/X1E80100-Microsoft-Surface-Pro-11-tplg.bin" "$STAGE/usr/lib/firmware/qcom/x1e80100/X1E80100-Microsoft-Surface-Pro-11-tplg.bin"
@@ -74,6 +76,28 @@ sed "s|Regex \"Microsoft Corporation\.\*Surface\.\*Microsoft Surface Pro, 11th E
 grep -qF "Regex \"$UCM_SP11_REGEX\"" "$UCM_OUT" || die "UCM regex substitution failed"
 printf '%s\n' "$SP11_UCM_DMI_INFO" | grep -Eq "$UCM_SP11_REGEX" || die "UCM regex does not match this device: $SP11_UCM_DMI_INFO"
 log "UCM matcher validated against '$SP11_UCM_DMI_INFO'"
+# v19c's Mic device enables the TX decimators without setting 'TX_DEC0/1 Volume', so the array captured at the
+# 0 dB reset value (speech around -60 dBFS). Insert UCM_MIC_GAIN into the staged copy right after the route: the
+# kernel applies the cached value when the decimator powers up, the pattern of upstream's DMIC sequences. The
+# guards refuse a release whose Mic device changed shape or sets the gain itself.
+HIFI_OUT="$STAGE/usr/share/alsa/ucm2/Qualcomm/x1e80100/SP11-HiFi.conf"
+[[ $UCM_MIC_GAIN =~ ^[0-9]+$ ]] && [ "$UCM_MIC_GAIN" -ge 84 ] && [ "$UCM_MIC_GAIN" -le 124 ] \
+  || die "UCM_MIC_GAIN must be an integer 84..124 (1 dB steps, 84 = 0 dB): '$UCM_MIC_GAIN'"
+MIC_ANCHOR="cset \"name='TX_AIF1_CAP Mixer DEC1' 1\""
+[ "$(grep -cF "$MIC_ANCHOR" "$HIFI_OUT")" = 1 ] \
+  || die "unexpected Mic route in $AUDIO_DIR/SP11-HiFi.conf; review UCM_MIC_GAIN handling"
+! grep -q "TX_DEC[0-9] Volume" "$HIFI_OUT" \
+  || die "$AUDIO_DIR/SP11-HiFi.conf sets a TX decimator gain itself; review UCM_MIC_GAIN handling"
+MIC_INDENT=$(grep -F "$MIC_ANCHOR" "$HIFI_OUT" | sed 's/[^[:space:]].*//')
+printf '%s\n' "${MIC_INDENT}# SP11 build: decimator gain from UCM_MIC_GAIN in sp11.conf (v19c left the 0 dB reset value)" \
+  "${MIC_INDENT}cset \"name='TX_DEC0 Volume' $UCM_MIC_GAIN\"" \
+  "${MIC_INDENT}cset \"name='TX_DEC1 Volume' $UCM_MIC_GAIN\"" > "$SDIR/mic-gain.ucm"
+sed -i "/$MIC_ANCHOR/r $SDIR/mic-gain.ucm" "$HIFI_OUT"
+for d in 0 1; do
+  grep -qE "^[[:space:]]*cset \"name='TX_DEC$d Volume' $UCM_MIC_GAIN\"\$" "$HIFI_OUT" \
+    || die "UCM mic gain insertion failed for TX_DEC$d"
+done
+log "UCM mic gain: TX_DEC0/1 Volume $UCM_MIC_GAIN ($((UCM_MIC_GAIN - 84)) dB)"
 
 ## 3. Wi-Fi: WCN7850 board.bin fallback extracted from linux-firmware's board-2.bin
 WIFI_TMP="$SDIR/wifi"; rm -rf "$WIFI_TMP"; mkdir -p "$WIFI_TMP/x"
@@ -122,9 +146,9 @@ log "GRUB console font: $GRUB_FONT_FILE, ${GRUB_FONT_SIZE}pt from ${FONT_TTF##*/
 install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
 install -m 0755 "$FILES_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
 install -m 0755 "$FILES_DIR/sp11-grub-defaults" "$STAGE/usr/libexec/sp11/sp11-grub-defaults"
-install -m 0755 "$FILES_DIR/sp11-selinux-restore" "$STAGE/usr/libexec/sp11/sp11-selinux-restore"
-# The ISO build removes the stock kernel packages; they must not come back through `dnf upgrade`.
-install -D -m 0644 "$FILES_DIR/90-sp11-dnf.conf" "$STAGE/etc/dnf/libdnf5.conf.d/90-sp11.conf"
+# Fedora's stock kernels lack the SP11 patch set: no configured repository may offer them (local SP11 kernel RPMs stay
+# installable, which a global excludepkgs would block too).
+install -D -m 0644 "$FILES_DIR/90-sp11-kernel.repo" "$STAGE/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo"
 install -D -m 0755 "$FILES_DIR/29_sp11_windows" "$STAGE/etc/grub.d/29_sp11_windows"
 install -m 0755 "$FILES_DIR/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-first-boot"
 install -m 0755 "$FILES_DIR/sp11-bt-import-pairings" "$STAGE/usr/libexec/sp11/sp11-bt-import-pairings"
@@ -136,7 +160,7 @@ install -d "$STAGE/usr/lib/systemd/system/multi-user.target.wants"
 ln -sf ../sp11-first-boot.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 install -D -m 0755 "$FILES_DIR/15-sp11-surface.install" "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install"
 install -D -m 0644 "$FILES_DIR/90-sp11.conf" "$STAGE/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
-install -D -m 0644 "$FILES_DIR/90-sp11.sysctl.conf" "$STAGE/usr/lib/sysctl.d/90-sp11.conf"
+install -D -m 0644 "$FILES_DIR/sp11-scmi-cpufreq.conf" "$STAGE/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
 cat > "$STAGE/etc/sp11/sp11.env" <<ENV
 # Surface Pro 11 boot policy (generated by scripts/30-build-support-rpm.sh)
 SP11_DTB="$SP11_DTB"
@@ -149,7 +173,7 @@ SP11_GRUB_FONT_BOOT="/boot/grub2/fonts/$GRUB_FONT_FILE"
 ENV
 # `bash -n A B C` parses only A (B and C become positional parameters): check every script on its own.
 for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
-         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,selinux-restore,bt-import-pairings,diag,bt-apply,ucm-apply}; do
+         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,bt-import-pairings,diag,bt-apply,ucm-apply}; do
   bash -n "$f" || die "shell syntax error in ${f#"$STAGE"}"
 done
 sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"

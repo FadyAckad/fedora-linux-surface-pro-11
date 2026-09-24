@@ -16,6 +16,9 @@ OUT_DIR="$BUILD_DIR/out"
 HARDWARE_ENV="$BUILD_DIR/hardware.env"
 FILES_DIR="$SP11_ROOT/files"
 SPEC_DIR="$SP11_ROOT/rpm"
+# The SP11 patch set: a partial clone of the kernel fork's pinned commits, and the series step 10 writes from it.
+KERNEL_PATCH_GIT="$CACHE_DIR/kernel-patches.git"
+KERNEL_PATCH_SERIES="$CACHE_DIR/kernel-patches/$KERNEL_PATCH_COMMIT"
 mkdir -p "$CACHE_DIR" "$WORK_DIR" "$RPM_DIR" "$OUT_DIR"
 
 log()  { printf '\033[1;34m[sp11]\033[0m %s\n' "$*" >&2; }
@@ -185,6 +188,40 @@ mock_rebuild() {
   printf '%s\n' "$RPM_DIR/$(basename "$built")"
 }
 
+# mock_rebuild_family SRPM ROOTNAME [MOCK_OPTION...] — rebuild SRPM in a buildroot of its own ($MOCK_CONFIG with
+# --uniqueext=ROOTNAME, so a long build neither waits for nor blocks the shared root the other steps use), passing the
+# options (--with/--without/--define) through, and copy every binary RPM it produced except the -debuginfo and
+# -debugsource packages into $RPM_DIR, replacing older builds of the same names. Prints the copied paths. For source
+# RPMs that build a package family (the kernel).
+mock_rebuild_family() {
+  local srpm=$1 root=$2; shift 2
+  local cfg="/etc/mock/$MOCK_CONFIG.cfg"
+  [ -f "$cfg" ] || die "no mock config $cfg (install mock-core-configs, or set MOCK_CONFIG)"
+  local resultdir="$WORK_DIR/mock-$root"
+  as_root rm -rf "$resultdir"; mkdir -p "$resultdir"
+  local -a mock=(mock)
+  case " $(id -nG) " in *" mock "*) ;; *) mock=(sudo mock) ;; esac
+  local -a args=(-r "$MOCK_CONFIG" --uniqueext="$root" --resultdir="$resultdir" --no-bootstrap-image "$@" --rebuild "$srpm")
+  log "rebuilding $(basename "$srpm") in the $MOCK_CONFIG buildroot ($root; log: $resultdir/build.log)"
+  if ! "${mock[@]}" "${args[@]}" >"$resultdir/mock.out" 2>&1; then
+    # Retry with the plain chroot backend only when mock itself failed before the build started (nspawn under WSL);
+    # a failed rpmbuild leaves build.log behind and would only fail the same way again, after as long.
+    if [ -s "$resultdir/build.log" ]; then mock_tail "$resultdir"; die "mock rebuild failed for $(basename "$srpm") (logs in $resultdir)"; fi
+    warn "mock failed before the build started; retrying with --isolation=simple"
+    "${mock[@]}" --isolation=simple "${args[@]}" >"$resultdir/mock-simple.out" 2>&1 \
+      || { mock_tail "$resultdir"; die "mock rebuild failed for $(basename "$srpm") (logs in $resultdir)"; }
+  fi
+  local rpm name n=0
+  while IFS= read -r rpm; do
+    name=$(rpm -qp --qf '%{NAME}' "$rpm" 2>/dev/null) || die "cannot read $rpm"
+    rm -f "$RPM_DIR/$name"-[0-9]*.rpm
+    install -m 0644 "$rpm" "$RPM_DIR/$(basename "$rpm")"
+    printf '%s\n' "$RPM_DIR/$(basename "$rpm")"; n=$((n + 1))
+  done < <(find "$resultdir" -maxdepth 1 \( -name "*.$FEDORA_ARCH.rpm" -o -name '*.noarch.rpm' \) \
+             ! -name '*-debuginfo-*' ! -name '*-debugsource-*' | sort)
+  [ "$n" -gt 0 ] || { mock_tail "$resultdir"; die "mock produced no binary RPM from $(basename "$srpm") (logs in $resultdir)"; }
+}
+
 # mock_chain SRPM... — build several SRPMs in the $MOCK_CONFIG buildroot in the given order (`mock --chain`): the
 # binary RPMs of each build enter a local repository the later builds resolve against, which is how
 # iio-sensor-proxy gets libssc-devel before either package exists in Fedora. Every binary RPM (subpackages
@@ -260,19 +297,31 @@ inputs_sha256() {
 }
 
 # kernel_rev_sha256 — the content of the SP11 kernel revision: its number, the fragment's effective lines (as
-# config_fragment_holds reads them) and, per patch in name order, its name and the diff from its first "--- " line.
-# Comments and patch descriptions do not count. sp11.conf pins it as KERNEL_SP11_REV_SHA256; step 20 compares, so
-# neither the files nor the number can change alone.
+# config_fragment_holds reads them) and the patch set's base and head commits (a commit id fixes the tree and the
+# history behind it). Comments do not count. sp11.conf pins it as KERNEL_SP11_REV_SHA256; step 20 compares, so neither
+# the inputs nor the number can change alone.
 kernel_rev_sha256() {
-  local p
   {
     printf 'KERNEL_SP11_REV=%s\n' "$KERNEL_SP11_REV"
     grep -E '^(CONFIG_[A-Za-z0-9_]+=|# CONFIG_[A-Za-z0-9_]+ is not set$)' "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" || true
-    for p in "$FILES_DIR/$KERNEL_PATCH_DIR"/*.patch; do
-      [ -f "$p" ] || continue
-      printf '== %s\n' "$(basename "$p")"; sed -n '/^--- /,$p' "$p"
-    done
+    printf 'KERNEL_PATCH_BASE_COMMIT=%s\nKERNEL_PATCH_COMMIT=%s\n' "$KERNEL_PATCH_BASE_COMMIT" "$KERNEL_PATCH_COMMIT"
   } | sha256sum | cut -d' ' -f1
+}
+
+# kernel_series_check — the written series, applied to the base commit's tree the way kernel.spec applies it (all
+# patches as one input to `git apply`), gives exactly the pinned commit's tree. Uses a throwaway index; works offline
+# once step 10 has fetched the contents of the files the patches touch, and never fetches (GIT_NO_LAZY_FETCH): the
+# partial clone holds only those contents, and `write-tree --missing-ok` does not ask for the rest of the kernel tree.
+kernel_series_check() {
+  local idx tree=""
+  local -x GIT_NO_LAZY_FETCH=1
+  idx=$(mktemp -u "$WORK_DIR/kernel-series.XXXXXX.idx")
+  if GIT_INDEX_FILE=$idx git -C "$KERNEL_PATCH_GIT" read-tree "$KERNEL_PATCH_BASE_COMMIT" \
+     && cat "$KERNEL_PATCH_SERIES"/*.patch | GIT_INDEX_FILE=$idx git -C "$KERNEL_PATCH_GIT" apply --cached --whitespace=nowarn; then
+    tree=$(GIT_INDEX_FILE=$idx git -C "$KERNEL_PATCH_GIT" write-tree --missing-ok)
+  fi
+  rm -f "$idx"
+  [ -n "$tree" ] && [ "$tree" = "$(git -C "$KERNEL_PATCH_GIT" rev-parse "$KERNEL_PATCH_COMMIT^{tree}")" ]
 }
 
 # mounts_under DIR — mount targets strictly below DIR, one per line (empty when none). `findmnt -R` only

@@ -1,7 +1,8 @@
 Fedora @RELEASE@ Live for Microsoft Surface Pro 11 (Snapdragon X Elite, OLED, incl. 5G SKU)
 
-Kernel:        @ABI@ (ooaklee/linux_ms_dev_kit-sp11 @COMMIT@, mode: @MODE@); the stock Fedora kernel is removed.
-Device tree:   @DTB@ (loaded explicitly by GRUB; installed system uses GRUB_DEVICETREE in BLS entries)
+Kernel:        @ABI@: @KERNEL@. Fedora's stock kernel
+               packages are replaced by this build of the same packages.
+Device tree:   @DTB@ (loaded by GRUB; the installed system gets it through GRUB_DEVICETREE)
 Built:         @DATE@ for SKU @SKU@
 Base media:    @MEDIA@
 Edition:       @EDITION_NOTE@
@@ -22,7 +23,8 @@ RPMs used to build this media are under /sp11/rpms.
 Redistribution: this media and the RPMs under /sp11/rpms contain proprietary Qualcomm firmware and the
                sensor configuration and registry copied from the Windows installation of the machine that
                built it. Do not pass them on; build your own from the source repository instead.
-Credits:       kernel ooaklee/linux_ms_dev_kit-sp11 (GPL-2.0); audio topology, UCM and pen integration
-               from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd; sensors from
-               linux-msm/hexagonrpc (this project's fork), DylanVanAssche/libssc and Fedora's
+Credits:       kernel: Fedora's kernel package with the SP11 patches from ooaklee/linux_ms_dev_kit-sp11
+               and the upstream work it carries (GPL-2.0, authors in each patch); audio topology, UCM and
+               pen integration from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd;
+               sensors from linux-msm/hexagonrpc (this project's fork), DylanVanAssche/libssc and Fedora's
                iio-sensor-proxy; Fedora @EDITION@ Live.

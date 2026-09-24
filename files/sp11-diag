@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# Collect Surface Pro 11 pen/touch/Bluetooth diagnostics into one file for offline review.
+# Collect Surface Pro 11 pen/touch/Bluetooth/audio/sensor diagnostics into one file for offline review.
 # Usage: sudo sp11-diag [output-file]   (default: ./sp11-diag-<date>.txt in the current directory)
 set -u
 out=${1:-"$PWD/sp11-diag-$(date +%Y%m%d-%H%M%S).txt"}
@@ -8,11 +8,13 @@ exec >"$out" 2>&1
 sec() { printf '\n===== %s =====\n' "$*"; }
 run() { printf '\n$ %s\n' "$*"; "$@" 2>&1 | head -n "${LINES_MAX:-200}"; }
 
-sec "system"; run uname -r; run uptime; run rpm -q kernel-sp11 sp11-surface-support sp11-iptsd bluez
+sec "system"; run uname -r; run uptime; run sh -c "rpm -qa 'kernel*' sp11-surface-support sp11-iptsd bluez | sort"
 run cat /proc/cmdline
+run sh -c "tr '\\0' ' ' < /sys/firmware/devicetree/base/compatible; echo"
+# Hardware IDs (from SMBIOS and the panel's EDID) that Fedora's automatic device-tree selection matches against.
+run systemd-analyze chid
 sec "security / secure boot"; run cat /sys/kernel/security/lsm; run getenforce
 run sh -c "journalctl -k -b --no-pager -g 'avc:  denied' | tail -n 60"
-run sh -c 'sysctl kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo "no AppArmor in this kernel"'
 run mokutil --sb-state
 
 # run() caps output at LINES_MAX lines, so filter inside the command and truncate last.
@@ -43,8 +45,41 @@ run ls -la /var/lib/bluetooth/ /var/lib/bluetooth/*/
 # Every device BlueZ knows (paired or cached), by address; nothing is hardcoded.
 for d in $(bluetoothctl devices 2>/dev/null | awk '$1 == "Device" { print $2 }'); do run bluetoothctl info "$d"; done
 run journalctl -b --no-pager -u bluetooth -n 60
+
+sec "audio: card, microphone route and gain, speaker operating points, PipeWire source"; run cat /proc/asound/cards
+# The SP11 card by its DT model name. ooaklee's UCM sets the mic route and the speaker points, the support RPM's
+# build inserts the decimator gain (UCM_MIC_GAIN); all of them are applied when WirePlumber enables the devices.
+# The card's raw controls, as the UCM sets them: `amixer -c N` opens sysdefault:N, which the UCM's ctl-remap turns
+# into a remapped control set without these names ("Cannot find the given element").
+card=$(awk '/X1E80100/ { print $1; exit }' /proc/asound/cards 2>/dev/null)
+if [ -n "$card" ]; then
+  for c in 'TX DMIC MUX0' 'TX DMIC MUX1' 'TX DEC0 MUX' 'TX DEC1 MUX' 'TX_DEC0 Volume' 'TX_DEC1 Volume' \
+           'WSA WSA_RX0 Digital Volume' 'WSA WSA_RX1 Digital Volume' 'SpkrLeft PA Volume' 'SpkrRight PA Volume'; do
+    run amixer -D "hw:$card" cget "name='$c'"
+  done
+else echo "no X1E80100 sound card"; fi
+# PipeWire runs in the desktop session: ask it as that user (needs sudo from a terminal in the session).
+run sh -c 'u=${SUDO_USER:-}; uid=$(id -u "$u" 2>/dev/null); if [ -n "$u" ] && [ -S "/run/user/$uid/pipewire-0" ]; then runuser -u "$u" -- env XDG_RUNTIME_DIR="/run/user/$uid" sh -c "wpctl status; wpctl get-volume @DEFAULT_AUDIO_SOURCE@"; else echo "no PipeWire session for ${u:-the calling user} (run from a terminal in the desktop session, with sudo)"; fi'
 # Sensors (Snapdragon Sensor Core stack, sp11-sensors): the check script carries its own sections.
 if [ -x /usr/libexec/sp11/sp11-sensors-check ]; then /usr/libexec/sp11/sp11-sensors-check; else sec "sensors"; echo "sp11-sensors not installed"; fi
+# What the running kernel drives, in a form that diffs cleanly between two kernels (run sp11-diag on each): every
+# device bound to a driver, the loaded modules, and the state of the SoC and platform services.
+sec "parity: drivers and devices"
+LINES_MAX=4000 run sh -c 'for d in /sys/bus/*/drivers/*/; do for l in "$d"*; do [ -L "$l" ] || continue; case "$(readlink -f "$l")" in /sys/devices/*) echo "$(basename "$(dirname "${d%/}")")/$(basename "$d") $(basename "$l")" ;; esac; done; done | sort'
+LINES_MAX=1000 run sh -c "lsmod | tail -n +2 | awk '{print \$1}' | sort"
+run sh -c 'for r in /sys/class/remoteproc/remoteproc*; do printf "%s %s %s\n" "${r##*/}" "$(cat "$r/name")" "$(cat "$r/state")"; done'
+run sh -c 'ls -l /dev/fastrpc-* 2>&1'
+# Providers still holding their boot-time maximum votes (sync_state pending) and the devices they wait for: one of
+# them means rails or buses stay at maximum for good, and on this machine the CDSP then never wakes from its first
+# sleep (docs/kernel.md).
+run sh -c 'n=0; for f in /sys/bus/*/drivers/*/*/state_synced; do [ "$(cat "$f" 2>/dev/null)" = 0 ] || continue; d=${f%/state_synced}; d=${d##*/}; n=$((n + 1)); echo "sync_state pending: $d"; for l in /sys/class/devlink/*:"$d"--*; do [ -e "$l" ] && [ "$(cat "$l/status")" != active ] && echo "  waits for ${l##*--} ($(cat "$l/status"))"; done; done; [ "$n" -gt 0 ] || echo "no provider waits for sync_state"'
+run sh -c 'for p in /sys/devices/system/cpu/cpufreq/policy*; do printf "%s %s %s\n" "${p##*/}" "$(cat "$p/scaling_driver")" "$(cat "$p/scaling_cur_freq")"; done'
+run sh -c 'for p in /sys/class/power_supply/*; do printf "%s type=%s\n" "${p##*/}" "$(cat "$p/type")"; done'
+run sh -c 'for h in /sys/class/hwmon/hwmon*; do printf "%s %s %s\n" "${h##*/}" "$(cat "$h/name")" "$(cat "$h"/fan*_input 2>/dev/null | tr "\n" " ")"; done'
+run sh -c 'for p in /sys/class/platform-profile/*/; do printf "%s: %s [%s]\n" "$(cat "$p/name")" "$(cat "$p/profile")" "$(cat "$p/choices")"; done; cat /sys/firmware/acpi/platform_profile /sys/firmware/acpi/platform_profile_choices 2>/dev/null'
+run sh -c 'command -v powerprofilesctl >/dev/null && powerprofilesctl'
+run sh -c 'command -v lsusb >/dev/null && lsusb -t'
+run sh -c "journalctl -k -b --no-pager -p warning -o cat | sed -E 's/[0-9]+(\\.[0-9]+)?//g' | sort | uniq -c | sort -rn | head -n 80"
 sec "recent journal errors"; run journalctl -b --no-pager -p err -n 60
 sec "done"; echo "written $(date -u +%FT%TZ)"
 exec >/dev/tty 2>&1 || true

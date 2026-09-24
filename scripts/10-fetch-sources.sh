@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # Step 2: download and verify every external input (idempotent; cached under build/cache).
 . "$(dirname "$0")/lib.sh"
-require_cmd curl sha256sum git python3 ar tar xz cpio rpm2cpio dnf
+require_cmd curl sha256sum git python3 tar xz cpio rpm2cpio dnf
 
 ## Fedora live ISO (FEDORA_EDITION) + upstream CHECKSUM (all spins of a compose share one)
 fetch "$FEDORA_ISO_BASEURL/$FEDORA_CHECKSUM_NAME" "$CACHE_DIR/$FEDORA_CHECKSUM_NAME"
@@ -10,25 +10,43 @@ fetch "$FEDORA_ISO_BASEURL/$FEDORA_ISO_NAME" "$CACHE_DIR/$FEDORA_ISO_NAME"
   || die "Fedora ISO failed checksum verification"
 log "verified $FEDORA_ISO_NAME"
 
-## Kernel release (ooaklee), plus the optional kernel.org stable patch (checksum pinned in sp11.conf)
-KSUMS="$CACHE_DIR/$KERNEL_RELEASE_TAG.SHA256SUMS"
-fetch "$KERNEL_RELEASE_BASEURL/SHA256SUMS" "$KSUMS"
-case "$KERNEL_MODE" in
-  build)
-    fetch "$KERNEL_RELEASE_BASEURL/$KERNEL_SOURCE_TARBALL" "$CACHE_DIR/$KERNEL_SOURCE_TARBALL"
-    verify_in_sums "$KSUMS" "$CACHE_DIR/$KERNEL_SOURCE_TARBALL"
-    if [ -n "$KERNEL_STABLE_VERSION" ]; then
-      fetch "$KERNEL_STABLE_URL" "$CACHE_DIR/patch-$KERNEL_STABLE_VERSION.xz"
-      verify_sha256 "$CACHE_DIR/patch-$KERNEL_STABLE_VERSION.xz" "$KERNEL_STABLE_SHA256"
-    fi
-    ;;
-  prebuilt)
-    for f in "$KERNEL_IMAGE_DEB" "$KERNEL_MODULES_DEB"; do
-      fetch "$KERNEL_RELEASE_BASEURL/$f" "$CACHE_DIR/$f"; verify_in_sums "$KSUMS" "$CACHE_DIR/$f"
-    done
-    ;;
-  *) die "KERNEL_MODE must be 'build' or 'prebuilt'" ;;
-esac
+## Kernel: Fedora's own kernel source RPM for the target release, checksum pinned in sp11.conf (Koji keeps every build)
+fetch "$KERNEL_SRPM_URL" "$CACHE_DIR/$KERNEL_SRPM"
+verify_sha256 "$CACHE_DIR/$KERNEL_SRPM" "$KERNEL_SRPM_SHA256"
+# ...and Fedora's own kernel-core of that build, the reference step 20 compares the SP11 configuration with
+fetch "$KERNEL_STOCK_CORE_URL" "$CACHE_DIR/$KERNEL_STOCK_CORE_RPM"
+verify_sha256 "$CACHE_DIR/$KERNEL_STOCK_CORE_RPM" "$KERNEL_STOCK_CORE_SHA256"
+# ...and the SP11 patch set: the kernel fork's pinned commit with its history back to the pinned base, fetched without
+# file contents (a few MB) and deepened until the base is there; the series is written from it, git fetching the
+# contents of the files the patches touch on demand, and checked against the commit's tree. Lookups before and after
+# the fetch run with GIT_NO_LAZY_FETCH: in a partial clone, asking for a missing commit makes git fetch it with its
+# whole history (3 GB of Linux commits and trees).
+G="$KERNEL_PATCH_GIT"
+if [ ! -d "$G" ]; then
+  git init -q --bare "$G"
+  git -C "$G" config core.repositoryformatversion 1
+  git -C "$G" config extensions.partialClone origin
+  git -C "$G" remote add origin "$KERNEL_PATCH_REPO"
+  git -C "$G" config remote.origin.promisor true
+  git -C "$G" config remote.origin.partialclonefilter blob:none
+fi
+git -C "$G" remote set-url origin "$KERNEL_PATCH_REPO"
+depth=0
+until GIT_NO_LAZY_FETCH=1 git -C "$G" merge-base --is-ancestor "$KERNEL_PATCH_BASE_COMMIT" "$KERNEL_PATCH_COMMIT" 2>/dev/null; do
+  depth=$((depth + 64)); [ "$depth" -le 1024 ] || die "$KERNEL_PATCH_BASE_COMMIT is not an ancestor of $KERNEL_PATCH_COMMIT within 1024 commits"
+  git -C "$G" fetch -q --no-tags --filter=blob:none --depth="$depth" origin "$KERNEL_PATCH_COMMIT" \
+    || die "cannot fetch $KERNEL_PATCH_COMMIT from $KERNEL_PATCH_REPO"
+done
+n=$(GIT_NO_LAZY_FETCH=1 git -C "$G" rev-list --count "$KERNEL_PATCH_BASE_COMMIT..$KERNEL_PATCH_COMMIT")
+if [ ! -f "$KERNEL_PATCH_SERIES/.complete" ] || [ "${FORCE:-0}" = 1 ]; then
+  rm -rf "$KERNEL_PATCH_SERIES"; mkdir -p "$KERNEL_PATCH_SERIES"
+  git -C "$G" format-patch -q --no-signature --no-renames -o "$KERNEL_PATCH_SERIES" \
+    "$KERNEL_PATCH_BASE_COMMIT..$KERNEL_PATCH_COMMIT" || die "format-patch of the SP11 patch set failed"
+  [ "$(find "$KERNEL_PATCH_SERIES" -name '*.patch' | wc -l)" = "$n" ] || die "the SP11 series does not have $n patches"
+  kernel_series_check || die "the SP11 series does not rebuild the tree of $KERNEL_PATCH_COMMIT"
+  touch "$KERNEL_PATCH_SERIES/.complete"
+fi
+log "SP11 patch set: $n commits, $KERNEL_PATCH_BASE..${KERNEL_PATCH_COMMIT:0:12}"
 
 ## Audio release (ooaklee FullIO v19c)
 AUDIO_DIR="$CACHE_DIR/$AUDIO_RELEASE_TAG"; mkdir -p "$AUDIO_DIR"

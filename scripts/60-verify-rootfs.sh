@@ -25,6 +25,9 @@ check r test -s "$ROOTFS/usr/lib/firmware/qcom/x1e80100/X1E80100-Microsoft-Surfa
 check r test -s "$ROOTFS/usr/lib/firmware/ath12k/WCN7850/hw2.0/board.bin"
 check r test -f "$ROOTFS/usr/share/alsa/ucm2/conf.d/x1e80100/x1e80100.conf"
 check r grep -qF "Regex \"$UCM_SP11_REGEX\"" "$ROOTFS/usr/share/alsa/ucm2/conf.d/x1e80100/x1e80100.conf"
+# The microphone gain step 30 inserts into ooaklee's Mic device (UCM_MIC_GAIN).
+hifi="$ROOTFS/usr/share/alsa/ucm2/Qualcomm/x1e80100/SP11-HiFi.conf"
+for d in 0 1; do check r grep -qE "^[[:space:]]*cset \"name='TX_DEC$d Volume' $UCM_MIC_GAIN\"\$" "$hifi"; done
 check r test -x "$ROOTFS/usr/libexec/sp11-iptsd"
 check r test -x "$ROOTFS/usr/libexec/sp11/sp11-bt-set-addr"
 check r grep -q "SP11_BT_MAC=\"$SP11_BT_MAC\"" "$ROOTFS/etc/sp11/bluetooth-address"
@@ -35,16 +38,18 @@ check r test -s "$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE"
 # GRUB cannot read the font from /usr on a LUKS install; Anaconda rsyncs /boot/grub2 to the target.
 check r test -s "$ROOTFS/boot/grub2/fonts/$GRUB_FONT_FILE"
 check r sh -c "[ \"\$(dd if='$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE' bs=1 count=4 skip=8 status=none)\" = PFF2 ]"
-check r grep -q "^-kernel.apparmor_restrict_unprivileged_userns = 0" "$ROOTFS/usr/lib/sysctl.d/90-sp11.conf"
-# The shipped kernel carries the config policy (Fedora's LSM stack, no Ubuntu-only modules) whenever one is set.
-[ -z "$KERNEL_SP11_REV" ] || check config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" "$ROOTFS/usr/lib/modules/$KERNEL_ABI/config"
-[ -z "$KERNEL_SP11_REV" ] || check test -z "$(find "$ROOTFS/usr/lib/modules/$KERNEL_ABI/kernel" -path '*/kernel/ubuntu/*' -name '*.ko*')"
+# The shipped kernel is Fedora's configuration plus kernel-local (step 20 compares the whole configuration).
+check config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" "$ROOTFS/usr/lib/modules/$KERNEL_ABI/config"
+check r grep -qx 'scmi-cpufreq' "$ROOTFS/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
 stock=$(r find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' ! -name "vmlinuz-$KERNEL_ABI" | wc -l); check test "$stock" -eq 0
 bls=$(r find "$ROOTFS/boot/loader/entries" -name '*.conf' 2>/dev/null | wc -l); check test "$bls" -eq 0
-check r grep -q 'kernel-uki-\*' "$ROOTFS/etc/dnf/libdnf5.conf.d/90-sp11.conf"
-check r rpm --root "$ROOTFS" -q kernel-sp11 sp11-surface-support sp11-iptsd
+check r grep -q '^excludepkgs=kernel,.*kernel-uki-\*$' "$ROOTFS/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo"
+check r test ! -e "$ROOTFS/etc/dnf/libdnf5.conf.d/90-sp11.conf"
+# shellcheck disable=SC2086
+check r rpm --root "$ROOTFS" -q $KERNEL_PKGS sp11-surface-support sp11-iptsd
+check test "$(r rpm --root "$ROOTFS" -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel-core)" = "$KERNEL_ABI"
 # The sensors stack is part of the media (inert here: no FastRPC node without the ADSP; active on the installed
 # system). Step 50 applied its scriptlet effects itself: the fastrpc user, the policy module, the registry copy.
 check r rpm --root "$ROOTFS" -q hexagonrpc libssc iio-sensor-proxy sp11-sensors
@@ -60,7 +65,7 @@ check test "$(r stat -c %Y "$ROOTFS/var/lib/sp11/hexagonrpc/sensors/persist/regi
 check r grep -q 'iio-sensor-proxy' "$ROOTFS/etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf"
 check r test ! -e "$ROOTFS/usr/lib/dracut/modules.d/95sp11-sensors"
 check sh -c "! lsinitrd '$WORK_DIR/iso/initrd' | grep -qE 'sp11-sensors|hexagonrpc'"
-for rpmf in "$(rpm_of kernel-sp11)" "$(rpm_of sp11-surface-support)" "$(rpm_of sp11-iptsd)"; do
+for rpmf in "$(rpm_of kernel-core)" "$(rpm_of sp11-surface-support)" "$(rpm_of sp11-iptsd)"; do
   check r rpm --root "$ROOTFS" -U --test --replacepkgs "$rpmf"
 done
 for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device /usr/libexec/sp11/sp11-bt-set-addr; do
@@ -68,9 +73,11 @@ for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device /usr/lib
 done
 check r chroot "$ROOTFS" /usr/libexec/sp11-iptsd-check-device --help
 check r test -x "$ROOTFS/usr/bin/liveinst"
-# Step 50 removes the stock kernel (the query matches the dnf exclusion) and every module tree it leaves behind.
-mapfile -t stock_pkgs < <(r rpm --root "$ROOTFS" -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel kernel-core \
-  kernel-modules kernel-modules-core kernel-modules-extra kernel-modules-internal 'kernel-uki-*')
+# Step 50 replaces the stock kernel packages with the SP11 build of the same packages and removes every module tree
+# the stock kernel leaves behind: every kernel package in the root is the SP11 build.
+# shellcheck disable=SC2086
+mapfile -t stock_pkgs < <(r rpm --root "$ROOTFS" -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' $KERNEL_STOCK_PKGS \
+  | grep -vF -- "-$KERNEL_ABI" || true)
 log "stock kernel packages: ${stock_pkgs[*]:-none}"
 check test "${#stock_pkgs[@]}" -eq 0
 check test "$(ls "$ROOTFS/usr/lib/modules")" = "$KERNEL_ABI"

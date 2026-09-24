@@ -12,8 +12,14 @@ The tested unit, its peripherals and their userspace, and the Bluetooth pairings
 - Upstream regexes are written for the non-5G SKU (`Microsoft Surface Pro, 11th Edition`, SKU `_2076`) and need
   `( with 5G)?` / `(_with_5G)?`. `05-detect-hardware.sh` self-tests every regex against both SKUs and the live
   Windows values.
-- stubble's `x1e80100-microsoft-denali.json` hardware IDs do not match this SKU (CHIDs computed: zero matches), so
-  automatic DTB selection cannot work; the DTB is always loaded explicitly.
+- stubble's `x1e80100-microsoft-denali.json` (the hardware-ID table of Fedora's `kernel-uki-dtbloader`) was written
+  for SKUs 2076 and 2085: none of its SMBIOS-based IDs matches this SKU (product name, SKU and baseboard differ;
+  computed). Fedora 45's stubble snapshot (20260320) also has IDs built from manufacturer, family and the panel's
+  EDID (`SDC4195`). On the device `systemd-analyze chid` lists the EDID-based `ext1` ID (manufacturer, family,
+  panel) `ca2ff828-b404-5253-9e0e-579c93bfb059`, and the `.hwids` section of the SP11 build of
+  `kernel-uki-dtbloader` maps exactly that ID to `microsoft,denali-oled` (2026-09-23). Linux takes the EDID from the
+  panel; the stub needs it from the firmware at boot, which is not verified, so the DTB is still loaded explicitly
+  (`GRUB_DEVICETREE`) until a boot of the dtbloader image shows it.
 - Windows identity queries (`05-detect-hardware.sh`): the built-in panel is the `WmiMonitorID` instance whose
   `WmiMonitorConnectionParams.VideoOutputTechnology` is 2147483648 (internal); the controller address is
   `DEVPKEY_Bluetooth_RadioAddress` (`{a92f26ca-eda7-4b1d-9db2-27b68aa5a2eb} 1`) on the Bluetooth-class device
@@ -42,9 +48,9 @@ The tested unit, its peripherals and their userspace, and the Bluetooth pairings
   byte-reversed address; `30-build-support-rpm.sh` patches `out[i]` to `out[5 - i]` before compiling. The helper
   validates the index and the address itself; `sp11-bt-apply` only maps the unit instance `hciN` to `N`.
 - Pen: unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`) on the kernel's HIDRAW bridge
-  (`hidraw` parent `001C:045E:0C83.*`, created by `mshw0485_touch` with `ipts_hid_bridge` defaulting to on);
-  integration templates from OE `userspace/iptsd-sp11`; the build needs cmake for meson to find Microsoft.GSL. The
-  kernel's own "Microsoft Surface G6 Pen" input device is silent by design; inking comes from the
+  (`hidraw` parent `001C:045E:0C83.*`, created by `mshw0485_touch` (patch 0054) with `ipts_hid_bridge` defaulting to
+  on); integration templates from OE `userspace/iptsd-sp11`; the build needs cmake for meson to find Microsoft.GSL.
+  The kernel's own "Microsoft Surface G6 Pen" input device is silent by design; inking comes from the
   `sp11-iptsd@dev-hidrawN.service` started by the udev rule.
 - Live media boots with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (an ADSP restart resets
   USB-C while rooted on USB), so no audio or battery in the live session; the installed system drops those arguments

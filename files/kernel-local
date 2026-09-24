@@ -1,0 +1,24 @@
+# SP11 additions to Fedora's kernel configuration: scripts/20-build-kernel.sh installs this file as the kernel
+# source RPM's kernel-local (Source3001), which kernel.spec merges into every configuration it builds. Fedora's
+# aarch64 configuration already sets every other option the Surface Pro 11 uses. Step 20 accepts exactly these lines
+# as the difference to Fedora's configuration, so a symbol that Kconfig derives from one of them is listed as well.
+# Every change to an effective line needs a new KERNEL_SP11_REV with its KERNEL_SP11_REV_SHA256; comments do not
+# count.
+
+# The touch controller driver the SP11 patch set adds (Fedora's configuration checks refuse an unset new symbol).
+CONFIG_TOUCHSCREEN_MSHW0485=m
+
+# Drivers for two devices the X1E80100 device tree enables and Fedora leaves out: the video clock controller (a user
+# of the RPMh power domains) and the crypto engine (a user of the interconnect). Until every user of a power domain
+# or interconnect provider has its driver, the provider never reaches sync_state and Linux keeps its boot-time
+# maximum votes on every rail and bus, sleep votes included; under the held rail votes the CDSP never wakes from its
+# first sleep. Step 20 checks that every such user has a driver. The crypto engine only needs to bind, so it offers
+# its hashes alone: its AES XTS and CTR fail the kernel's self-tests (XTS refuses equal key halves), and the CPU's
+# crypto extensions outrank it for everything else.
+CONFIG_SM_VIDEOCC_8550=m
+CONFIG_CRYPTO_DEV_QCE=m
+CONFIG_CRYPTO_DEV_QCE_SHA=y
+# CONFIG_CRYPTO_DEV_QCE_ENABLE_ALL is not set
+# CONFIG_CRYPTO_DEV_QCE_ENABLE_SKCIPHER is not set
+CONFIG_CRYPTO_DEV_QCE_ENABLE_SHA=y
+# CONFIG_CRYPTO_DEV_QCE_ENABLE_AEAD is not set

@@ -5,7 +5,6 @@
 #   - GRUB_DEVICETREE: the BLS entry gets "devicetree /dtb-<version>/<Denali OLED dtb>"
 #   - low GRUB resolution via gfxterm
 #   - installed-system kernel arguments; live-only ADSP blacklist removed
-#   - the selinux=0 / SELINUX=disabled an installer that ran without SELinux left behind are undone
 set -eu
 [ "${1:-}" = add ] || exit 0
 [ -n "${KERNEL_INSTALL_MACHINE_ID:-}" ] || exit 0
@@ -29,8 +28,4 @@ fi
 
 # Anaconda persists modprobe.blacklist=<module> from the live command line; the ADSP must run on NVMe.
 rm -f /etc/modprobe.d/anaconda-denylist.conf
-
-# Installations made from media without active SELinux carry the installer's selinux=0 and SELINUX=disabled;
-# put Fedora's default back before 20-grub.install writes the entry from /etc/kernel/cmdline. No-op elsewhere.
-/usr/libexec/sp11/sp11-selinux-restore || :
 exit 0

@@ -2,29 +2,30 @@
 # Step 0: install build dependencies on the aarch64 Fedora (WSL) host and sanity-check the environment.
 . "$(dirname "$0")/lib.sh"
 
-[ "$(uname -m)" = aarch64 ] || die "this build must run on an aarch64 host (native kernel build, aarch64 RPMs)"
+[ "$(uname -m)" = aarch64 ] || die "this build must run on an aarch64 host (native mock builds of the kernel and the aarch64 RPMs)"
 grep -q '^ID=fedora' /etc/os-release || die "this build expects a Fedora host (found: $(. /etc/os-release; echo "$PRETTY_NAME"))"
 as_root true || die "sudo is required"
 
+# The kernel's mock buildroot (/var/lib/mock, the same WSL disk) takes about 40 GiB on top of the ISO work tree.
 free_gib=$(df -Pk "$BUILD_DIR" | awk 'NR==2{print int($4/1024/1024)}')
-[ "$free_gib" -ge 40 ] || die "need at least 40 GiB free under $BUILD_DIR (have ${free_gib} GiB)"
+[ "$free_gib" -ge 80 ] || die "need at least 80 GiB free under $BUILD_DIR (have ${free_gib} GiB)"
 
 PKGS=(
-  # kernel build
-  gcc make flex bison bc openssl openssl-devel elfutils-libelf-devel dwarves perl-interpreter perl-Getopt-Long
-  python3 rsync zstd xz dtc kmod binutils gawk file diffutils findutils which util-linux patch
+  # tools the steps use (the kernel itself is built in a mock buildroot, scripts/20)
+  gcc make openssl perl-interpreter python3 rsync zstd xz dtc kmod binutils gawk file diffutils findutils which
+  util-linux patch
   # RPM packaging
   rpm-build rpmdevtools
   # iptsd build
   gcc-c++ cmake meson ninja-build pkgconf-pkg-config cli11-devel eigen3-devel fmt-devel spdlog-devel
   inih-devel guidelines-support-library-devel systemd-rpm-macros
-  # ISO remaster
-  xorriso erofs-utils erofs-fuse dracut dracut-live cpio curl git dosfstools
+  # ISO remaster (isomd5sum: the media check checksum Fedora's live menu relies on)
+  xorriso erofs-utils erofs-fuse dracut dracut-live cpio curl git dosfstools isomd5sum
   # GRUB console font (grub2-mkfont; DejaVu Sans Mono is the source face)
   grub2-tools-extra dejavu-sans-mono-fonts
   # Windows Bluetooth pairing export
   python3-hivex hivex
-  # cross-release RPM builds (sp11-iptsd against the target Fedora's fmt/spdlog)
+  # builds in a buildroot of the target release: the kernel, sp11-iptsd (the target Fedora's fmt/spdlog)
   mock
   # sensors stack (scripts/45): `mock --chain` keeps a local repository between the builds
   createrepo_c

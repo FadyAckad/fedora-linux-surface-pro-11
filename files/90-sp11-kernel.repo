@@ -1,0 +1,8 @@
+# Surface Pro 11: dnf5 repository override (installed as /usr/share/dnf5/repos.override.d/90-sp11-kernel.repo).
+# Fedora's stock kernel packages lack the SP11 patch set (touchscreen, pen, audio, ...). A newer one would install next
+# to the SP11 kernel and become the default boot entry, so no configured repository may offer them. The SP11 kernel is
+# Fedora's kernel rebuilt with the patch set (release <n>.sp11.<revision>.fc<n>) and is installed from local RPMs,
+# which no repository override touches: `sudo dnf install ./kernel-*.rpm`. A stock kernel after all:
+#   sudo dnf --setopt=disable_excludes='*' install kernel-core
+[*]
+excludepkgs=kernel,kernel-core,kernel-modules,kernel-modules-core,kernel-modules-extra,kernel-modules-internal,kernel-uki-*

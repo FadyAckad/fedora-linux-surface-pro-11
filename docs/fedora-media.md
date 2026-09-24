@@ -56,20 +56,28 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   Windows generator is `29_sp11_windows`.
 - Stock live initramfs arguments:
   `dracut --no-hostonly --no-hostonly-cmdline --install /.profile --add "dmsquash-live livenet pollcdrom" --omit multipath`;
-  it includes the `fips` dracut modules, which the pipeline omits. Generate it in a chroot of the live root.
-- `rd.live.check` needs an implanted ISO checksum, which xorriso remastering does not carry over, so the live menu
-  has no media-check entry.
+  it includes the `fips` dracut modules, and so does the SP11 one (Fedora's kernel has `CRYPTO_FIPS`). Generate it
+  in a chroot of the live root.
+- Fedora's live `grub.cfg` (read from each ISO): `set default="1"` (the media check), `timeout=10`, `load_video`,
+  `terminal_output console`, `search --file --set=root <marker>`, then "Start …", "Test this media & start …"
+  (`rd.live.check`) and a Troubleshooting submenu with basic graphics. Step 50 keeps it and changes only what the
+  SP11 needs: `terminal_output console` gives way to the console-font block after the `search` line, every `linux`
+  line gets `$sp11_args` (installed + live-only arguments) and every `initrd` line a `devicetree $sp11_dtb` after
+  it; a layout the transformation does not recognise stops the build. `rd.live.check` needs the ISO checksum that
+  `implantisomd5` writes and xorriso's remastering drops, so step 50 implants it again and checks the result with
+  `checkisomd5` (both from `isomd5sum`, as Fedora's image build uses).
 - Anaconda 44.30 and 45.22 (code read in a Fedora 44 and a Workstation 45 Beta live root; same task order in both)
   discover kernels only from `/boot/vmlinuz-*` (`live_os/utils.py`) and run
-  `kernel-install add <ver> /lib/modules/<ver>/vmlinuz` for each (the 44 1.7 and 45 Beta media carry no
-  `kernel-core`; see `kernel-uki-dtbloader` below). Queue order (`modules/boss/installation.py`): payload
-  (`PrepareSystemForInstallationTask` writes `/etc/modprobe.d/anaconda-denylist.conf` from `modprobe.blacklist=`;
-  rsync of the live root without `--delete`, excluding `/boot/loader/`, then `/boot/grub2`, `/etc/sysconfig` and
-  `/usr/lib/grub` copied again without xattrs) → bootloader (`InstallBootloaderTask`: `write_defaults` truncates
-  `/etc/default/grub` and sets `GRUB_CMDLINE_LINUX` to Anaconda's boot args, then grub2-mkconfig, which creates
-  `/etc/kernel/cmdline`; `CreateBLSEntriesTask`: deletes every BLS entry, `kernel-install add`,
-  `grub2-mkconfig -o /etc/grub2.cfg`) → configuration queue (`RecreateInitrdsTask`: `dracut -f`). Only
-  `preserved_arguments` from the live command line reach the boot args
+  `kernel-install add <ver> /lib/modules/<ver>/vmlinuz` for each (45.22 also knows `vmlinuz-dtbloader.efi`; the 44
+  1.7 and 45 Beta media carry no `kernel-core`, see `kernel-uki-dtbloader` below). Step 50 installs the SP11 kernel
+  packages with `--noscripts`, so it copies `vmlinuz` and `.vmlinuz.hmac` to `/boot` itself, as `20-grub.install`
+  would. Queue order (`modules/boss/installation.py`): payload (`PrepareSystemForInstallationTask` writes
+  `/etc/modprobe.d/anaconda-denylist.conf` from `modprobe.blacklist=`; rsync of the live root without `--delete`,
+  excluding `/boot/loader/`, then `/boot/grub2`, `/etc/sysconfig` and `/usr/lib/grub` copied again without xattrs) →
+  bootloader (`InstallBootloaderTask`: `write_defaults` truncates `/etc/default/grub` and sets `GRUB_CMDLINE_LINUX`
+  to Anaconda's boot args, then grub2-mkconfig, which creates `/etc/kernel/cmdline`; `CreateBLSEntriesTask`: deletes
+  every BLS entry, `kernel-install add`, `grub2-mkconfig -o /etc/grub2.cfg`) → configuration queue
+  (`RecreateInitrdsTask`: `dracut -f`). Only `preserved_arguments` from the live command line reach the boot args
   (`clk_ignore_unused pd_ignore_unused arm64.nopauth` among them, 45.22 also `systemd.tpm2_wait`; never
   `modprobe.blacklist`, `rd.driver.blacklist` or the soundwire argument), plus `rhgb quiet` and storage arguments.
   Command lines and their output go to `/var/log/anaconda/program.log` on the installed system. Its grub2-mkconfig
@@ -89,10 +97,7 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
 - `15-sp11-surface.install` runs before `20-grub.install`: `sp11-grub-defaults` (the single writer of the
   `/etc/default/grub` policy, also used by `sp11-first-boot`, the support RPM's `%posttrans` and `50-build-iso.sh`)
   sets `GRUB_DEVICETREE` and the display settings, the plugin appends the SP11 arguments to `/etc/kernel/cmdline`
-  (rewritten after `/etc/default/grub`, so 20-grub does not rerun mkconfig — unless `sp11-selinux-restore` acts,
-  which edits `/etc/default/grub` last; 20-grub's sync then rewrites the cmdline and every entry from
-  `GRUB_CMDLINE_LINUX`, which carried the SP11 arguments on the tested unit since its first boot, so nothing was
-  lost when the restore ran on 2026-09-19; left as is) and removes the Anaconda denylist before
+  (rewritten after `/etc/default/grub`, so 20-grub does not rerun mkconfig) and removes the Anaconda denylist before
   Anaconda's initramfs rebuild. Anaconda's last grub2-mkconfig still strips the SP11-only arguments from the entry
   (the soundwire argument; on 44 also `systemd.tpm2_wait=0`), and on BTRFS the GRUB settings as well, so the first
   boot runs without them until `sp11-first-boot` (`grubby --update-kernel=ALL --args`, which also updates
@@ -133,22 +138,36 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   `rpm -U --test` refuses it. `IPTSD_BUILD_MODE=auto` builds iptsd in a `mock` buildroot for the target whenever
   `FEDORA_RELEASE` differs from `rpm -E %{fedora}`; `mock_rebuild` in `lib.sh` passes `--no-bootstrap-image` (no
   container pull, so podman stays out of the dependency set) and retries once with `--isolation=simple` for WSL.
-  `sp11-bt-set-addr` is libc-only and `kernel-sp11` is `AutoReqProv: no`, so iptsd is the only cross-release
-  package of the ISO; the sensors chain (hexagonrpc, libssc, iio-sensor-proxy) is built by mock for the target
-  release as well.
+  `sp11-bt-set-addr` is libc-only; the kernel and the sensors chain (hexagonrpc, libssc, iio-sensor-proxy) are built
+  by mock for the target release as well.
 - `rpm/sp11-iptsd.spec.in` must carry `BuildRequires: cmake`: meson locates Microsoft.GSL only through its CMake
   config. The host build masked this because `00-setup-host.sh` installs cmake as an iptsd build dependency.
 - The boot kernel on aarch64 is owned by `kernel-uki-dtbloader`, not `kernel-core` (Workstation Live installs no
   `kernel-core` at all). Not new in 45: Koji's package list of the 44 1.7 Workstation image shows the same set
-  (`kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`, no `kernel-core`). It provides
-  `installonlypkg(kernel)` and `kernel-core-uname-r`, so dnf adds it *alongside* rather than upgrading in place, and
-  its `/usr/bin/kernel-install` dependency writes the BLS entry. `files/90-sp11-dnf.conf` therefore excludes
-  `kernel-uki-*` as well; the glob deliberately does not match `kernel-sp11`, which must stay installable from a
-  local RPM. `kernel-tools` and `kernel-tools-libs` track the kernel version too but own nothing in `/boot` and
-  cannot create entries.
-- dnf5 has no `--disableexcludes` (that is the DNF4 spelling and it errors out); `disable_excludes` is a config
-  option only, so the override is `dnf --setopt=disable_excludes='*' ...`. The exclusion hides packages from
-  `remove` as well as install, so taking a stock kernel off the system needs it.
+  (`kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`, no `kernel-core`); the kiwi description
+  (`components/boot.xml`, profile BootCoreLive) names it. It is a systemd-stub UKI
+  (`ukify --hwids=/usr/share/stubble/hwids`) with `.dtbauto` device trees and a `.hwids` table from Fedora's
+  `stubble` package (hardware IDs from github.com/ubuntu/stubble); `%posttrans` runs `kernel-install add` on
+  `vmlinuz-dtbloader.efi`, and `20-grub.install` writes an ordinary BLS entry (with `devicetree` when
+  `GRUB_DEVICETREE` is set; the stub then replaces a DTB it did not choose with its own embedded one of the same
+  compatible). It `Conflicts:` with `kernel-core` of the same version and provides `installonlypkg(kernel)` and
+  `kernel-core-uname-r`. The SP11 media install `kernel-core` in its place (`KERNEL_PKGS`): this unit's SMBIOS
+  hardware IDs match no stubble entry (see `docs/hardware.md`), and Fedora documents `kernel-core` with
+  `GRUB_DEVICETREE` as the manual path. The SP11 build of `kernel-uki-dtbloader` is built for a later test.
+  `kernel-tools` and `kernel-tools-libs` track the kernel version too but own nothing in `/boot` and cannot create
+  entries.
+- Stock kernels are kept off installed systems by a dnf5 repository override the support RPM ships
+  (`/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo`: `[*]` with
+  `excludepkgs=kernel,kernel-core,…,kernel-uki-*`). dnf5 5.4 loads the override directories in `/usr/share/dnf5` and
+  `/etc/dnf`, accepts globbed repository IDs and per-repository `excludepkgs`, and applies them to configured
+  repositories only: verified in the 45 Beta root on 2026-09-23 (step 35), a `kernel-core` offered by a local
+  repository is hidden, visible again with `--setopt=disable_excludes='*'`, and the same RPM given as a file
+  installs from `@commandline`. That is the difference from support 1.6–2.7's global `[main] excludepkgs` in
+  `libdnf5.conf.d`, which also hid local RPMs of the same names. dnf5 has no `--disableexcludes` (DNF4 spelling);
+  the override is `dnf --setopt=disable_excludes='*' ...`.
+- No rescue image (`dracut_rescue_image="no"` in the support RPM's drop-in): `51-dracut-rescue.install` (from
+  `dracut-config-rescue`, installed by default) copies the kernel's BLS entry and replaces the kernel version in it,
+  so the entry's `devicetree /dtb-<version>/…` becomes `/dtb-0-rescue-<machine-id>/…`, a directory nothing creates.
 - Two new aarch64 dracut modules defeat the live-media policy, and `LIVE_DRACUT_OMIT` in `50-build-iso.sh` omits
   both: `devicetree-firmware`'s generic (`--no-hostonly`) path globs `$fw_dir/qcom/x1e80100/*/*/*.mbn|elf`, which is
   exactly the Denali set, and `qcom-adsp` modprobes `qcom_q6v5_pas` from a pre-udev hook. dracut ignores omit names
@@ -166,13 +185,9 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
 - A stock kernel whose packages stay installed without its `/boot` image breaks `dracut --regenerate-all`: dracut
   111 without an output path writes `/boot/initramfs-<ver>.img` only when `/boot/vmlinuz-<ver>` exists; otherwise,
   with `/boot/efi` mounted, it falls back to `/boot/efi/<machine-id>/<ver>/initrd`, fails with `Can't write to ...`,
-  carries on to the next kernel and exits non-zero. Since support RPM 2.3, step 50 erases the stock set from the
-  live root with `rpm -e --noscripts` (a plain erase, so dependencies are still checked: nothing outside the kernel
-  family requires those packages on 44 or 45, and `kernel-sp11`'s unversioned `kernel-uname-r`,
-  `kernel-core-uname-r` and `kernel-modules-core-uname-r` provides satisfy their versioned requires, so even a
-  partial erase passes; erasing `glibc` is a working negative control). The erase leaves no module tree and no
-  `/boot` file behind (the depmod outputs are `%ghost`); step 50 still removes unowned leftovers and refuses any
-  other module tree, so the installer only ever sees `kernel-sp11`. Systems installed from earlier media got the
-  cleanup from `sp11-remove-stock-kernels.service` (support RPM 2.1 and 2.2, a one-shot with its own stamp;
-  confirmed on hardware on 2026-09-16 as an upgrade to 2.1), which 2.3 no longer ships: a system older than 2.1
-  needs 2.1 or 2.2 and one reboot before 2.3.
+  carries on to the next kernel and exits non-zero. Step 50 therefore erases the stock set (`KERNEL_STOCK_PKGS`)
+  from the live root with `rpm -e --noscripts` before it installs the SP11 build of the same packages (a plain
+  erase, so dependencies are still checked: nothing outside the kernel family requires those packages; erasing
+  `glibc` is a working negative control). The erase leaves no module tree and no `/boot` file behind (the depmod
+  outputs are `%ghost`); step 50 still removes unowned leftovers and refuses any other module tree, so the installer
+  only ever sees the SP11 kernel.

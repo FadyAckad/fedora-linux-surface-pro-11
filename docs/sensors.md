@@ -74,18 +74,19 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   listener also quits on the first input buffer over 256 bytes (`Large (>256B) input buffers aren't implemented`,
   exit 0, which `Restart=on-failure` does not restart; the sensors keep running on the DSP). The framework repeats
   its registry work on the next attach until one attempt completes; after that, re-attaches (after a resume, the
-  ADSP stays up through suspend) make no file request. The ADSP itself boots in the initramfs (the PAS driver's
-  `RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE` restarts the UEFI-started ADSP with the Linux firmware at probe time,
-  "restarting adsp with new firmware", and dracut's `qcom-adsp` pre-udev hook loads the driver there, before the
-  LUKS prompt), but `/dev/fastrpc-adsp` appears only with the root's udev (16–25 s into the boot), and the framework
-  does its registry work on that first root-side attach (the attach follows the node by ~0.6 s, the writes come
-  within a second). An initramfs attach (sp11-sensors 1.1 and 1.2) is refused with
-  `Could not attach to FastRPC node` until the sensors PD is up (the first came 20 ms after "adsp is now up") and is
-  not needed, so it has been dropped; one boot with it hung at a black screen before the LUKS prompt, never
-  explained (a hung boot leaves no journal). The QMI service 400 is registered as soon as the framework starts,
-  registry or not, so readiness is a reading (`ssccli --sensor light`; without a working file server every request
-  ends in "'registry' sensor timed out after 30s, is hexagonrpcd running?"); `ssccli` hangs in its synchronous
-  registry lookup before its own `--timeout` applies, so it runs under `timeout`.
+  ADSP stays up through suspend) make no file request. The ADSP itself boots in the initramfs (dracut's `qcom-adsp`
+  pre-udev hook loads the PAS driver there, before the LUKS prompt; the driver shuts the UEFI-started "lite"
+  firmware down and boots the Linux firmware — mainline does this in `qcom_pas_load`, the v23 kernel did it through
+  ooaklee's attach series, logging "restarting adsp with new firmware"; the timings in this section were measured on
+  v23), but `/dev/fastrpc-adsp` appears only with the root's udev (16–25 s into the boot), and the framework does
+  its registry work on that first root-side attach (the attach follows the node by ~0.6 s, the writes come within a
+  second). An initramfs attach (sp11-sensors 1.1 and 1.2) is refused with `Could not attach to FastRPC node` until
+  the sensors PD is up (the first came 20 ms after "adsp is now up") and is not needed, so it has been dropped; one
+  boot with it hung at a black screen before the LUKS prompt, never explained (a hung boot leaves no journal). The
+  QMI service 400 is registered as soon as the framework starts, registry or not, so readiness is a reading
+  (`ssccli --sensor light`; without a working file server every request ends in "'registry' sensor timed out after
+  30s, is hexagonrpcd running?"); `ssccli` hangs in its synchronous registry lookup before its own `--timeout`
+  applies, so it runs under `timeout`.
 - Packaging: `hexagonrpc` 0.5.0 from the project's fork (`HEXAGONRPC_REPO` github.com/FadyAckad/hexagonrpc, branch
   `sp11-sensors` = upstream 598b591 plus five commits, pinned by `HEXAGONRPC_COMMIT`; `git_pin` fetches the commit
   by full hash, which GitHub serves for any reachable commit). The commits: hexagonfs
@@ -144,10 +145,12 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   `Conflicts=suspend.target`, and nothing restarts a conflict-stopped unit; `sleep.target` is the wrong anchor, it
   is active before the suspend). `sp11-sensors-wait` (the online unit, `TimeoutStartSec=5min`) waits for a light
   reading and then hands iio-sensor-proxy what its own probe missed without restarting it (see the compass bullet
-  below). `91-sp11-sensors.conf` excludes `iio-sensor-proxy`; libdnf5 appends `excludepkgs` across drop-ins
-  (verified with `dnf --dump-main-config` in the 45 Beta root: kernel list plus iio-sensor-proxy), and the exclusion
-  also filters a local RPM of the package ("from @commandline is filtered out by exclude filtering"): the four RPMs
-  go in one transaction, a later SP11 build of the proxy needs `--setopt=disable_excludes='*'`.
+  below). `91-sp11-sensors.conf` excludes `iio-sensor-proxy` in dnf's main configuration; the support RPM's kernel
+  exclusion is a repository override since 3.0, so `dnf --dump-main-config` shows only the proxy and
+  `dnf --dump-repo-config=fedora` the kernel list (step 46 checks both; libdnf5 appends `excludepkgs` across
+  main-configuration drop-ins, as the 2.x kernel drop-in showed). The main-configuration exclusion also filters a
+  local RPM of the package ("from @commandline is filtered out by exclude filtering"): the four RPMs go in one
+  transaction, a later SP11 build of the proxy needs `--setopt=disable_excludes='*'`.
 - In the ISO since 2026-09-22: step 50 installs the four RPMs into the live root with `--noscripts` and applies the
   scriptlet effects itself (`systemd-sysusers hexagonrpc.conf`, `semodule -i sp11-sensors.cil`,
   `systemd-tmpfiles --create sp11-sensors.conf`, all in the chroot with `/dev`, `/proc` and `/sys` bound), asserts
@@ -202,16 +205,15 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   a 40-byte packed request with the response through a user buffer; notifier register/unregister and event
   enable/disable with the SAM event registry `0x01/0x01/0x0b/0x0c`), sends the drivers' own read-only queries (KIP
   cover state, POS sources 0x26/0x01 and posture per source 0x26/0x02), reads the kernel switch with `EVIOCGSW` and
-  prints every KIP/POS event with `--watch N`. The fix, SP11 kernel revision 2:
-  `files/kernel-patches/0001-surface-aggregator-registry-sp11-pos-tablet-switch.patch` puts
-  `&ssam_node_pos_tablet_switch` (`ssam:01:26:01:00:01`, the node the Surface Pro 12" group uses) in place of the
-  KIP node, replacing rather than adding it: libinput pairs every tablet-mode switch with the internal keyboard and
-  touchpad, so a second, static KIP switch left in tablet state from a detached boot would keep the attached
-  touchpad suspended. Result on the device: "Microsoft Surface POS Tablet Mode Switch" reports SW_TABLET_MODE 1
-  detached or folded back and 0 attached, `PanelOrientationManaged` is true when folded, GNOME offers the
-  auto-rotate button with the keyboard folded back or detached, and libinput switches the keyboard and touchpad off
-  while the keyboard is folded back (the aggregator's devices sit on `BUS_HOST` and count as internal). `gpio-keys`
-  also carries a lid switch (`SW=1`).
+  prints every KIP/POS event with `--watch N`. The fix, SP11 kernel revision 2 of the v23 kernel (today patch 0061
+  of the SP11 patch set, `docs/kernel-patches.md`), puts `&ssam_node_pos_tablet_switch` (`ssam:01:26:01:00:01`, the
+  node the Surface Pro 12" group uses) in place of the KIP node, replacing rather than adding it: libinput pairs
+  every tablet-mode switch with the internal keyboard and touchpad, so a second, static KIP switch left in tablet
+  state from a detached boot would keep the attached touchpad suspended. Result on the device: "Microsoft Surface
+  POS Tablet Mode Switch" reports SW_TABLET_MODE 1 detached or folded back and 0 attached, `PanelOrientationManaged`
+  is true when folded, GNOME offers the auto-rotate button with the keyboard folded back or detached, and libinput
+  switches the keyboard and touchpad off while the keyboard is folded back (the aggregator's devices sit on
+  `BUS_HOST` and count as internal). `gpio-keys` also carries a lid switch (`SW=1`).
 - The compass in iio-sensor-proxy: libssc builds it from the DSP's `rotv` (rotation vector) fusion sensor, which the
   framework publishes a few seconds after the physical sensors, and the proxy probes the SSC sensors once, on the
   udev "add" of the node, 0.6–0.7 s after the attach. At that probe the compass was missing on three of six boots
@@ -274,3 +276,5 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   - 2026-09-21, rounds 7–12: hexagonrpc 0.5.0-6's write-path fixes held, also through three suspend/resume cycles;
     the tablet-mode diagnosis (1.7's check in four keyboard states, `sp11-sam-posture`) and kernel revision 2 with
     the POS switch; 1.8 and 1.9 for the compass; auto-rotation confirmed on the desktop.
+  - 2026-09-24: hexagonrpc 0.5.0-7 changes only a comment in its sysusers file (a Debian reference removed); built
+    and checked in the live root (step 46), not yet on the device.

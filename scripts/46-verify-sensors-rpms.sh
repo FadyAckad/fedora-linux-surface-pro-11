@@ -93,8 +93,10 @@ check as_root grep -q 'ssc-light ssc-compass' "$M/usr/lib/udev/rules.d/80-iio-se
 check as_root grep -q 'RestrictAddressFamilies=.*AF_QIPCRTR' "$M/usr/lib/systemd/system/iio-sensor-proxy.service"
 # %post loaded the CIL module into the root's policy store (no policy is active in the chroot, so it only compiles).
 check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-sensors"
-# Both dnf drop-ins have to stay in force: the kernel exclusion and the proxy exclusion.
-check as_root sh -c "chroot '$M' /usr/bin/dnf --dump-main-config 2>/dev/null | grep -E '^excludepkgs' | grep -q 'kernel-uki-'"
+# Both dnf exclusions have to stay in force: the support RPM's repository override keeps stock kernels out of every
+# repository (per repository, so it shows in the repository's configuration, not the main one), the sensors
+# drop-in keeps Fedora's iio-sensor-proxy out.
+check as_root sh -c "chroot '$M' /usr/bin/dnf --dump-repo-config=fedora 2>/dev/null | grep -E '^excludepkgs' | grep -q 'kernel-core'"
 check as_root sh -c "chroot '$M' /usr/bin/dnf --dump-main-config 2>/dev/null | grep -E '^excludepkgs' | grep -q 'iio-sensor-proxy'"
 for s in sp11-sensors-wait sp11-sensors-check; do check inroot /usr/bin/bash -n "/usr/libexec/sp11/$s"; done
 # The helper hands late sensors to the running proxy through a udev "add" event and never restarts it: the CDSP
