@@ -1,7 +1,7 @@
 # Fedora media
 The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and the Fedora 45 differences.
 
-## Fedora live media
+## Source media
 
 - `FEDORA_TARGET` in `sp11.conf` picks the compose family: `ga` (`releases/<n>/`), `beta`
   (`releases/test/<n>_Beta/`) or `nightly` (`development/<n>/`, needs `FEDORA_COMPOSE=<stamp>`). `FEDORA_RELEASE`
@@ -16,6 +16,9 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   (`Fedora-Spins-44-1.7-aarch64-CHECKSUM`), hence the separate `FEDORA_PRODUCT`. Workstation names resolve exactly
   as before the switch existed. KDE is its own product (`KDE/`, `Fedora-KDE-44-1.7-aarch64-CHECKSUM`,
   `Fedora-KDE-Desktop-Live-...`) and is not covered.
+
+## ISO layout
+
 - `Fedora-Workstation-Live-44-1.7.aarch64.iso`, volume id `Fedora-WS-Live-44`, built by kiwi. The live root
   `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does
@@ -24,6 +27,9 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   `/boot/aarch64/loader/grub2/fonts/unicode.pf2` (step 50 maps `sp11-console.pf2` in beside it, lifted out of the
   live root rather than generated a second time). `xorriso ... -boot_image any replay -map ...` reproduces the
   layout; `50-build-iso.sh` reads these paths from the ISO instead of assuming them.
+
+## GRUB image, font and modules
+
 - Fedora's aarch64 GRUB image has `devicetree`, `gfxterm`, `loadfont`, `blscfg`, `fat`, `efi_gop`, `all_video`,
   `search_fs_uuid`, `part_gpt`, `fwsetup`, `efinet`, `net`, `boot`. It lacks `efi_uga`, `video_bochs`,
   `video_cirrus` and `chain` (Fedora builds `chain` into x86 images only).
@@ -54,6 +60,9 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   `GRUB_DISABLE_OS_PROBER=false` never finds Windows.
 - GRUB menu order follows `/etc/grub.d/` filename order; `30_uefi-firmware` emits UEFI Firmware Settings, hence the
   Windows generator is `29_sp11_windows`.
+
+## Live initramfs and live menu
+
 - Stock live initramfs arguments:
   `dracut --no-hostonly --no-hostonly-cmdline --install /.profile --add "dmsquash-live livenet pollcdrom" --omit multipath`;
   it includes the `fips` dracut modules, and so does the SP11 one (Fedora's kernel has `CRYPTO_FIPS`). Generate it
@@ -66,6 +75,9 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   it; a layout the transformation does not recognise stops the build. `rd.live.check` needs the ISO checksum that
   `implantisomd5` writes and xorriso's remastering drops, so step 50 implants it again and checks the result with
   `checkisomd5` (both from `isomd5sum`, as Fedora's image build uses).
+
+## Anaconda
+
 - Anaconda 44.30 and 45.22 (code read in a Fedora 44 and a Workstation 45 Beta live root; same task order in both)
   discover kernels only from `/boot/vmlinuz-*` (`live_os/utils.py`) and run
   `kernel-install add <ver> /lib/modules/<ver>/vmlinuz` for each (45.22 also knows `vmlinuz-dtbloader.efi`; the 44
@@ -87,6 +99,9 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   truncated again and grub2-mkconfig rewrites every entry's options and `/etc/kernel/cmdline` from Anaconda's
   arguments, after the kernel-install plugin ran. The entry's `devicetree` line, the initramfs and the removed
   denylist survive; the GRUB settings and the SP11-only arguments do not.
+
+## kernel-install and BLS entries
+
 - Fedora's `10_linux` (`update_bls_cmdline`) rewrites the `options` line of **every** BLS entry from
   `root=… ro $GRUB_CMDLINE_LINUX $GRUB_CMDLINE_LINUX_DEFAULT` on each grub2-mkconfig, and rewrites
   `/etc/kernel/cmdline` when that file is missing or older than `/etc/default/grub`. `20-grub.install` reads the
@@ -106,6 +121,8 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   `grub2-probe`/`grub2-mkrelpath` stub for the overlay root, an ext4 loop at `/boot`). The plugin does not filter
   live-only arguments; step 60 checks that no Anaconda config mentions them.
 
+## Live root repack
+
 - `mkfs.erofs -Ededupe` is single-threaded in erofs-utils 1.9.4 (hours).
   `-Efragments -C1048576 --workers=N -zlzma,level=6` takes ~5 min and is only slightly larger. Use `--file-contexts`
   from the root's own SELinux policy.
@@ -115,6 +132,9 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   live root's 8178 `.pyc` files) at every start of an unprivileged process, and `rpm -V` flags the times; no
   malfunction. Step 50 passes `--mkfs-time` since 2026-09-22 and asserts that `/usr/lib/os-release` keeps its
   time from the source image.
+
+## Chroot and RPM pitfalls
+
 - In a chroot without udev, `lsblk` reports empty PARTTYPE/FSTYPE; use `blkid -c /dev/null -o device -t TYPE=vfat`
   and `blkid -p -s PART_ENTRY_TYPE -o value DEV` instead.
 - `%systemd_postun_with_restart NAME@.service` on a template unit is a no-op (`systemctl try-restart` rejects a name
@@ -179,7 +199,7 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   stock-kernel entries inside the image.
 - The GPU probes in the initramfs (plymouth) and needs the Adreno microcode there, or early boot logs
   `failed to load gen70500_sqe.fw` until switch-root makes `/usr/lib/firmware` reachable. `qcom-firmware` ships
-  `qcom/gen70500_sqe.fw.xz` and `qcom/gen70500_gmu.bin.xz`; `files/90-sp11.conf` installs both and the support RPM
+  `qcom/gen70500_sqe.fw.xz` and `qcom/gen70500_gmu.bin.xz`; `payload/90-sp11.conf` installs both and the support RPM
   now `Requires: qcom-firmware`. With 2.0 or later the error is gone on the installed 45 Beta Workstation system.
   The live initramfs still carries only the zap shader (step 50 parks the drop-in).
 - A stock kernel whose packages stay installed without its `/boot` image breaks `dracut --regenerate-all`: dracut

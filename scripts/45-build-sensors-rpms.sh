@@ -7,7 +7,7 @@
 #   libssc (+devel)   upstream QMI client library and ssccli
 #   iio-sensor-proxy  Fedora's own source RPM of the target release, rebuilt with -Dssc-support=enabled
 #   sp11-sensors      this unit's payload (Windows sensor configuration, the registry exported by scripts/75, platform
-#                     identity) plus the udev, systemd, SELinux and dnf integration from files/sensors/
+#                     identity) plus the udev, systemd, SELinux and dnf integration from payload/sensors/
 # The first three are chain-built in a mock buildroot of the target release (iio-sensor-proxy needs libssc-devel,
 # which exists nowhere else); sp11-sensors is files only and built on the host. Idempotent: the chain is skipped
 # while the three RPMs match sp11.conf, sp11-sensors is rebuilt when its inputs are newer; FORCE=1 rebuilds all.
@@ -37,14 +37,14 @@ FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
 [ -d "$FR" ] || die "Windows DriverStore not found at $FR"
 SNSCFG=$(find "$FR" -maxdepth 1 -type d -name "$SENSORS_SNSCFG_GLOB" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
 [ -n "$SNSCFG" ] || die "no $SENSORS_SNSCFG_GLOB package under $FR (the Windows sensor configuration)"
-# What the sp11-sensors payload is built from: its files under files/sensors/ (hexagonrpc's two files and the
+# What the sp11-sensors payload is built from: its files under payload/sensors/ (hexagonrpc's two files and the
 # unpackaged probe aside), the spec, this unit's registry export and the DriverStore package. Recorded in the RPM's
 # description; a same-version rebuild from other inputs is refused, because dnf would not install it.
 sensors_inputs() {
   local -a in=("$SPEC_DIR/sp11-sensors.spec.in" "$REG" "$SNSCFG")
   [ -d "$OVR" ] && in+=("$OVR")
   printf '%s\n' "SENSORS_PAYLOAD_DIR=$SENSORS_PAYLOAD_DIR" "SNSCFG=$(basename "$SNSCFG")" \
-    | inputs_sha256 "${in[@]}" $(find "$FILES_DIR/sensors" -maxdepth 1 -type f \
+    | inputs_sha256 "${in[@]}" $(find "$PAYLOAD_DIR/sensors" -maxdepth 1 -type f \
         ! -name hexagonrpc.sysusers.conf ! -name 60-hexagonrpc-fastrpc.rules ! -name sp11-sam-posture | sort)
 }
 INPUTS=""; [ -s "$REG/sns_reg_config" ] && INPUTS=$(sensors_inputs)
@@ -60,7 +60,7 @@ sensors_current() {
   [ -n "$INPUTS" ] || return 1
   [ -z "$(recorded_inputs "$r")" ] || return 0   # same inputs: sensors_guard compared them
   warn "cached $(basename "$r") was built before the inputs guard; deciding by modification times"
-  [ -z "$(find "$REG" "$FILES_DIR/sensors" "$SPEC_DIR/sp11-sensors.spec.in" "$SP11_ROOT/sp11.conf" -newer "$r" 2>/dev/null | head -1)" ]
+  [ -z "$(find "$REG" "$PAYLOAD_DIR/sensors" "$SPEC_DIR/sp11-sensors.spec.in" "$SP11_ROOT/sp11.conf" -newer "$r" 2>/dev/null | head -1)" ]
 }
 sensors_guard
 if [ "${FORCE:-0}" != 1 ] && chain_current && sensors_current; then
@@ -74,7 +74,7 @@ rm -rf "$SRC"; mkdir -p "$SRC"
 [ "$(git -C "$CACHE_DIR/libssc" rev-parse HEAD 2>/dev/null)" = "$LIBSSC_COMMIT" ] || die "libssc checkout is not at $LIBSSC_COMMIT (run scripts/10-fetch-sources.sh)"
 git -C "$CACHE_DIR/hexagonrpc" archive --format=tar.gz --prefix="hexagonrpc-$HEXAGONRPC_COMMIT/" -o "$SRC/hexagonrpc-$HEXAGONRPC_COMMIT.tar.gz" HEAD
 git -C "$CACHE_DIR/libssc" archive --format=tar.gz --prefix="libssc-$LIBSSC_COMMIT/" -o "$SRC/libssc-$LIBSSC_COMMIT.tar.gz" HEAD
-install -m 0644 "$FILES_DIR/sensors/hexagonrpc.sysusers.conf" "$FILES_DIR/sensors/60-hexagonrpc-fastrpc.rules" "$SRC/"
+install -m 0644 "$PAYLOAD_DIR/sensors/hexagonrpc.sysusers.conf" "$PAYLOAD_DIR/sensors/60-hexagonrpc-fastrpc.rules" "$SRC/"
 ( cd "$SRC" && rpm2cpio "$ISP_SRPM" | cpio -idm --quiet ) || die "cannot unpack $(basename "$ISP_SRPM")"
 [ -s "$SRC/iio-sensor-proxy-$ISP_VERSION.tar.bz2" ] || die "$(basename "$ISP_SRPM") does not carry iio-sensor-proxy-$ISP_VERSION.tar.bz2"
 # The template is Fedora's spec plus the SSC option and the release suffix: a spec Fedora changed (a build
@@ -170,8 +170,8 @@ fi
 find "$P" -type d -exec chmod 0755 {} + ; find "$P" -type f -exec chmod 0644 {} +
 log "registry: $(find "$P/sensors/registry" -type f | wc -l) files; overrides: $(find "$OVR" -type f 2>/dev/null | wc -l)"
 
-## 4. Integration (files/sensors/), rendered with the payload path
-SD="$FILES_DIR/sensors"
+## 4. Integration (payload/sensors/), rendered with the payload path
+SD="$PAYLOAD_DIR/sensors"
 install -D -m 0644 "$SD/81-sp11-sensors.rules" "$STAGE/usr/lib/udev/rules.d/81-sp11-sensors.rules"
 install -d "$STAGE/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d"
 install -m 0644 "$SD/hexagonrpcd-sensorspd-sp11.conf" "$STAGE/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-sp11.conf"

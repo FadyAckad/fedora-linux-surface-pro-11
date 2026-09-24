@@ -137,7 +137,7 @@ check as_root test -s "$M/boot/vmlinuz-$KERNEL_ABI"
 check as_root test -s "$M/boot/System.map-$KERNEL_ABI"
 check as_root test -s "$M/boot/config-$KERNEL_ABI"
 check as_root test -s "$M/usr/lib/modules/$KERNEL_ABI/modules.dep"
-check config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" "$M/usr/lib/modules/$KERNEL_ABI/config"
+check config_fragment_holds "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" "$M/usr/lib/modules/$KERNEL_ABI/config"
 log "boot entry for $KERNEL_ABI"
 [ -e "$ENTRY" ] && as_root cat "$ENTRY" | sed 's/^/    /' >&2
 check as_root test -s "$ENTRY"

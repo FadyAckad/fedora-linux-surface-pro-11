@@ -14,7 +14,7 @@ WORK_DIR="$BUILD_DIR/work"
 RPM_DIR="$BUILD_DIR/rpms"
 OUT_DIR="$BUILD_DIR/out"
 HARDWARE_ENV="$BUILD_DIR/hardware.env"
-FILES_DIR="$SP11_ROOT/files"
+PAYLOAD_DIR="$SP11_ROOT/payload"
 SPEC_DIR="$SP11_ROOT/rpm"
 # The SP11 patch set: a partial clone of the kernel fork's pinned commits, and the series step 10 writes from it.
 KERNEL_PATCH_GIT="$CACHE_DIR/kernel-patches.git"
@@ -303,7 +303,7 @@ inputs_sha256() {
 kernel_rev_sha256() {
   {
     printf 'KERNEL_SP11_REV=%s\n' "$KERNEL_SP11_REV"
-    grep -E '^(CONFIG_[A-Za-z0-9_]+=|# CONFIG_[A-Za-z0-9_]+ is not set$)' "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" || true
+    grep -E '^(CONFIG_[A-Za-z0-9_]+=|# CONFIG_[A-Za-z0-9_]+ is not set$)' "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" || true
     printf 'KERNEL_PATCH_BASE_COMMIT=%s\nKERNEL_PATCH_COMMIT=%s\n' "$KERNEL_PATCH_BASE_COMMIT" "$KERNEL_PATCH_COMMIT"
   } | sha256sum | cut -d' ' -f1
 }

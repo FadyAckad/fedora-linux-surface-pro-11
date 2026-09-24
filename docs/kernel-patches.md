@@ -6,10 +6,10 @@ tarball carries. `sp11.conf` pins the base and the head commit (`KERNEL_PATCH_BA
 `scripts/10-fetch-sources.sh` fetches them (a shallow partial clone of a few MB) and writes the series with
 `git format-patch`; `scripts/20-build-kernel.sh` checks that the series rebuilds the pinned commit's tree and
 concatenates it into Fedora's `linux-kernel-test.patch` (the slot `kernel.spec` provides for local builds, applied
-with `git apply` after Fedora's own `patch-<x.y>-redhat.patch`). `files/kernel-local` sets the one new configuration
-symbol and enables two drivers Fedora's configuration leaves out. Nothing else about Fedora's kernel changes. Every
-change needs a new `KERNEL_SP11_REV` (see `docs/kernel.md`). A pushed branch is never rewritten, so every pinned
-commit stays fetchable: fixes go on top as new commits, a new kernel base on a new branch.
+with `git apply` after Fedora's own `patch-<x.y>-redhat.patch`). `payload/kernel-local` sets the one new
+configuration symbol and enables two drivers Fedora's configuration leaves out. Nothing else about Fedora's kernel
+changes. Every change needs a new `KERNEL_SP11_REV` (see `docs/kernel.md`). A pushed branch is never rewritten, so
+every pinned commit stays fetchable: fixes go on top as new commits, a new kernel base on a new branch.
 
 The patches are derived from the Linux kernel and, like the files they modify, licensed GPL-2.0 (the new
 `mshw0485_touch.c` and headers carry their own SPDX lines). Authorship is in each commit; this repository does not
@@ -34,10 +34,10 @@ X1E tree (jglathe/linux_ms_dev_kit) and ooaklee's Surface Pro 11 work on top. Th
 - 0061: this repository's POS tablet-mode switch.
 
 Revision 2 (2026-09-23) added a CDSP boot-order patch that did not help and was dropped again. Revisions 3 and 4
-(2026-09-24) carry these 61 patches unchanged; they add configuration only (`files/kernel-local`, `docs/kernel.md`).
-On 2026-09-24 the patches moved from this repository into the fork as the branch `sp11/7.2.5` (head `df9cc406`): its
-tree equals the former patch files applied to `v7.2.5`, and only 0061's author changed, from a build placeholder to
-the fork's owner.
+(2026-09-24) carry these 61 patches unchanged; they add configuration only (`payload/kernel-local`,
+`docs/kernel.md`). On 2026-09-24 the patches moved from this repository into the fork as the branch `sp11/7.2.5`
+(head `df9cc406`): its tree equals the former patch files applied to `v7.2.5`, and only 0061's author changed, from
+a build placeholder to the fork's owner.
 
 Proven on the host before the first build: the series applied to kernel.org 7.2.5 reproduces 70 of the 80 files it
 touches byte for byte from the v23.2 source; the other 10 differ only by the left-out parts listed below. The Denali
@@ -80,7 +80,8 @@ needs the rpmsg helper that is now 0005.)
 
 ## Left out of v23.2, and the device check for each
 
-Nothing here drives hardware a README feature depends on; the check says what round A confirms.
+Nothing here drives hardware the feature table depends on; each entry ends with what the device check of
+2026-09-23 covered.
 
 - Ubuntu's packaging, configuration annotations, out-of-tree drivers and SAUCE patches (AppArmor, lockdown, FAN
   networking, ...), including three that touch hardware this machine uses: the eDP PHY regulator-load removal (Johan
@@ -93,7 +94,7 @@ Nothing here drives hardware a README feature depends on; the check says what ro
   and power domains on).
 - The PCIe ASPM API series and ath12k's MAC-from-device-tree hack — Wi-Fi and NVMe, also after resume.
 - The camera stack (IMX681, CAMSS, CCI, C-PHY, privacy LED): on v23.2 its picture was far too dark to use (checked
-  2026-09-23), and the README lists cameras as not working; left out until a camera fix.
+  2026-09-23), and the feature table lists cameras as not working; left out until a camera fix.
 - The spi-hid series (unused: the MSHW0485 driver frames HID-over-SPI itself) and the uncalled
   `qcom_geni_spi_biosref_xfer()` helper.
 - Debug output (DP, QMP combo, drm_dp_helper, UCSI feature print), the DPU underflow colour, DP audio (the Denali

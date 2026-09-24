@@ -6,13 +6,13 @@
 require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
 
-# Bump with every change to the payload: the files this script installs from files/, the spec template and the
+# Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
 VERSION="3.2"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
-# file directly under files/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
+# file directly under payload/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
 # values that reach sp11.env, the UCM matcher and microphone gain, the board data and the font. Recorded in the
 # RPM's description.
 support_inputs() {
@@ -22,7 +22,7 @@ support_inputs() {
     "GRUB_FONT_NAME=$GRUB_FONT_NAME" "UCM_SP11_REGEX=$UCM_SP11_REGEX" "WIFI_BOARD_ENTRY=$WIFI_BOARD_ENTRY" \
     "AUDIO_RELEASE_TAG=$AUDIO_RELEASE_TAG" "UCM_MIC_GAIN=$UCM_MIC_GAIN" "BT_HELPER_SHA256=$BT_HELPER_SHA256" \
     | inputs_sha256 "$SPEC_DIR/sp11-surface-support.spec.in" \
-        $(find "$FILES_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort)
+        $(find "$PAYLOAD_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort)
 }
 INPUTS=$(support_inputs)
 
@@ -121,9 +121,9 @@ sed -i 's/^\t\tout\[i\] = (uint8_t)val;$/\t\tout[5 - i] = (uint8_t)val; \/* bdad
 grep -q 'out\[5 - i\] = (uint8_t)val;' "$BT_SRC" || die "bdaddr byte-order patch did not apply to sp11-bt-set-addr.c"
 install -d "$STAGE/usr/libexec/sp11"
 gcc -O2 -Wall -Wextra -o "$STAGE/usr/libexec/sp11/sp11-bt-set-addr" "$BT_SRC" || die "sp11-bt-set-addr failed to compile"
-install -m 0755 "$FILES_DIR/sp11-bt-apply" "$STAGE/usr/libexec/sp11/sp11-bt-apply"
-install -D -m 0644 "$FILES_DIR/sp11-bluetooth-address@.service" "$STAGE/usr/lib/systemd/system/sp11-bluetooth-address@.service"
-install -D -m 0644 "$FILES_DIR/99-sp11-bluetooth-address.rules" "$STAGE/usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules"
+install -m 0755 "$PAYLOAD_DIR/sp11-bt-apply" "$STAGE/usr/libexec/sp11/sp11-bt-apply"
+install -D -m 0644 "$PAYLOAD_DIR/sp11-bluetooth-address@.service" "$STAGE/usr/lib/systemd/system/sp11-bluetooth-address@.service"
+install -D -m 0644 "$PAYLOAD_DIR/99-sp11-bluetooth-address.rules" "$STAGE/usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules"
 install -d -m 0755 "$STAGE/etc/sp11"
 printf '# Bluetooth public address of this Surface Pro 11 (from Windows)\nSP11_BT_MAC="%s"\n' "$SP11_BT_MAC" > "$STAGE/etc/sp11/bluetooth-address"
 chmod 0600 "$STAGE/etc/sp11/bluetooth-address"
@@ -143,24 +143,24 @@ chmod 0644 "$FONT_OUT"
 log "GRUB console font: $GRUB_FONT_FILE, ${GRUB_FONT_SIZE}pt from ${FONT_TTF##*/} ($(du -h "$FONT_OUT" | cut -f1))"
 
 ## 6. Boot policy: kernel-install plugin, first-boot finalizer, dracut policy, UCM apply helper
-install -m 0755 "$FILES_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
-install -m 0755 "$FILES_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
-install -m 0755 "$FILES_DIR/sp11-grub-defaults" "$STAGE/usr/libexec/sp11/sp11-grub-defaults"
+install -m 0755 "$PAYLOAD_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"
+install -m 0755 "$PAYLOAD_DIR/sp11-grub-modules" "$STAGE/usr/libexec/sp11/sp11-grub-modules"
+install -m 0755 "$PAYLOAD_DIR/sp11-grub-defaults" "$STAGE/usr/libexec/sp11/sp11-grub-defaults"
 # Fedora's stock kernels lack the SP11 patch set: no configured repository may offer them (local SP11 kernel RPMs stay
 # installable, which a global excludepkgs would block too).
-install -D -m 0644 "$FILES_DIR/90-sp11-kernel.repo" "$STAGE/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo"
-install -D -m 0755 "$FILES_DIR/29_sp11_windows" "$STAGE/etc/grub.d/29_sp11_windows"
-install -m 0755 "$FILES_DIR/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-first-boot"
-install -m 0755 "$FILES_DIR/sp11-bt-import-pairings" "$STAGE/usr/libexec/sp11/sp11-bt-import-pairings"
-install -m 0755 "$FILES_DIR/sp11-diag" "$STAGE/usr/libexec/sp11/sp11-diag"
+install -D -m 0644 "$PAYLOAD_DIR/90-sp11-kernel.repo" "$STAGE/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo"
+install -D -m 0755 "$PAYLOAD_DIR/29_sp11_windows" "$STAGE/etc/grub.d/29_sp11_windows"
+install -m 0755 "$PAYLOAD_DIR/sp11-first-boot" "$STAGE/usr/libexec/sp11/sp11-first-boot"
+install -m 0755 "$PAYLOAD_DIR/sp11-bt-import-pairings" "$STAGE/usr/libexec/sp11/sp11-bt-import-pairings"
+install -m 0755 "$PAYLOAD_DIR/sp11-diag" "$STAGE/usr/libexec/sp11/sp11-diag"
 # Anaconda's BTRFS bootloader fix rewrites /etc/default/grub and every boot entry's options after the
 # kernel-install plugin has run; the first boot puts the policy back.
-install -D -m 0644 "$FILES_DIR/sp11-first-boot.service" "$STAGE/usr/lib/systemd/system/sp11-first-boot.service"
+install -D -m 0644 "$PAYLOAD_DIR/sp11-first-boot.service" "$STAGE/usr/lib/systemd/system/sp11-first-boot.service"
 install -d "$STAGE/usr/lib/systemd/system/multi-user.target.wants"
 ln -sf ../sp11-first-boot.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
-install -D -m 0755 "$FILES_DIR/15-sp11-surface.install" "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install"
-install -D -m 0644 "$FILES_DIR/90-sp11.conf" "$STAGE/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
-install -D -m 0644 "$FILES_DIR/sp11-scmi-cpufreq.conf" "$STAGE/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
+install -D -m 0755 "$PAYLOAD_DIR/15-sp11-surface.install" "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install"
+install -D -m 0644 "$PAYLOAD_DIR/90-sp11.conf" "$STAGE/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
+install -D -m 0644 "$PAYLOAD_DIR/sp11-scmi-cpufreq.conf" "$STAGE/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
 cat > "$STAGE/etc/sp11/sp11.env" <<ENV
 # Surface Pro 11 boot policy (generated by scripts/30-build-support-rpm.sh)
 SP11_DTB="$SP11_DTB"

@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # Step 3: build the SP11 kernel packages from Fedora's own kernel source RPM (KERNEL_SRPM, pinned in sp11.conf) with
 # the SP11 patch set (the kernel fork's pinned commits as step 10 writes them out, applied by kernel.spec as
-# linux-kernel-test.patch) and configuration additions (files/$KERNEL_CONFIG_FRAGMENT, kernel.spec's kernel-local),
+# linux-kernel-test.patch) and configuration additions (payload/$KERNEL_CONFIG_FRAGMENT, kernel.spec's kernel-local),
 # under buildid .sp11.<KERNEL_SP11_REV>. The result is Fedora's kernel package family, built in a mock buildroot of
 # the target release; nothing else about Fedora's kernel changes.
 . "$(dirname "$0")/lib.sh"
@@ -15,7 +15,7 @@ mkdir -p "$KDIR"
 # rebuilt with another patch set or fragment would collide with the installed package instead of replacing it.
 REV_SHA=$(kernel_rev_sha256)
 [ "$REV_SHA" = "${KERNEL_SP11_REV_SHA256:-}" ] \
-  || die "files/$KERNEL_CONFIG_FRAGMENT and KERNEL_PATCH_COMMIT do not match SP11 revision $KERNEL_SP11_REV (KERNEL_SP11_REV_SHA256 in sp11.conf); a changed patch set or fragment needs a new revision: bump KERNEL_SP11_REV and set KERNEL_SP11_REV_SHA256=$REV_SHA"
+  || die "payload/$KERNEL_CONFIG_FRAGMENT and KERNEL_PATCH_COMMIT do not match SP11 revision $KERNEL_SP11_REV (KERNEL_SP11_REV_SHA256 in sp11.conf); a changed patch set or fragment needs a new revision: bump KERNEL_SP11_REV and set KERNEL_SP11_REV_SHA256=$REV_SHA"
 
 [ -s "$SRPM_IN" ] || die "missing $SRPM_IN (run scripts/10-fetch-sources.sh)"
 verify_sha256 "$SRPM_IN" "$KERNEL_SRPM_SHA256"
@@ -54,14 +54,14 @@ check_kernel_rpms() {
     || die "no driver for these users of the RPMh power domains or the interconnect; add it to kernel-local: $(printf '%s\n' "$missing" | tr '\n' ';')"
   # The configuration is the one Fedora shipped in the same build, plus exactly the kernel-local lines; only the build's
   # identity and the values Kconfig derives from the toolchain of the buildroot may differ.
-  config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" "$MOD/config" || die "kernel-local did not survive Fedora's configuration processing"
+  config_fragment_holds "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" "$MOD/config" || die "kernel-local did not survive Fedora's configuration processing"
   settings() { grep -E '^(CONFIG_[A-Za-z0-9_]+=|# CONFIG_[A-Za-z0-9_]+ is not set$)' "$1" \
     | grep -vE '^(# )?CONFIG_(BUILD_SALT|CC_VERSION_TEXT|GCC_VERSION|CLANG_VERSION|AS_VERSION|LD_VERSION|LLD_VERSION|PAHOLE_VERSION|RUSTC_VERSION|RUSTC_VERSION_TEXT|RUSTC_LLVM_VERSION|RUSTC_LLVM_MAJOR_VERSION|BINDGEN_VERSION_TEXT|CC_IS_[A-Z_]+|AS_IS_[A-Z_]+|LD_IS_[A-Z_]+|CC_CAN_[A-Z0-9_]+|CC_HAS_[A-Z0-9_]+|AS_HAS_[A-Z0-9_]+|LD_CAN_[A-Z0-9_]+|TOOLS_SUPPORT_[A-Z0-9_]+|RUSTC_HAS_[A-Z0-9_]+|PAHOLE_HAS_[A-Z0-9_]+)[= ]' | sort; }
   # Expected: kernel-local's lines ('>') and Fedora's own value of each symbol kernel-local overrides ('<').
   delta=$(diff <(settings "$STOCK_CONFIG") <(settings "$MOD/config") | grep -E '^[<>]' \
-          | grep -vxF -f <(grep -E '^(CONFIG_|# CONFIG_)' "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" | sed 's/^/> /') \
+          | grep -vxF -f <(grep -E '^(CONFIG_|# CONFIG_)' "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" | sed 's/^/> /') \
           | grep -vE -f <(sed -nE 's/^(# )?(CONFIG_[A-Za-z0-9_]+)(=.*| is not set)$/^< (# )?\2( is not set|=)/p' \
-                            "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT") || true)
+                            "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT") || true)
   [ -z "$delta" ] || die "the configuration differs from Fedora's $KERNEL_STOCK_CORE_RPM beyond kernel-local ('<' Fedora, '>' SP11): $(printf '%s\n' "$delta" | tr '\n' ';')"
   for m in mshw0485_touch soundwire-qcom snd-soc-wsa884x surface_aggregator_registry; do
     find "$MOD" -name "$m.ko*" | grep . >/dev/null || die "module $m missing from the kernel packages"
@@ -96,7 +96,7 @@ done
 kernel_series_check || die "the SP11 series in $KERNEL_PATCH_SERIES does not rebuild the tree of $KERNEL_PATCH_COMMIT"
 cat "$KERNEL_PATCH_SERIES"/*.patch > "$SRC/linux-kernel-test.patch"
 [ "$(wc -l < "$SRC/linux-kernel-test.patch")" -gt 9 ] || die "the patch set is empty (kernel.spec ignores a test patch of 9 lines or fewer)"
-cp "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" "$SRC/kernel-local"
+cp "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" "$SRC/kernel-local"
 [ "$(grep -c '^# define buildid \.local$' "$SRC/kernel.spec")" = 1 ] || die "kernel.spec has no single '# define buildid .local' line"
 sed -i "s/^# define buildid \.local\$/%define buildid $KERNEL_BUILDID/" "$SRC/kernel.spec"
 log "Fedora $KERNEL_SRPM + $(find "$KERNEL_PATCH_SERIES" -name '*.patch' | wc -l) SP11 patches (${KERNEL_PATCH_COMMIT:0:12}) + kernel-local, buildid $KERNEL_BUILDID"

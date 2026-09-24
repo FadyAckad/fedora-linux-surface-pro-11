@@ -294,7 +294,7 @@ log "live menu: Fedora's $(grep -c '^[[:space:]]*menuentry ' "$W/grub.cfg") entr
 
 ## 9. /sp11 payload: the RPMs the media carries, and a note
 rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" "$W/sp11/rpms/"
-render "$FILES_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" \
+render "$PAYLOAD_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" \
   KERNEL="Fedora ${KERNEL_SRPM%.src.rpm} + SP11 revision $KERNEL_SP11_REV ($KERNEL_PATCH_BASE + ${KERNEL_PATCH_COMMIT:0:12})" \
   DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE" \
   EDITION="$FEDORA_EDITION" EDITION_NOTE="$EDITION_NOTE"

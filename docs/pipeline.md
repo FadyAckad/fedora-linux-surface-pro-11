@@ -5,11 +5,30 @@ The repository's files, the pipeline steps and their verification steps, the WSL
 
 - `sp11.conf`: every version (but the support RPM's, `VERSION=` in step 30), URL, regex, boot-policy string and
   content pin; scripts source it via `scripts/lib.sh`.
-- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30, 40 and
-  50 and then `35-verify-support-rpm.sh`, which needs the live root 50 extracts (step 30 also runs it itself
-  whenever one is already there, and warns when it is not); `60-verify-rootfs.sh` (optional, not in `build-all.sh`)
-  checks the remastered root; `70-export-bt-pairings.sh` is a separate tool. `sync-state-drivers.py` is step 20's
-  check that every user of the rails and the interconnect in the Denali device tree has a driver (`docs/kernel.md`).
+- `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30, 40, 45
+  and 50 and then `35-verify-support-rpm.sh` and `46-verify-sensors-rpms.sh`, which need the live root 50 extracts
+  (steps 30 and 45 also run them themselves whenever one is already there; 30 warns when it is not);
+  `60-verify-rootfs.sh` (optional, not in `build-all.sh`) checks the remastered root; `70-export-bt-pairings.sh`
+  and `75-export-sensor-registry.sh` are separate tools. `sync-state-drivers.py` is step 20's check that every user
+  of the rails and the interconnect in the Denali device tree has a driver (`docs/kernel.md`).
+- `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
+- `payload/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`,
+  `/usr/lib/...`), `README-iso.txt.in` (the note inside the ISO; it carries the redistribution warning and credits),
+  `kernel-local` (configuration additions; a build input of step 20, part of `KERNEL_SP11_REV`, not part of the
+  support RPM). The SP11 patch set lives in the project's kernel fork (`KERNEL_PATCH_*` in `sp11.conf`; manifest in
+  `docs/kernel-patches.md`).
+  `payload/sensors/`: payload of `sp11-sensors` (udev, systemd, tmpfiles, SELinux and dnf files, the helper
+  scripts), hexagonrpc's sysusers entry and udev rule (packaged by `hexagonrpc.spec.in`), and the unpackaged
+  `sp11-sam-posture` probe.
+- `build/` (git-ignored): `cache/` (downloads, the kernel source RPM, pinned checkouts, `rpm-deps/`, the kernel
+  fork's partial clone `kernel-patches.git` and the series written from it, `kernel-patches/<commit>/`), `kernel/`
+  (the unpacked source RPM with the SP11 additions, the SP11 source RPM, step 20's logs; the build itself runs in
+  `/var/lib/mock/<MOCK_CONFIG>-sp11-kernel`), `work/iso/` (extracted live root, root-owned), `rpms/`, `out/` (ISO,
+  `.sha256`, pairing tarball), `bt-pairings/` (exported hive; secret), `sensors/` (this unit's sensor registry
+  export; private), `hardware.env`.
+
+## Verification steps
+
 - `35-verify-support-rpm.sh` installs the freshly built support RPM in an overlay of the live root, with a real ext4
   `/boot` loop and the `grub2-probe`/`grub2-mkrelpath` stub, on both paths it reaches a machine: `rpm -U` with
   scriptlets over the version the live root carries (what `dnf upgrade` does; after step 50 that is the RPM under
@@ -59,20 +78,9 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   way a crash loop was stopped.
   `75-export-sensor-registry.sh` is the UAC tool that copies this unit's registry and calibration overrides out of
   `DriverData\Qualcomm\fastRPC` (robocopy in an elevated PowerShell) into `build/sensors/`.
-- `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
-- `files/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`, `/usr/lib/...`),
-  `README-iso.txt.in` (the note inside the ISO; it carries the redistribution warning and credits), `kernel-local`
-  (configuration additions; a build input of step 20, part of `KERNEL_SP11_REV`, not payload). The SP11 patch set
-  lives in the project's kernel fork (`KERNEL_PATCH_*` in `sp11.conf`; manifest in `docs/kernel-patches.md`).
-  `files/sensors/`: payload of `sp11-sensors` (udev, systemd, tmpfiles, SELinux and dnf files, the helper scripts),
-  hexagonrpc's sysusers entry and udev rule (packaged by `hexagonrpc.spec.in`), and the unpackaged
-  `sp11-sam-posture` probe.
-- `build/` (git-ignored): `cache/` (downloads, the kernel source RPM, pinned checkouts, `rpm-deps/`, the kernel
-  fork's partial clone `kernel-patches.git` and the series written from it, `kernel-patches/<commit>/`), `kernel/`
-  (the unpacked source RPM with the SP11 additions, the SP11 source RPM, step 20's logs; the build itself runs in
-  `/var/lib/mock/<MOCK_CONFIG>-sp11-kernel`), `work/iso/` (extracted live root, root-owned), `rpms/`, `out/` (ISO,
-  `.sha256`, pairing tarball), `bt-pairings/` (exported hive; secret), `sensors/` (this unit's sensor registry
-  export; private), `hardware.env`.
+
+## Versions and content pins
+
 - Bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the support payload changes, so `dnf upgrade` works
   on the installed system. Its `%posttrans` runs `sp11-grub-defaults` and then, when a
   `grub.cfg` exists, regenerates it. The helper call is not optional: up to 2.3 the scriptlet only ran
@@ -88,10 +96,14 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   registry export and the DriverStore package) and die when the cached RPM of the same version was built from other
   inputs, `FORCE=1` or not; an RPM built before that is accepted with a warning. Step 20 pins each kernel
   revision's content in `sp11.conf` (`KERNEL_SP11_REV_SHA256`, `kernel_rev_sha256`: the revision number, the
-  `kernel-local` lines, each patch's diff) and dies before its cache check when the files or the number differ,
-  printing the value to set after a bump; a revision number therefore always means one content.
+  effective `kernel-local` lines and the two pinned commits of the patch set) and dies before its cache check when
+  they or the number differ, printing the value to set after a bump; a revision number therefore always means one
+  content.
   `build_rpm`, `mock_rebuild` and `mock_rebuild_family` delete every older RPM of the same name, so `build/rpms/`
   holds one release's set.
+
+## Caches and build details
+
 - The support spec disables `__os_install_post`: `board.bin` and the Qualcomm images are ELF files that rpmbuild's
   brp scripts would otherwise rewrite (`board.bin` comes out 32 bytes shorter, the Bluetooth helper loses its
   `.comment` data).

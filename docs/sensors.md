@@ -1,6 +1,8 @@
 # Sensors (Snapdragon Sensor Core)
 The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated device history is at the end.
 
+## Hardware and the Windows path
+
 - **No sensor is on a bus Linux can see.** Windows' `Sensor` class holds two ACPI stubs, `MSHW048A` (display) and
   `MSHW048B` (keyboard, "Qualcomm All-Ways Aware Sensor Platform Device", `qcSensors.dll`: a QMI/protobuf client,
   `sns_client.pb`, `sns_suid.pb`, `sns_surface_imu.pb`). The chips, from the registry JSONs: ST LSM6DSV accel+gyro
@@ -8,10 +10,16 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   on I2C 4, TMD2755 ALS/prox, LPS22DF barometer on I2C 7, all on QUP instances the ADSP's sensor framework (SSC,
   protection domain `sensor_pd` inside `qcadsp8380.mbn`, `adsps.jsn`) owns. The Denali DTS has no sensor nodes
   (`&i2c0`/`&i2c4` carry "Something @…" comments only); the T14s bit-banged LIS2DW12 is a different board.
+
+## Kernel
+
 - Kernel: nothing to change for the sensors themselves (auto-rotation needs the tablet-mode switch patch, see
   below). `CONFIG_QCOM_FASTRPC=m` with the ADSP `fastrpc` node (`hamoa.dtsi:4372`, `qcom,non-secure-domain`, hence
   `/dev/fastrpc-adsp`), `FASTRPC_IOCTL_INIT_ATTACH_SNS`, `QRTR`/`QRTR_SMD=m`, `qcom_pd_mapper` advertising
   `msm/adsp/sensor_pd` for x1e80100. Installed system only: the live session blacklists the ADSP.
+
+## Stack
+
 - Stack (denisix/ubuntu-surface-pro-11 `SENSORS.md` reports 13 sensors working on an SP11 this way):
   `hexagonrpcd -s` attaches to the sensors PD and serves the DSP a virtual tree from `-R DIR`:
   `/vendor/etc/sensors/config` ← `DIR/sensors/config/`, `/vendor/etc/sensors/sns_reg_config` ←
@@ -24,6 +32,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   package), its udev rule enables `ssc-light ssc-compass` on `fastrpc-adsp*`, `ssc-accel` is the opt-in, its unit
   already allows `AF_QIPCRTR`. Fedora's `iiosensorproxy_t` has no `qipcrtr_socket` rule, so `sp11-sensors` loads a
   CIL module; under enforcing no AVC for the stack's domains has been seen.
+
+## Inputs from Windows
+
 - Inputs. Unelevated: `DriverStore/FileRepository/surfacepro_snscfgcrd8380.inf_*` (65 JSON, `json.lst`,
   `sns_reg_config`, `golden_color_calibration.bin`, the platform files `hw_platform`=CRD, `soc_id`=615,
   `revision`=3.1, …). **Every text file there is CRLF.** `sns_reg_config`, `json.lst` and the platform files are
@@ -46,6 +57,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   itself (`… | sed >&2 || rc=$?`): under errexit and pipefail a `$PIPESTATUS` check after a failed pipeline is never
   reached (75 exited without its message until 2026-09-22). Both derive the Windows temp directory from
   `$env:USERNAME`, which names the profile directory on this unit; a renamed account would not, and the die says so.
+
+## What the framework does on attach
+
 - What the framework does when the file server attaches (the daemon's request log, `-Dhexagonrpcd_verbose=true`, run
   under `stdbuf -oL`: the log is on stdout, which is fully buffered on the journal socket otherwise). It asks for
   `oemconfig.so` (refused; not needed: the framework parses the JSONs itself, contrary to denisix's note that the
@@ -87,6 +101,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   (`ssccli --sensor light`; without a working file server every request ends in "'registry' sensor timed out after
   30s, is hexagonrpcd running?"); `ssccli` hangs in its synchronous registry lookup before its own `--timeout`
   applies, so it runs under `timeout`.
+
+## Packaging
+
 - Packaging: `hexagonrpc` 0.5.0 from the project's fork (`HEXAGONRPC_REPO` github.com/FadyAckad/hexagonrpc, branch
   `sp11-sensors` = upstream 598b591 plus five commits, pinned by `HEXAGONRPC_COMMIT`; `git_pin` fetches the commit
   by full hash, which GitHub serves for any reachable commit). The commits: hexagonfs
@@ -117,10 +134,13 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   `sp11-sensors`: payload under `/usr/share/qcom/x1e80100/Microsoft/denali-oled` (the DriverStore package's 65 JSONs
   and `golden_color_calibration.bin`, its `json.lst`, `sns_reg_config` and platform files converted to LF, plus this
   unit's registry of 343 entries, its two parent-directory files and 6 calibration overrides from
-  `vendor\etc\sensors\config`; `files/sensors/` installs elsewhere) with Windows' modification times (`install -p`,
-  `source_date_epoch_from_changelog 0` and `clamp_mtime_to_source_date_epoch 0` in the spec; the JSONs carry their
-  own times, 1747743181 to 1747743185, the Surface calibration overrides 1789827151, the registry's stamps; step 46
-  compares two of them).
+  `vendor\etc\sensors\config`; `payload/sensors/` installs elsewhere) with Windows' modification times
+  (`install -p`, `source_date_epoch_from_changelog 0` and `clamp_mtime_to_source_date_epoch 0` in the spec; the
+  JSONs carry their own times, 1747743181 to 1747743185, the Surface calibration overrides 1789827151, the
+  registry's stamps; step 46 compares two of them).
+
+## Runtime design
+
 - Runtime design: udev `SYSTEMD_WANTS` on the `fastrpc-adsp` misc device starts `hexagonrpcd-adsp-sensorspd.service`
   and `sp11-sensors-online.service` (the stock `[Install]` stays unused: the node exists only after the ADSP
   booted); the same rule adds `ssc-accel` to `IIO_SENSOR_PROXY_TYPE` and sets `ACCEL_MOUNT_MATRIX`. The daemon's
@@ -151,6 +171,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   main-configuration drop-ins, as the 2.x kernel drop-in showed). The main-configuration exclusion also filters a
   local RPM of the package ("from @commandline is filtered out by exclude filtering"): the four RPMs go in one
   transaction, a later SP11 build of the proxy needs `--setopt=disable_excludes='*'`.
+
+## In the ISO
+
 - In the ISO since 2026-09-22: step 50 installs the four RPMs into the live root with `--noscripts` and applies the
   scriptlet effects itself (`systemd-sysusers hexagonrpc.conf`, `semodule -i sp11-sensors.cil`,
   `systemd-tmpfiles --create sp11-sensors.conf`, all in the chroot with `/dev`, `/proc` and `/sys` bound), asserts
@@ -162,11 +185,17 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   release with `--oldpackage`; step 60 checks the packages, the user, the module, the copy's mtime and the
   initramfs. The 45 Beta Workstation root provides every runtime dependency (`protobuf3-c` for `protobuf-c`);
   step 50 tests them by capability and installs missing ones from `build/cache/rpm-deps`, as it does for iptsd's.
+
+## ADSP safety
+
 - ADSP safety: nothing in the stack writes `/sys/class/remoteproc/*/state` (step 45 greps the stage for it;
   `sp11-sensors-check` only reads it). hexagonrpcd only attaches to the existing sensors PD (`INIT_ATTACH_SNS`),
   never creates a PD (`-c`) nor supplies DSP libraries (`dsp/` absent → empty), and serves the files taken from
   Windows (the control files converted to LF) and the registry copy the DSP itself rewrites. Its exit leaves the
   sensors running on the DSP. Stopping the ADSP through remoteproc resets the SoC (denisix).
+
+## sp11-sensors-check
+
 - `sp11-sensors-check` (also run by `sp11-diag`): boot timeline, crashes per remote processor, the daemon's status
   and memory breakdown, a summary of the DSP's writes, removals, renames and refusals with the log's head and tail,
   the files the DSP wrote measured against `/run/sp11-sensors/attaches`, one `ssccli` reading per sensor,
@@ -174,12 +203,18 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   modules and kernel lines, libinput capabilities, `HasAccelerometer`, mutter's `PanelOrientationManaged` asked on
   the logged-in user's session bus with `runuser`/`gdbus`, so run it with `sudo` from a terminal in the desktop,
   connected Bluetooth devices; `libinput-utils` is optional).
+
+## Orientation
+
 - Orientation: the Sensor Core reports the Android convention (the reaction force in the display frame: x right, y
   up, z out of the screen; upright on the kickstand it read x=+0.77, y=+7.39, z=+6.35 m/s²; libssc's matrix from the
   SSC placement attribute is all zeros, so identity), while iio-sensor-proxy's `test-orientation.c` wants y<0 for
   normal, x>0 for left-up and `tilt_calc` z>0 for face-up. `ACCEL_MOUNT_MATRIX="-1,0,0;0,-1,0;0,0,1"` on the node:
   the proxy reports `normal` upright (`bottom-up` without the matrix), and on the desktop the picture follows the
   device to each side and upside down.
+
+## Tablet mode and auto-rotation
+
 - Auto-rotation needs tablet mode. From the sources Fedora 45 ships (gnome-shell 51~beta, mutter 51~beta, libinput
   1.31): the quick toggle (`js/ui/status/autoRotate.js`) is visible iff `SystemActions.can-lock-orientation`, which
   is mutter's `panel-orientation-managed` (`js/misc/systemActions.js`); mutter (`meta-monitor-manager.c`) sets it to
@@ -199,7 +234,7 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   new posture as le32; one source, id 0, the type cover): 03 laptop attached, 01 disconnected (with or without
   Bluetooth), 05 folded back, 04 folded canvas, and 00, not in the driver's enum, for about 3 s while the keyboard
   is being attached (logged once as `unknown device posture for type-cover: 0`, reported as tablet, the mode the
-  device is already in). Found with `files/sensors/sp11-sam-posture` (python3, not packaged): it talks to the
+  device is already in). Found with `payload/sensors/sp11-sam-posture` (python3, not packaged): it talks to the
   aggregator through `/dev/surface/aggregator` (`surface_aggregator_cdev`, `CONFIG_SURFACE_AGGREGATOR_CDEV=m`; the
   module creates its own platform device on load and binds the controller; ioctl `SSAM_CDEV_REQUEST` = `0xc028a501`,
   a 40-byte packed request with the response through a user buffer; notifier register/unregister and event
@@ -214,6 +249,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   is true when folded, GNOME offers the auto-rotate button with the keyboard folded back or detached, and libinput
   switches the keyboard and touchpad off while the keyboard is folded back (the aggregator's devices sit on
   `BUS_HOST` and count as internal). `gpio-keys` also carries a lid switch (`SW=1`).
+
+## Compass
+
 - The compass in iio-sensor-proxy: libssc builds it from the DSP's `rotv` (rotation vector) fusion sensor, which the
   framework publishes a few seconds after the physical sensors, and the proxy probes the SSC sensors once, on the
   udev "add" of the node, 0.6–0.7 s after the attach. At that probe the compass was missing on three of six boots
@@ -234,6 +272,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   against stubs (eight scenarios) and step 46, which asserts that the helper sends the event and restarts or stops
   no unit (a check 1.8's helper fails). Not needed on the device yet: on the 1.9 boot the proxy's own probe had the
   compass.
+
+## Known issues
+
 - Known issues. The CDSP firmware asserts (`sleep_statsi.c:537`, recovered in 0.1–0.2 s, once in 5 s) around sensor
   streams starting or stopping on the ADSP: 5 s after the ADSP crash of round 3; 130 ms and 58 ms into the two
   boot-time proxy restarts (rounds 4 and 11), which close every stream at once; about a second after a check closed
@@ -251,6 +292,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   carry the right time, the root's are two hours behind): systemd's "since … ago", early file times and
   `find -newer` against files written later are off, so the check measures the DSP's writes against
   `/run/sp11-sensors/attaches`, which the same clock stamped.
+
+## Upstream state
+
 - Upstream state (checked 2026-09-19 against linux-msm/hexagonrpc): no pull request carries these changes. PR #21
   (z3ntu, draft since 2026-03-20, for issue #19 "Support opening files for writing", the same
   `.../registry/registry/DIR` refusal) stubs `fwrite` (accepts the `DIR` marker and a `version=` string, nothing
@@ -265,6 +309,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   ("method 24 stub", "write support"); main has not moved past 598b591. The fork was created on 2026-09-19 at
   598b591 and its `sp11-sensors` branch pushed on 2026-09-20; its commits carry the owner as author and committer
   and no other trailer. Owner's decision: fork only for now, no pull request yet.
+
+## History
+
 - Device history on the tested unit (Fedora 45 Beta install, SELinux enforcing throughout):
   - 2026-09-19, rounds 1–4: 1.0 attached safely (both remote processors up through two suspend/resume cycles, audio
     unaffected) but the registry never reached the DSP (the CRLF defect); a refused registry write ended in the ADSP

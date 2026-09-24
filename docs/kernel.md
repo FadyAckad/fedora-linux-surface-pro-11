@@ -1,10 +1,12 @@
 # Kernel
 Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisions, configuration, rebase, install.
 
+## Sources and packages
+
 - The kernel is Fedora's own `kernel` source RPM for `FEDORA_RELEASE` (`KERNEL_SRPM`, sha256 pinned in `sp11.conf`;
   Koji keeps every build under `kojipkgs.fedoraproject.org/packages/kernel/<version>/<release>.fc<n>/src/`), rebuilt
   with the SP11 patch set (the commits `KERNEL_PATCH_BASE_COMMIT..KERNEL_PATCH_COMMIT` of the project's kernel fork,
-  `KERNEL_PATCH_REPO`; manifest in `docs/kernel-patches.md`) and `files/kernel-local`. The result is Fedora's
+  `KERNEL_PATCH_REPO`; manifest in `docs/kernel-patches.md`) and `payload/kernel-local`. The result is Fedora's
   package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`. First build: `kernel-7.2.5-300.fc45` with revision 1, uname
@@ -13,6 +15,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 - Fedora's `linux-7.2.5.tar.xz` inside the source RPM is byte-identical to kernel.org's `linux-7.2.tar.xz` plus
   `patch-7.2.5.xz`. Fedora's own `patch-7.2-redhat.patch` touches 61 files, none of the patch set's (crypto and
   lockdown policy, secure-boot state in `/chosen`, some x86/s390, a few quirks).
+
+## kernel.spec slots and the build
+
 - `kernel.spec` provides the slots step 20 uses, so the spec's only edit is the buildid line:
   `# define buildid .local` becomes `%define buildid .sp11.<rev>` (step 20 dies unless exactly one such line
   exists); `Patch999999: linux-kernel-test.patch` (empty in the SRPM; `ApplyOptionalPatch` applies it when it has
@@ -36,6 +41,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   `build/rpms`; step 20's cache is the `kernel-core` RPM of the configured uname. The spec signs the image through
   pesign's rpmbuild helper; outside Fedora's build system the image stays unsigned, so Secure Boot stays off as
   before.
+
+## Checks on the result
+
 - Step 20's checks on the result: every `KERNEL_PKGS` package at the configured uname; `vmlinuz` and the Denali OLED
   DTB in `kernel-core` (compatible `microsoft,denali-oled`, a `microsoft,mshw0485` touch controller node); a driver
   in the packages for every enabled user of the RPMh power domains and of the interconnect in that DTB
@@ -48,6 +56,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   `snd-soc-wsa884x`, `surface_aggregator_registry` and the parameters `ipts_hid_bridge` and
   `sp11_feedback_active_offset2_zero`. The source RPM's `kernel-aarch64-fedora.config` is no reference: it is the
   input Kconfig resolves during the build (options with unmet dependencies drop out, derived ones are added).
+
+## Revisions
+
 - `KERNEL_SP11_REV` (in the buildid) and `KERNEL_SP11_REV_SHA256` (`kernel_rev_sha256` in `lib.sh`: the revision
   number, the effective `kernel-local` lines and the two pinned commits, whose ids fix the patch set) pin what a
   revision contains; step 20 refuses a patch set or fragment that differs and prints the value to set. Bump the
@@ -55,6 +66,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   the installed kernel's `/boot` and module paths. A new Fedora kernel changes the uname by itself, but the patches
   change with the rebase, so it is a new revision too. The buildid must not contain `rt|auto|uki|64k|debug`, or
   `20-grub.install` does not make the kernel the saved default.
+
+## Configuration
+
 - Configuration: Fedora's (`CONFIG_LSM="lockdown,yama,integrity,selinux,bpf,landlock,ipe"`, SELinux default,
   `CRYPTO_FIPS=y`, zboot `vmlinuz`, EROFS with LZMA, XZ firmware). What the SP11 needs beyond the patch set is
   already there, but for the two drivers of the sync-state bullet: the Surface Aggregator stack
@@ -64,6 +78,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   `SPI_QCOM_GENI`, `HIDRAW=y`, `KEYBOARD_GPIO`, `PINCTRL_QCOM_SPMI_PMIC`. `ARM_SCMI_CPUFREQ=m` does not load on its
   own (modpost cannot generate SCMI-bus aliases; ooaklee's config had it built in), so the support RPM loads it
   through `modules-load.d`, the fix Fedora's "Snapdragon WoA Laptop Install" wiki page gives.
+
+## Extraction from v23.2
+
 - The patch set and how revision 1 was extracted from the v23.2 kernel (ooaklee's linux_ms_dev_kit-sp11 v23, built
   on Ubuntu's qcom-x1e concept kernel and jglathe's X1E tree, plus the 7.2.5 update and the POS patch): see
   `docs/kernel-patches.md`. Method, for a future re-extraction: a blobless clone of ooaklee/linux_ms_dev_kit-sp11
@@ -87,6 +104,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 - The ADSP: mainline's PAS driver has the X1E ADSP's "lite" firmware IDs (`lite_pas_id` 0x1f, `lite_dtb_pas_id`
   0x29) and shuts the UEFI-started firmware down in `qcom_pas_load` before it boots the Linux one. v23 did the same
   through ooaklee's attach series ("restarting adsp with new firmware"), which the patch set leaves out.
+
+## Sync state and the CDSP
+
 - Sync state, and the CDSP (no listed feature uses it): until every enabled user of an RPMh power-domain or
   interconnect provider has its driver bound, the provider does not reach `sync_state`, and Linux keeps the votes it
   sends at boot: the highest level on every rail its drivers touch and full bandwidth on every interconnect node,
@@ -109,6 +129,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   clock. `sp11-diag` lists the providers still waiting. Once the CDSP sleeps and wakes, its firmware can report a
   `sleep_stats` fatal error once in a boot (`fatal error received: sleep_statsi.c…`; v23.2 and revision 4 alike, and
   Qualcomm's public tracker shows it on other boards); remoteproc restarts the CDSP by itself.
+
+## Rebase to a new Fedora kernel
+
 - Rebase to a new Fedora kernel (7.2.6 and later): set `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and the SRPM
   checksum in `sp11.conf`, then in the kernel fork `git switch -c sp11/<new> sp11/<old>` and
   `git rebase --onto v<new> v<old>` (the stable tag from `gregkh/linux`), resolve the conflicts, push the new branch
@@ -118,6 +141,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   PHY supplies) is in 7.2.6 and goes. Fedora 45 had 7.2.6-300 stable and 7.2.7-300 in testing on 2026-09-22. Step
   20's sync-state check shows whether Fedora's new configuration still has a driver for every user of the rails and
   the interconnect.
+
+## Install and removal
+
 - `kernel-core` provides `installonlypkg(kernel)` and `kernel-core-uname-r`, so dnf installs each SP11 kernel next
   to the previous ones; `installonly_limit` (3) counts per package name, so the old `kernel-sp11` packages count
   apart from `kernel-core`. `20-grub.install` makes the added kernel the saved default when `/etc/sysconfig/kernel`
@@ -131,6 +157,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   since the host has no e2fsprogs): on an overlay root `grub2-editenv` fails with
   `failed to get canonical path of overlay`, so `saved_entry` never changes. The step 60 simulation does not check
   it.
+
+## SELinux
+
 - SELinux: Fedora's kernel runs the targeted policy enforcing. Installations made from ISOs built before 2026-09-22
   (AppArmor kernels) were installed with SELinux disabled (`selinux=0` in the boot arguments, `SELINUX=disabled`);
   support RPM 3.0 no longer carries `sp11-selinux-restore`, so such a system needs the manual procedure once:
@@ -138,7 +167,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   `sudo touch /.autorelabel`, reboot (relabel and one more reboot follow). The tested unit was reinstalled from
   SELinux media on 2026-09-22.
 
-History: 2026-09-13 to 2026-09-22 the project built ooaklee's linux_ms_dev_kit-sp11 v23 (Linux 7.2.0) from source
+## History
+
+2026-09-13 to 2026-09-22 the project built ooaklee's linux_ms_dev_kit-sp11 v23 (Linux 7.2.0) from source
 with its Ubuntu-derived configuration, later with the kernel.org 7.2.5 update, a configuration policy for Fedora's
 LSM stack (revision 1, 2026-09-18) and the POS tablet switch (revision 2, 2026-09-21), packaged as `kernel-sp11`
 (`7.2.5-jg-0sp11v23.2-qcom-x1e`). 2026-09-23: replaced by Fedora's `kernel-7.2.5-300.fc45` with the patch set

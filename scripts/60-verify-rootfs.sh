@@ -39,7 +39,7 @@ check r test -s "$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE"
 check r test -s "$ROOTFS/boot/grub2/fonts/$GRUB_FONT_FILE"
 check r sh -c "[ \"\$(dd if='$ROOTFS/usr/share/sp11/fonts/$GRUB_FONT_FILE' bs=1 count=4 skip=8 status=none)\" = PFF2 ]"
 # The shipped kernel is Fedora's configuration plus kernel-local (step 20 compares the whole configuration).
-check config_fragment_holds "$FILES_DIR/$KERNEL_CONFIG_FRAGMENT" "$ROOTFS/usr/lib/modules/$KERNEL_ABI/config"
+check config_fragment_holds "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" "$ROOTFS/usr/lib/modules/$KERNEL_ABI/config"
 check r grep -qx 'scmi-cpufreq' "$ROOTFS/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
 check r test -L "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 check r test ! -e "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"

@@ -52,7 +52,7 @@ log "converting pairing keys for adapter $SP11_BT_MAC (devices: $BT_PAIRING_USB_
 usb_args=(); for id in $BT_PAIRING_USB_IDS; do usb_args+=(--only-usb "$id"); done
 python3 "$SP11_ROOT/scripts/bt-pairings-from-hive.py" --adapter "$SP11_BT_MAC" --meta "$OUT/meta.json" \
   "${usb_args[@]}" "$OUT/bthport-parameters.hiv" "$OUT" | tee "$OUT/devices.txt"
-install -m 0755 "$FILES_DIR/sp11-bt-import-pairings" "$OUT/sp11-bt-import-pairings"
+install -m 0755 "$PAYLOAD_DIR/sp11-bt-import-pairings" "$OUT/sp11-bt-import-pairings"
 rm -f "$BUNDLE"
 ( cd "$OUT" && tar -czf "$BUNDLE" --owner=0 --group=0 sp11-bt-import-pairings devices.txt ./*:* )
 chmod 0600 "$BUNDLE"
