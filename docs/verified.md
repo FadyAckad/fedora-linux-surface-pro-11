@@ -187,3 +187,26 @@ and resume. GNOME's Power Mode reaches the Surface: Power Saver, Balanced and Pe
 to `powersave`, `balanced` and `throughput-performance` and the platform profile to `low-power`, `balanced` and
 `performance`. On a second boot `/dev/fastrpc-cdsp` was present and both DSPs answered the ping. USB-C charging and
 data confirmed as well (an external display over USB-C not checked).
+
+## Kernel revision 5 (7.2.7-300.sp11.5) as an update (2026-09-25)
+
+`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.5.fc45` (Fedora's 7.2.7 with the patch
+set rebased onto `v7.2.7`, `docs/kernel-patches.md`) installed with `dnf install` next to `7.2.5-300.sp11.4` on the
+installation from the revision-4 ISO; support 3.2 unchanged. The boot entry carries the Denali device tree, the SP11
+arguments and tuned's `$tuned_params`, and `saved_entry` names it; dracut printed
+`If you need to use bluetooth, please include it explicitly` twice and nothing else. Confirmed on the device: kernel
+`7.2.7-300.sp11.5` with the SP11 arguments, SELinux enforcing; both speakers, with
+`SP11 stage SP/SPVI enabled with VI+CPS feedback accepted` at every playback and no `All ports busy` (the feedback
+port 13 that 7.2.6's SoundWire check refused, patch 0058); microphone recording and playback; touch, multi-touch and
+pen (`SP11: accepting protocol 9 as QSPI controller`, GPI DMA mode); `/dev/fastrpc-adsp`, `-cdsp` and `-cdsp-secure`
+and both DSPs answering the ping, on a second boot too; the crypto engine with `sha256-qce` and `hmac-sha256-qce`
+only and no failed self-test; no provider waiting for sync_state; light, accelerometer, gyroscope, magnetometer and
+compass readings and the POS tablet-mode switch; the same 422 bound devices as on revision 4; a deep suspend and
+resume. Confirmed by the owner: Wi-Fi, the Flex Keyboard and Slim Pen 2, battery status, the brightness slider, the
+volume keys, keyboard and touchpad, auto-rotation, the power modes, and display, touch, pen, keyboard, Wi-Fi and
+sound after the resume. The journal's errors are again only the ADSP's `Handover signaled, but it already happened`
+(566 in that boot, which included the suspend and several playbacks). Warnings of that boot that revision 4's diag
+boot, which had no suspend, did not show: one `dpu_crtc_disable` frame-done timeout, `IRQ: set affinity failed` and
+a PM ordering warning of a PHY's hwmon device, none with a visible effect. Confirmed by the owner afterwards for
+revision 5 as well: GPU acceleration, USB-C charging and data, Flatpak, the Windows entry in GRUB, tablet mode's
+keyboard lock-out, automatic screen brightness.

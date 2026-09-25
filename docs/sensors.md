@@ -240,7 +240,7 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   a 40-byte packed request with the response through a user buffer; notifier register/unregister and event
   enable/disable with the SAM event registry `0x01/0x01/0x0b/0x0c`), sends the drivers' own read-only queries (KIP
   cover state, POS sources 0x26/0x01 and posture per source 0x26/0x02), reads the kernel switch with `EVIOCGSW` and
-  prints every KIP/POS event with `--watch N`. The fix, SP11 kernel revision 2 of the v23 kernel (today patch 0061
+  prints every KIP/POS event with `--watch N`. The fix, SP11 kernel revision 2 of the v23 kernel (today patch 0057
   of the SP11 patch set, `docs/kernel-patches.md`), puts `&ssam_node_pos_tablet_switch` (`ssam:01:26:01:00:01`, the
   node the Surface Pro 12" group uses) in place of the KIP node, replacing rather than adding it: libinput pairs
   every tablet-mode switch with the internal keyboard and touchpad, so a second, static KIP switch left in tablet

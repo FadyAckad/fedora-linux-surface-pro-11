@@ -12,6 +12,9 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   and `75-export-sensor-registry.sh` are separate tools. `sync-state-drivers.py` is step 20's check that every user
   of the rails and the interconnect in the Denali device tree has a driver (`docs/kernel.md`).
 - `rpm/*.spec.in`: templates rendered by `render()` (`@KEY@` placeholders; leftovers fail the build).
+- `.claude/skills/sp11-kernel-update/`: the procedure for a new Fedora kernel as a Claude Code project skill
+  (`SKILL.md`; every command with its expected output in `reference.md`; hand-off templates; the DSP ping tool
+  the device steps use).
 - `payload/`: payload of `sp11-surface-support` (installed under `/usr/libexec/sp11`, `/etc/grub.d`,
   `/usr/lib/...`), `README-iso.txt.in` (the note inside the ISO; it carries the redistribution warning and credits),
   `kernel-local` (configuration additions; a build input of step 20, part of `KERNEL_SP11_REV`, not part of the
@@ -57,10 +60,15 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   `initrd`, `devicetree /dtb-<abi>/…`, every `SP11_ARGS_INSTALLED`, no live-only argument), `saved_entry` naming the
   new entry, the previous kernel's files, the dracut initramfs (new module tree, Adreno microcode, the Denali DSP
   firmware), the regenerated menu, `kernel-local` in the shipped `config`, and that `rpm -e` of the new packages
-  puts the previous kernel back. `kernel-install` exits non-zero in the chroot (`95-set-boot-entry.install` wants
-  the kernel's initramfs, which the previous kernel's entry is written without), so the script judges by the entry,
-  as the RPM's `%posttrans` does with `|| :`. `95-set-boot-entry.install` (grub2-common) is what turns
-  `tmp_saved_entry` into `saved_entry`, so a kernel whose initramfs failed to build never becomes the default.
+  puts the previous kernel back. When the live root already carries the support RPM under test (after any ISO
+  build), pass that RPM as `SUPPORT_PREVIOUS_RPM`: its reinstall's `%posttrans` writes the menu an installed system
+  has. Without it the menu check fails, because the live root's menu is Fedora's own and `20-grub.install`
+  regenerates the menu only when `/etc/kernel/cmdline` is older than `/etc/default/grub`, which the SP11 plugin's
+  rewrite of `/etc/kernel/cmdline` before it never lets happen (2026-09-25). `kernel-install` exits non-zero in
+  the chroot (`95-set-boot-entry.install` wants the kernel's initramfs, which the previous kernel's entry is written
+  without), so the script judges by the entry, as the RPM's `%posttrans` does with `|| :`.
+  `95-set-boot-entry.install` (grub2-common) is what turns `tmp_saved_entry` into `saved_entry`, so a kernel whose
+  initramfs failed to build never becomes the default.
   dracut's `selinux` module is in none of these images (its `check()` returns 255: included only as a dependency or
   when added; Fedora's stock 45 Beta live initrd lacks it too) — systemd loads the policy in the real root.
 - Sensors stack (see `docs/sensors.md`; `build-all.sh` runs 45 before 50 and 46 after 35 since 2026-09-22, and

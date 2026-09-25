@@ -48,7 +48,7 @@ The tested unit, its peripherals and their userspace, and the Bluetooth pairings
   byte-reversed address; `30-build-support-rpm.sh` patches `out[i]` to `out[5 - i]` before compiling. The helper
   validates the index and the address itself; `sp11-bt-apply` only maps the unit instance `hciN` to `N`.
 - Pen: unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`) on the kernel's HIDRAW bridge
-  (`hidraw` parent `001C:045E:0C83.*`, created by `mshw0485_touch` (patch 0054) with `ipts_hid_bridge` defaulting to
+  (`hidraw` parent `001C:045E:0C83.*`, created by `mshw0485_touch` (patch 0050) with `ipts_hid_bridge` defaulting to
   on); integration templates from OE `userspace/iptsd-sp11`; the build needs cmake for meson to find Microsoft.GSL.
   The kernel's own "Microsoft Surface G6 Pen" input device is silent by design; inking comes from the
   `sp11-iptsd@dev-hidrawN.service` started by the udev rule.

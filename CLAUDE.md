@@ -45,6 +45,8 @@ a guide says only what concretely works.
   pinned in `sp11.conf`.
 - `docs/`: the working notes; `docs/guide/`: the user guides. `build/` (git-ignored): caches, work trees, RPMs and
   output; see `docs/pipeline.md`.
+- `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
+  command with its expected output in `reference.md`, hand-off templates, the DSP ping tool).
 
 ## Rules
 
@@ -65,9 +67,10 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
 - Support payload: `VERSION=` in `scripts/30-build-support-rpm.sh`.
 - `payload/kernel-local` or `KERNEL_PATCH_COMMIT` (new commits on the kernel fork): `KERNEL_SP11_REV` and
   `KERNEL_SP11_REV_SHA256` in `sp11.conf` (step 20 prints the value to set). A new Fedora kernel:
-  `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and its line in the `KERNEL_SRPM_SHA256` case table, plus the
-  patch set rebased on a new fork branch (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) under a new revision
-  (`docs/kernel.md`). A pushed fork branch is never rewritten.
+  `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and its lines in the `KERNEL_SRPM_SHA256` and
+  `KERNEL_STOCK_CORE_SHA256` case tables, plus the patch set rebased on a new fork branch
+  (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) under a new revision (`docs/kernel.md`). A pushed fork branch
+  is never rewritten.
 - In `sp11.conf`: `IPTSD_RPM_RELEASE` (the iptsd spec), `HEXAGONRPC_RPM_RELEASE` (the number, for the spec, its
   payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec), `IIO_SENSOR_PROXY_RPM_SUFFIX` (its
   template; `IIO_SENSOR_PROXY_BASE_SPEC_SHA256` for a new SRPM), `SENSORS_VERSION` (`payload/sensors/`, the

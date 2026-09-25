@@ -4,20 +4,21 @@
 
 Builds a Fedora 45 live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition with the
 Samsung OLED panel (Snapdragon X Elite X1E80100). The kernel is Fedora's own kernel package
-(`kernel-7.2.5-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
-Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.5-300.sp11.4.fc45.aarch64`); GRUB loads
+(`kernel-7.2.7-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
+Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.7-300.sp11.5.fc45.aarch64`); GRUB loads
 the Denali OLED device tree. The build runs on the Surface itself, in WSL, and takes the unit's identity, Bluetooth
 address, device firmware and sensor registry from its Windows installation, so every ISO is tailored to the unit
 that built it. Secure Boot has to be off and Windows stays on the device (see Status and scope).
 
 ## What works
 
-Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`) with the kernel above in its current revision 4
-(`7.2.5-300.sp11.4.fc45.aarch64`) and support RPM 3.2, installed fresh from the ISO built on 2026-09-24.
+Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`) with the kernel above in its current revision 5
+(`7.2.7-300.sp11.5.fc45.aarch64`, installed as an update on 2026-09-25) and support RPM 3.2, on an installation from
+the ISO built on 2026-09-24.
 [`docs/verified.md`](docs/verified.md) has the details and what was confirmed with earlier kernels, including
 ooaklee's v23 tree the project built until 2026-09-22.
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.5-300 (sp11.4) |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.7-300 (sp11.5) |
 |---|:-:|
 | Boot from the internal NVMe drive | yes |
 | Display with GPU acceleration | yes |
@@ -82,7 +83,7 @@ scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.5-300.sp11.4.fc45.aarch64.iso`, with a `.sha256` beside it. Every
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.5.fc45.aarch64.iso`, with a `.sha256` beside it. Every
 option and step: [`docs/guide/build.md`](docs/guide/build.md). Writing the media and installing:
 [`docs/guide/install.md`](docs/guide/install.md). Updating an installed system:
 [`docs/guide/update.md`](docs/guide/update.md).
