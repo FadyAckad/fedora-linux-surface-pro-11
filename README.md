@@ -52,7 +52,7 @@ running from USB-C; both work once installed.
 
 ## Status and scope
 
-- Unofficial community project, not affiliated with Microsoft, Qualcomm, Fedora or ooaklee. No warranty.
+- Unofficial community project, not affiliated with Microsoft, Qualcomm, or Fedora. No warranty.
 - Tested only on the 5G OLED SKU. The hardware checks also accept the non-5G OLED SKUs
   (`Surface_Pro_11th_Edition_2076`, `Surface_Pro_11th_Edition_For_Business_2085`), which share the
   device tree, firmware file names and digitizer IDs; no build from one has been reported. The X1P64100
