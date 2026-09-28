@@ -5,7 +5,7 @@ The folder (location and naming in `CLAUDE.local.md`) holds the five `KERNEL_PKG
 `sp11-<new>-series.tar.gz` (`git format-patch --no-signature v<new>..<head>`, packed without a directory), and the
 three files below. Before handing over, apply the tarball with `git am` onto `v<new>` in a throwaway clone
 (`git clone --shared --no-checkout <fork clone>`, detached at the tag, signing off): 58 commits and one whitespace
-warning for 7.2.7 (72 commits since revision 8), and the rehearsal's tree.
+warning for 7.2.7 (74 commits since revision 9), and the rehearsal's tree.
 
 Steps files follow the maintainer's format: a `#` title with topic, version and date; a short intro (what changed,
 what was verified off-hardware, what can break, the way back); numbered steps with one command per fenced `bash`

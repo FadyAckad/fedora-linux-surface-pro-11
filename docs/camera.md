@@ -32,7 +32,8 @@ camera's sensor, what the host checks prove and what only the device can show.
   drivers. Revision 6 carries them as the patches 0059–0070 (`docs/kernel-patches.md`): turbineBMW's reviewed camera
   branch, their OV13858 retry of the first register write after power-up, and ooaklee's IMX681 exposure fix;
   `kernel-local` adds `VIDEO_IMX681=m` and `VIDEO_VD55G0=m`. In revision 6 every driver file equalled the one in
-  turbineBMW's 7.3 port, their daily kernel; revision 8 changes the IMX681's (0072).
+  turbineBMW's 7.3 port, their daily kernel; revision 8 changes the IMX681's (0072), revision 9 the OV13858's and
+  the IMX681's (0073, 0074).
 - Fedora's `patch-7.2-redhat.patch` adds a Sony IMX471 driver at the IMX681's alphabetical place in
   `drivers/media/i2c/Kconfig` and `Makefile`; kernel.spec's `git apply` refused turbineBMW's hunks there (the first
   build of revision 6 stopped in `%prep`), so the IMX681 entries follow the MAX9271 library entry instead. Fedora's
@@ -54,6 +55,18 @@ camera's sensor, what the host checks prove and what only the device can show.
   libcamera derives is the sensor's. Confirmed on the device (2026-09-28): at 3554, 5331 and 7108 lines the camera
   runs at 30.01, 20.00 and 15.00 fps also at a short exposure (886 lines), which only a frame length the sensor
   takes can lower (`sp11-camera-probe front --frame-length`).
+- Revision 9 (2026-09-28, two fixes from a review): the Surface Pro 11 mode put its 592.8 MHz link frequency first
+  in the OV13858 driver's menu, and the pixel rate's minimum, which the driver took from the menu's second entry,
+  became 432 instead of 216 MHz. In the 270 MHz modes, among them the 2112x1188 mode GNOME Snapshot gets, the
+  driver's 216 MHz was clamped to 432 MHz, so libcamera took a line for 5.19 instead of 10.39 us and reported half
+  the exposure time, and CAMSS chose its VFE clock for twice the rate; 0073 takes the minimum from the lowest link
+  frequency. The full 4224x3136 mode (540 MHz, 432 MHz), which `cam` takes without a stream size, was right before.
+  libcamera 0.7.2 uses the pixel rate only for that line time and the line time only for the `ExposureTime`
+  metadata; the exposure control and `payload/camera/` count exposure lines and gain codes, so the picture does not
+  change and the libcamera rebuild needs none. 0074 applies the IMX681's controls at stream start under the control
+  handler's lock, which `__v4l2_ctrl_handler_setup()` expected and `.s_stream` does not hold. On the device
+  (`docs/verified.md`) the 2112x1188 mode reports 216 MHz and a full exposure of 33.3 ms at 29.95 fps, and both
+  cameras work as before in GNOME Snapshot.
 - The camera nodes add two users of the providers that must reach `sync_state` (`docs/kernel.md`): the camera clock
   controller votes on the RPMh power domains, CAMSS on the interconnect (the CCI buses use the clock controller's
   own power domain). Step 20's check finds a driver for both in Fedora's packages; whether they bind only the
@@ -183,11 +196,13 @@ camera's sensor, what the host checks prove and what only the device can show.
   `sync_state`, the front and the rear camera stream in GNOME Snapshot and in Firefox, also after a suspend and
   resume (rechecked on 2026-09-28 with revision 8 and 0.7.2-3.sp11.6, also after reboots). `cam -l` lists
   `Internal front camera`, `Internal back camera` and `'vd55g0'` (the VD55G0 driver has no orientation control);
-  libcamera runs the rear camera in a 2112x1188 mode and the IR camera at 320x240 8-bit, about 59 fps. GNOME
-  Snapshot leaves the IR camera out by itself (`IR Camera ignored: vd55g0`). The rebuild's markers as expected:
-  `signature is valid`, `Using tuning file .../imx681.yaml`, `gain 1-16 (0.15)` (Fedora's build: `not valid`,
-  `uncalibrated.yaml`, `gain 0-960 (1)`). The OV13858 retry recovered one CCI queue timeout, when Snapshot switched
-  from the front to the rear camera.
+  libcamera runs the rear camera in its 2112x1188 mode for GNOME Snapshot (the software ISP's
+  `Input 2112x1188-GRBG-10-CSI2P`) and in its full 4224x3136 mode for `cam` without a stream size, since the simple
+  pipeline takes the smallest sensor mode that covers the stream; the IR camera at 320x240 8-bit, about 59 fps.
+  GNOME Snapshot leaves the IR camera out by itself (`IR Camera ignored: vd55g0`). The rebuild's markers as
+  expected: `signature is valid`, `Using tuning file .../imx681.yaml`, `gain 1-16 (0.15)` (Fedora's build:
+  `not valid`, `uncalibrated.yaml`, `gain 0-960 (1)`). The OV13858 retry recovered one CCI queue timeout, when
+  Snapshot switched from the front to the rear camera.
 - Brightness (2026-09-26 and 2026-09-27): the dark, grey picture of the first round came from dim rooms; the sensors
   are fine. In those captures the software ISP's brightness statistic (`exposureMSV`) stayed at 1 (all pixels in the
   darkest fifth) with the exposure at its maximum while the gain rose (Fedora's libcamera one raw code per update,

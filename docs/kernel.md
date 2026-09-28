@@ -13,7 +13,8 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   `7.2.5-300.sp11.1.fc45.aarch64` (2026-09-23); revision 2 (a CDSP boot-order patch, dropped again) the same day;
   revisions 3 and 4 (configuration additions only) on 2026-09-24; revision 5 (`kernel-7.2.7-300.fc45`, the patch set
   rebased onto `v7.2.7`) on 2026-09-25; revision 6 (the cameras, `docs/camera.md`) and revision 7 (the front
-  camera's privacy LED) on 2026-09-26; revision 8 (the IMX681's frame length) on 2026-09-27.
+  camera's privacy LED) on 2026-09-26; revision 8 (the IMX681's frame length) on 2026-09-27; revision 9 (two camera
+  driver fixes: the OV13858's pixel rate, the IMX681's control lock) on 2026-09-28.
 - Fedora's `linux-<version>.tar.xz` inside the source RPM is the stable tag's tree: for 7.2.5 byte-identical to
   kernel.org's `linux-7.2.tar.xz` plus `patch-7.2.5.xz`, for 7.2.7 every path, mode and blob of `v7.2.7`. Fedora's
   own `patch-7.2-redhat.patch` touches 61 files in 7.2.5 and 63 in 7.2.7 (crypto and lockdown policy, secure-boot
@@ -208,4 +209,6 @@ effect). 2026-09-24: the CDSP's fault traced to the boot-time votes Linux never 
 2026-09-26: the cameras, turbineBMW's camera branch on top of `sp11/7.2.7` (revision 6: both cameras stream on the
 device, with a dark picture and without the front camera's light; `docs/camera.md`). The same day revision 7: the
 front camera's light. 2026-09-27: revision 8, the IMX681's frame length at the register the sensor uses. 2026-09-28:
-revision 8 passed on the device, and revisions 6 to 8 were pushed to `sp11/7.2.7` (head `95a74f27`).
+revision 8 passed on the device, and revisions 6 to 8 were pushed to `sp11/7.2.7` (head `95a74f27`). The same day
+revision 9, two fixes from a review of the camera commits (`docs/kernel-patches.md`): passed on the device and
+pushed (head `30c57e66`).

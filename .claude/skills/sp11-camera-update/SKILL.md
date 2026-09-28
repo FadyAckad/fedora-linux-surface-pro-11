@@ -9,7 +9,7 @@ argument-hint: "[the change to make, or the new libcamera version]"
 
 Request: $ARGUMENTS
 
-The camera stack has two halves. The kernel side is part of the SP11 patch set (0059–0072 of the fork branch: CAMSS
+The camera stack has two halves. The kernel side is part of the SP11 patch set (0059–0074 of the fork branch: CAMSS
 C-PHY, the IMX681, OV13858 and VD55G0 drivers, the Denali camera nodes, the front camera's light, the IMX681's frame
 length). libcamera is Fedora's source RPM rebuilt by step 47 with `payload/camera/`: turbineBMW's IMX681 support
 (0001–0003), Robert Bozik's faster exposure control with digital gain (0004, backported), and this project's

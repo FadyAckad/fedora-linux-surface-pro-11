@@ -81,7 +81,7 @@ release.
    replaces Fedora's libcamera with the rebuild of step 47, builds the live initramfs, adds the device tree, the
    kernel arguments and the console font to Fedora's own live GRUB menu, assembles the ISO and implants the
    media-check checksum, for example
-   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.8.fc45.aarch64.iso`, plus `.sha256`. The file
+   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.9.fc45.aarch64.iso`, plus `.sha256`. The file
    name carries the edition, so images of different editions coexist.
 
 ## Checks

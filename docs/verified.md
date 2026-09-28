@@ -322,3 +322,21 @@ from the values the sensor kept, reached 4x digital gain within 0.3 s; both ende
 band where 0009 acts (about 12 to 17 lux in the model), so the round shows the new build working and unchanged at
 the limits, not the fix's effect. Confirmed by the owner: both cameras by hand in GNOME Snapshot, in the dim spot
 and in daylight; the cameras in Firefox (a WebRTC test page), and after suspend and resume and after reboots.
+
+## Kernel revision 9 (7.2.7-300.sp11.9): the camera driver fixes (2026-09-28)
+
+`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.9.fc45` (revision 8 plus 0073, the
+OV13858's lowest pixel rate, and 0074, the IMX681's control lock) installed with `dnf install`; dnf removed
+`7.2.7-300.sp11.6` and dracut printed only its two Bluetooth notes; the boot entry carries the Denali device tree
+and the SP11 arguments, and `saved_entry` names it. Confirmed on the device: kernel `7.2.7-300.sp11.9`, SELinux
+enforcing, the speakers' feedback accepted each time playback started, the touch controller's lines, both DSPs
+answering the ping (the compute DSP also after a second boot), the crypto engine's two hashes without a failed
+self-test, no provider waiting for sync_state; the ADSP's `Handover signaled, but it already happened` lines as many
+as with revision 8. The front camera streamed 300 frames with its light on (0074). The OV13858's pixel rate control
+reads 216 to 474.24 MHz (revision 8: from 432 MHz). `cam` without a stream size ran the rear camera in its full
+4224x3136 mode at 540 MHz, which revision 8 already described right: 432 MHz, 29.87 fps, a covered full exposure of
+3206 lines reported as 33306 us. No failed stream start and no OV13858 retry in the boot. With a 1280x720 stream
+(`cam -s width=1280,height=720`) the rear camera ran in its 2112x1188 mode at 270 MHz, the one 0073 changes: the
+pixel rate read 216 MHz where revision 8's minimum was 432 MHz, 29.95 fps at CAMSS's clock for that rate, a covered
+full exposure of 3206 lines reported as 33306 us. Confirmed by the owner: both cameras in GNOME Snapshot, Wi-Fi,
+Bluetooth, the pen, tablet mode and the other by-hand checks, suspend and resume.

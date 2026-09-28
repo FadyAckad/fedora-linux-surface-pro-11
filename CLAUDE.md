@@ -28,7 +28,7 @@ a guide says only what concretely works.
 - `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors), tablet
   mode and auto-rotation; its dated history is at the end. Read before touching steps 45, 46 and 75,
   `payload/sensors/` or the hexagonrpc fork.
-- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 8), libcamera rebuilt
+- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), libcamera rebuilt
   with the IMX681 support and a faster exposure control (steps 47 and 48, `payload/camera/`), what the host checks
   prove and what the device has to show. Read before touching steps 47 and 48, `payload/camera/`,
   `rpm/libcamera.spec.in` or the kernel fork's camera commits.

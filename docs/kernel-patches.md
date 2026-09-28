@@ -81,6 +81,14 @@ is counted in the 548.57 MHz CSI-2 pixel rate the driver reports (5144 pixels, t
 reaches 3546 lines at 30 fps instead of 2660. Revisions 6 to 8 went to the fork in one push on 2026-09-28 (head
 `95a74f27`, tree `9d1a0c38`); revisions 6 and 7 were built from the trees of its commits 0070 and 0071.
 
+Revision 9 (2026-09-28) adds two fixes a review of the camera commits found (this repository). 0073 takes the
+OV13858's lowest pixel rate from the lowest link frequency: the Surface Pro 11 mode had put 592.8 MHz at the head of
+the link frequency menu, so the minimum came from 540 MHz, and the 270 MHz modes (2112x1188 among them, the one
+GNOME Snapshot gets) reported 432 instead of 216 MHz, which halved the line and exposure times libcamera derives.
+0074 applies the IMX681's controls at stream start under the control handler's lock (`v4l2_ctrl_handler_setup()`),
+so a control set from userspace meanwhile no longer interleaves with them. Revision 9 went to the fork on 2026-09-28
+(head `30c57e66`, tree `5ef459c8`), after the device round of the kernel built from that tree.
+
 Proven on the host before the first build: the series applied to kernel.org 7.2.5 reproduces 70 of the 80 files it
 touches byte for byte from the v23.2 source; the other 10 differ only by the left-out parts listed below. The Denali
 OLED device tree it builds has the same enabled nodes as v23.2's, minus the camera, the privacy LED, the PMK8550 ADC
@@ -103,6 +111,10 @@ every file it touches then equals the branch's, but for the three Fedora's patch
 buses, the three sensors, the PM8010 camera regulators and the IR flash LED, and `scripts/sync-state-drivers.py`
 finds a driver in Fedora's packages for every new user of the rails and the interconnect. Revision 7: every arm64
 device tree compiles without a warning, and `checkpatch.pl --strict` reports only the missing `Signed-off-by`.
+Revision 9: `drivers/media/i2c/` compiles without an error or a warning (the two changed files also with `W=1`), and
+`checkpatch.pl --strict` reports only the missing `Signed-off-by`. Its packages hold the same modules as revision
+8's; the IMX681 module imports `v4l2_ctrl_handler_setup` instead of `__v4l2_ctrl_handler_setup`, and the OV13858
+module's code differs from revision 8's only in the constant of the pixel rate's minimum.
 
 ## Contents
 
@@ -142,6 +154,8 @@ device tree compiles without a warning, and `checkpatch.pl --strict` reports onl
 | 0070 | IMX681: exposure through the 24-bit coarse integration register | Leon Silcott (ooaklee) | front camera exposure |
 | 0071 | Denali device tree: the front camera's privacy LED on GPIO 225 | this repository | the light next to the front camera while it streams |
 | 0072 | IMX681: the frame length at `0x033d`, the sensor's line time, an exposure margin of 8 lines | this repository | a third more exposure at 30 fps; the vertical blanking sets the frame rate |
+| 0073 | OV13858: the lowest pixel rate from the lowest link frequency | this repository | the rear camera's line and exposure times in libcamera |
+| 0074 | IMX681: the controls applied at stream start under the control handler's lock | this repository | no race with control changes at stream start |
 
 ## Left out of v23.2, and the device check for each
 

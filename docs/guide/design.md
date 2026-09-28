@@ -3,14 +3,14 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.2.7-300.fc45` source RPM with Fedora's configuration, rebuilt with the 72 patches of
+- Kernel: Fedora's `kernel-7.2.7-300.fc45` source RPM with Fedora's configuration, rebuilt with the 74 patches of
   the branch `sp11/7.2.7` of the project's kernel fork, on top of the stable tag `v7.2.7` and pinned by commit
-  (`KERNEL_PATCH_COMMIT`; SP11 revision 8, `KERNEL_SP11_REV`), and `payload/kernel-local`, which enables the patch
+  (`KERNEL_PATCH_COMMIT`; SP11 revision 9, `KERNEL_SP11_REV`), and `payload/kernel-local`, which enables the patch
   set's touch driver (`CONFIG_TOUCHSCREEN_MSHW0485=m`) and two camera sensor drivers (`CONFIG_VIDEO_IMX681=m`,
   `CONFIG_VIDEO_VD55G0=m`), and two drivers Fedora's configuration leaves out, the video clock controller and the
   crypto engine, without which Linux never lowers the power-rail and bus votes it takes at boot and the compute DSP
   never wakes from sleep. The result is Fedora's `kernel`, `kernel-core` and `kernel-modules*` packages with the
-  buildid `.sp11.8`. The patches come from the kernel the project verified before (ooaklee's linux_ms_dev_kit-sp11
+  buildid `.sp11.9`. The patches come from the kernel the project verified before (ooaklee's linux_ms_dev_kit-sp11
   v23): ooaklee's touchscreen, pen, audio and device-tree work, the X1E fixes from jglathe's tree that act on this
   machine, and this repository's tablet-mode switch and its fix of 7.2.6's SoundWire port check, which refused the
   speakers' feedback port; that tree's Ubuntu packaging, configuration and SAUCE patches, its camera stack and its
