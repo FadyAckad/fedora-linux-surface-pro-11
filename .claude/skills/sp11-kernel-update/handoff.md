@@ -5,7 +5,7 @@ The folder (location and naming in `CLAUDE.local.md`) holds the five `KERNEL_PKG
 `sp11-<new>-series.tar.gz` (`git format-patch --no-signature v<new>..<head>`, packed without a directory), and the
 three files below. Before handing over, apply the tarball with `git am` onto `v<new>` in a throwaway clone
 (`git clone --shared --no-checkout <fork clone>`, detached at the tag, signing off): 58 commits and one whitespace
-warning for 7.2.7, and the rehearsal's tree.
+warning for 7.2.7 (72 commits since revision 8), and the rehearsal's tree.
 
 Steps files follow the maintainer's format: a `#` title with topic, version and date; a short intro (what changed,
 what was verified off-hardware, what can break, the way back); numbered steps with one command per fenced `bash`
@@ -42,14 +42,21 @@ Cover, in this order, and keep the commands exactly as below:
 10. Crypto engine: `grep -E '^driver +: .*-qce$' /proc/crypto` and
     `sudo journalctl -k -b --no-pager | grep -E 'alg: |qce'` — `sha256-qce` and `hmac-sha256-qce`, nothing with
     `aes`; no `self-tests ... failed`.
-11. By hand: Wi-Fi, the Bluetooth keyboard and pen, battery, brightness, volume keys, keyboard and touchpad,
+11. Cameras, as your user with no application using a camera (libcamera's rebuild installed): `cam -l`, then
+    `F=$(cam -l 2>/dev/null | sed -n 's/^\([0-9]*\): .*camera@1a)$/\1/p'); echo "front=$F"`,
+    `cam -c "$F" -C300 >/dev/null 2>&1 & sleep 4; cat /sys/class/leds/white:camera-indicator/brightness; wait` and
+    `cat /sys/class/leds/white:camera-indicator/brightness` — `Internal front camera`, `Internal back camera` and
+    `'vd55g0'`; a number; `1` while the capture runs, with the light next to the front camera on, and `0` after it.
+    By hand: the front and the rear camera in GNOME Snapshot.
+12. By hand: Wi-Fi, the Bluetooth keyboard and pen, battery, brightness, volume keys, keyboard and touchpad,
     rotation with the keyboard folded back, power modes; optional: an external display on USB-C.
-12. Suspend from the Power menu, one minute, wake: display, touch, pen, keyboard, Wi-Fi and sound as before.
-13. `sudo /usr/libexec/sp11/sp11-diag ./sp11-diag-sp11.<rev>.txt` and
+13. Suspend from the Power menu, one minute, wake: display, touch, pen, keyboard, Wi-Fi, sound and both cameras in
+    GNOME Snapshot as before.
+14. `sudo /usr/libexec/sp11/sp11-diag ./sp11-diag-sp11.<rev>.txt` and
     `grep -A2 'state_synced' ./sp11-diag-sp11.<rev>.txt` — the file written; `no provider waits for sync_state`.
-14. Second boot, 3 minutes: `ls -l /dev/fastrpc-cdsp`, `sudo timeout 20 python3 ./sp11-dsp-ping.py 10 1` —
+15. Second boot, 3 minutes: `ls -l /dev/fastrpc-cdsp`, `sudo timeout 20 python3 ./sp11-dsp-ping.py 10 1` —
     the node; `answered`.
-15. Only if the revision misbehaves: boot `<prev-abi>` from the GRUB menu, then
+16. Only if the revision misbehaves: boot `<prev-abi>` from the GRUB menu, then
     `sudo dnf remove kernel{,-core,-modules-core,-modules,-modules-extra}-<abi>`,
     `sudo grubby --set-default /boot/vmlinuz-<prev-abi>` and `sudo grubby --default-kernel` — five packages
     removed; `/boot/vmlinuz-<prev-abi>`.

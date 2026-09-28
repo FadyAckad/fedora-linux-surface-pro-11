@@ -280,7 +280,7 @@ config_fragment_holds() {
 
 # inputs_sha256 PATH... — one hash over every regular file below the given paths (content and path, the path
 # relative to the repository where it lies inside it, sorted, so the value is the same in every checkout) followed
-# by whatever lines stdin carries (values from sp11.conf). Steps 30 and 45 record it in the RPM they build and
+# by whatever lines stdin carries (values from sp11.conf). Steps 30, 45 and 47 record it in the RPM they build and
 # refuse to rebuild the same version from other inputs: dnf ignores a same-version rebuild. Callers without extra
 # lines pass </dev/null.
 inputs_sha256() {
@@ -322,6 +322,31 @@ kernel_series_check() {
   fi
   rm -f "$idx"
   [ -n "$tree" ] && [ "$tree" = "$(git -C "$KERNEL_PATCH_GIT" rev-parse "$KERNEL_PATCH_COMMIT^{tree}")" ]
+}
+
+# ipa_signatures_ok LIBCAMERA_SO IPA_DIR — every ipa_*.so in IPA_DIR has a .sign that verifies against the public key
+# built into libcamera.so (the DER RSA-2048 key of ipa_pub_key.cpp): the check libcamera's IPA manager makes before it
+# loads a module into its own process; a module that fails it runs isolated. Warns and returns 1 on the first failure.
+ipa_signatures_ok() {
+  local so=$1 dir=$2 key m n=0
+  key=$(mktemp)
+  python3 - "$so" "$key" <<'EOF' || { rm -f "$key"; return 1; }
+import sys
+d = open(sys.argv[1], 'rb').read()
+p = bytes.fromhex('30820122300d06092a864886f70d0101010500')
+i = d.find(p)
+if i < 0 or d.find(p, i + 1) >= 0:
+    sys.exit(f'{sys.argv[1]}: no unique RSA-2048 public key')
+open(sys.argv[2], 'wb').write(d[i:i + 294])
+EOF
+  for m in "$dir"/ipa_*.so; do
+    [ -f "$m" ] || continue
+    n=$((n + 1))
+    openssl dgst -sha256 -verify "$key" -keyform DER -signature "$m.sign" "$m" >/dev/null 2>&1 \
+      || { warn "IPA signature does not verify: $m"; rm -f "$key"; return 1; }
+  done
+  rm -f "$key"
+  [ "$n" -gt 0 ] || { warn "no IPA modules under $dir"; return 1; }
 }
 
 # mounts_under DIR — mount targets strictly below DIR, one per line (empty when none). `findmnt -R` only

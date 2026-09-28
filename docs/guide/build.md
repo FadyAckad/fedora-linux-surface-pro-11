@@ -26,7 +26,7 @@ Then:
 scripts/build-all.sh
 ```
 
-Steps 00 to 45 skip finished work and `FORCE=1` rebuilds one; step 50 and the checks always run. The kernel build
+Steps 00 to 47 skip finished work and `FORCE=1` rebuilds one; step 50 and the checks always run. The kernel build
 takes about an hour after the downloads; WSL has to keep running, or it stops and starts over on the next run. Two
 settings in `sp11.conf`, also accepted from the environment, select the source media:
 
@@ -46,11 +46,11 @@ release.
 1. `scripts/00-setup-host.sh` installs the build dependencies and checks the host.
 2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, checks them
    against the supported models and writes `build/hardware.env`.
-3. `scripts/10-fetch-sources.sh` downloads and verifies the Fedora ISO, Fedora's kernel source RPM (checksum pinned
-   in `sp11.conf`), the audio files, the SP11 patch set from the kernel fork's pinned commit (written out as a patch
-   series and checked against the commit's tree), the pinned checkouts (iptsd, OE, hexagonrpc, libssc) and the
-   Bluetooth helper source, and fetches with dnf, per Fedora release and again with `FORCE=1`, `atheros-firmware`,
-   the runtime packages the live image may lack, the iio-sensor-proxy source RPM and the sensors' runtime
+3. `scripts/10-fetch-sources.sh` downloads and verifies the Fedora ISO, Fedora's kernel, iio-sensor-proxy and
+   libcamera source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11 patch set from the kernel
+   fork's pinned commit (written out as a patch series and checked against the commit's tree), the pinned checkouts
+   (iptsd, OE, hexagonrpc, libssc) and the Bluetooth helper source, and fetches with dnf, per Fedora release and
+   again with `FORCE=1`, `atheros-firmware`, the runtime packages the live image may lack and the sensors' runtime
    dependencies.
 4. `scripts/20-build-kernel.sh` rebuilds Fedora's kernel source RPM with that patch series (the spec's
    `linux-kernel-test.patch`), `payload/kernel-local` (the spec's `kernel-local`) and the buildid
@@ -69,19 +69,27 @@ release.
    `iio-sensor-proxy` in a mock buildroot of the target release, and `sp11-sensors` from this unit's registry
    export (step 75) and the Windows sensor configuration; it runs `scripts/46-verify-sensors-rpms.sh` when a
    live root is there.
-8. `scripts/50-build-iso.sh` replaces the live root's stock kernel packages with the SP11 build of the same
-   packages, installs the support, iptsd and sensors RPMs (the sensors stack stays inert on the live media), builds
-   the live initramfs, adds the device tree, the kernel arguments and the console font to Fedora's own live GRUB
-   menu, assembles the ISO and implants the media-check checksum, for example
-   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.5.fc45.aarch64.iso`, plus `.sha256`. The file
+8. `scripts/47-build-camera-rpms.sh` rebuilds Fedora's libcamera source RPM (its checksum and its spec checked
+   first) with the patches of `payload/camera/` (the IMX681 support, a faster exposure control with digital
+   gain, the cameras' tuning, a GPU downscaling fix, the sensor's nearest gain code), in a mock buildroot of the
+   target release, checks the packages (the IMX681 in the library and the image processing module, the exposure
+   control's tuning keys, the fixed shader, the tuning files, valid IPA signatures) and runs
+   `scripts/48-verify-camera-rpms.sh` when a live root is there. `LIBCAMERA_RPM_SUFFIX` versions the rebuild; a
+   changed input at the same release stops it.
+9. `scripts/50-build-iso.sh` replaces the live root's stock kernel packages with the SP11 build of the same
+   packages, installs the support, iptsd and sensors RPMs (the sensors stack stays inert on the live media),
+   replaces Fedora's libcamera with the rebuild of step 47, builds the live initramfs, adds the device tree, the
+   kernel arguments and the console font to Fedora's own live GRUB menu, assembles the ISO and implants the
+   media-check checksum, for example
+   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.8.fc45.aarch64.iso`, plus `.sha256`. The file
    name carries the edition, so images of different editions coexist.
 
 ## Checks
 
-`build-all.sh` runs the steps above and then `scripts/35-verify-support-rpm.sh` and
-`scripts/46-verify-sensors-rpms.sh`; `scripts/36-verify-kernel-install.sh` and `scripts/60-verify-rootfs.sh` run by
-hand. Each works in an overlay of the live root step 50 extracts, so it never touches the host; what each one
-asserts in detail is in [`docs/pipeline.md`](../pipeline.md).
+`build-all.sh` runs the steps above and then `scripts/35-verify-support-rpm.sh`,
+`scripts/46-verify-sensors-rpms.sh` and `scripts/48-verify-camera-rpms.sh`; `scripts/36-verify-kernel-install.sh`
+and `scripts/60-verify-rootfs.sh` run by hand. Each works in an overlay of the live root step 50 extracts, so it
+never touches the host; what each one asserts in detail is in [`docs/pipeline.md`](../pipeline.md).
 
 - Step 35 installs the support RPM the two ways it reaches a machine: with its scriptlets over the version the live
   root carries, as `dnf upgrade` does (after step 50 that is the same version, installed again;
@@ -91,13 +99,17 @@ asserts in detail is in [`docs/pipeline.md`](../pipeline.md).
   the repository override hides a stock kernel from repositories but not from a local RPM.
 - Step 46 installs the sensors RPMs with their scriptlets and checks linkage, units, rules, the policy module, the
   working directory and the payload; `SENSORS_PREVIOUS_RPMS=<rpms>` adds an upgrade from an earlier release.
+- Step 48 installs `libcamera`, `libcamera-ipa` and `libcamera-tools` over the build the live root carries
+  (Fedora's, or after step 50 the rebuild again) and checks the linkage (PipeWire's libcamera plugin included), the
+  IMX681 support, the tuning files and the IPA signatures.
 - Step 36, for kernel RPMs built for an existing installation, installs the kernel packages the way `dnf install`
   does, next to the kernel already there and with their scriptlets, then the support RPM, and checks both packages,
   the boot entry with the Denali DTB, the initramfs and the kernel arguments, the new kernel as the saved GRUB
   default, the regenerated menu, and that removing the new kernel puts the previous one back.
 - Step 60, optional, checks the root step 50 left behind: RPM dependencies, loadable binaries, the installer, the
-  firmware against the device tree, the SP11 build in place of the stock kernel, the sensors stack, the boot entry
-  and GRUB settings an installation would get (Denali DTB, kernel arguments) and the Windows GRUB entry.
+  firmware against the device tree, the SP11 build in place of the stock kernel, the sensors stack, the libcamera
+  rebuild in place of Fedora's, the boot entry and GRUB settings an installation would get (Denali DTB, kernel
+  arguments) and the Windows GRUB entry.
 
 ## Building the sensors RPMs alone
 

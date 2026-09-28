@@ -3,17 +3,20 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.2.7-300.fc45` source RPM with Fedora's configuration, rebuilt with the 58 patches of
+- Kernel: Fedora's `kernel-7.2.7-300.fc45` source RPM with Fedora's configuration, rebuilt with the 72 patches of
   the branch `sp11/7.2.7` of the project's kernel fork, on top of the stable tag `v7.2.7` and pinned by commit
-  (`KERNEL_PATCH_COMMIT`; SP11 revision 5, `KERNEL_SP11_REV`), and `payload/kernel-local`, which enables the patch
-  set's touch driver (`CONFIG_TOUCHSCREEN_MSHW0485=m`) and two drivers Fedora's configuration leaves out, the video
-  clock controller and the crypto engine, without which Linux never lowers the power-rail and bus votes it takes at
-  boot and the compute DSP never wakes from sleep. The result is Fedora's `kernel`, `kernel-core` and
-  `kernel-modules*` packages with the buildid `.sp11.5`. The patches come from the kernel the project verified
-  before (ooaklee's linux_ms_dev_kit-sp11 v23): ooaklee's touchscreen, pen, audio and device-tree work, the X1E
-  fixes from jglathe's tree that act on this machine, and this repository's tablet-mode switch and its fix of
-  7.2.6's SoundWire port check, which refused the speakers' feedback port; that tree's Ubuntu packaging,
-  configuration and SAUCE patches, its camera stack and its ADSP attach series are not carried.
+  (`KERNEL_PATCH_COMMIT`; SP11 revision 8, `KERNEL_SP11_REV`), and `payload/kernel-local`, which enables the patch
+  set's touch driver (`CONFIG_TOUCHSCREEN_MSHW0485=m`) and two camera sensor drivers (`CONFIG_VIDEO_IMX681=m`,
+  `CONFIG_VIDEO_VD55G0=m`), and two drivers Fedora's configuration leaves out, the video clock controller and the
+  crypto engine, without which Linux never lowers the power-rail and bus votes it takes at boot and the compute DSP
+  never wakes from sleep. The result is Fedora's `kernel`, `kernel-core` and `kernel-modules*` packages with the
+  buildid `.sp11.8`. The patches come from the kernel the project verified before (ooaklee's linux_ms_dev_kit-sp11
+  v23): ooaklee's touchscreen, pen, audio and device-tree work, the X1E fixes from jglathe's tree that act on this
+  machine, and this repository's tablet-mode switch and its fix of 7.2.6's SoundWire port check, which refused the
+  speakers' feedback port; that tree's Ubuntu packaging, configuration and SAUCE patches, its camera stack and its
+  ADSP attach series are not carried. The cameras come from turbineBMW's camera branch (the camera subsystem's
+  C-PHY support, the camera nodes, the IMX681 and VD55G0 drivers), with ooaklee's IMX681 exposure fix and this
+  repository's front camera light and IMX681 frame length.
   [`docs/kernel.md`](../kernel.md); each patch, its authors, what it is needed for and what each left-out part
   means for the device: [`docs/kernel-patches.md`](../kernel-patches.md).
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb` from the kernel package, loaded explicitly everywhere: GRUB
@@ -67,6 +70,14 @@ bullet is in the working note it names.
   by the build (the `fastrpc` user, the SELinux module, the registry copy under `/var/lib/sp11/hexagonrpc`).
   The live session never starts them (no FastRPC node while the ADSP is off); the installed system does on
   its first boot. [`docs/sensors.md`](../sensors.md).
+- Cameras: libcamera is Fedora's own source RPM rebuilt with `payload/camera/` (step 47): the IMX681's sensor data
+  and tuning file, a faster exposure control that adds up to 4x digital gain once exposure and analogue gain are at
+  their maximum, an exposure target of 1.4 for both cameras (libcamera's default of 2.5 turned faces white in
+  daylight), the rear camera's analogue gain bounded at 15.5x, where the OV13858 stops, and whole Bayer quads when
+  the GPU downscales, which removes coloured squares from dark pictures. The IPA modules are re-signed where
+  Fedora's spec installs them, so their signatures verify. The ISO installs them in place of Fedora's build (since
+  2026-09-28), so an installation has them from its first boot; nothing holds back a Fedora libcamera update, which
+  replaces them. [`docs/camera.md`](../camera.md).
 - Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth
   radio, so an external monitor or a USB Bluetooth dongle does not change the result.
   [`docs/hardware.md`](../hardware.md).

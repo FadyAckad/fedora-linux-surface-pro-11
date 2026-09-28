@@ -82,16 +82,12 @@ for pkg in $LIVE_EXTRA_PKGS; do
     ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --arch=aarch64 "$pkg" ) || die "dnf download $pkg failed"
   fi
 done
-## Sensors stack (scripts/45, installed system only): pinned upstream checkouts, Fedora's iio-sensor-proxy source
-## RPM of the target release (rebuilt with its SSC drivers), and the runtime dependencies the live-root
-## verification (scripts/46) may have to add. None of this enters the ISO.
+## Sensors stack (scripts/45): pinned upstream checkouts, Fedora's iio-sensor-proxy source RPM (pinned in sp11.conf,
+## rebuilt with its SSC drivers), and the runtime dependencies the live root may lack (steps 50 and 46 add them).
 git_pin "$HEXAGONRPC_REPO" "$HEXAGONRPC_COMMIT" "$CACHE_DIR/hexagonrpc"
 git_pin "$LIBSSC_REPO" "$LIBSSC_COMMIT" "$CACHE_DIR/libssc"
-if [ "${FORCE:-0}" = 1 ] || ! ls "$DEPS_DIR"/iio-sensor-proxy-[0-9]*.src.rpm >/dev/null 2>&1; then
-  log "downloading the iio-sensor-proxy source RPM (Fedora $FEDORA_RELEASE)"
-  rm -f "$DEPS_DIR"/iio-sensor-proxy-[0-9]*.src.rpm
-  ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --source iio-sensor-proxy ) || die "dnf download --source iio-sensor-proxy failed"
-fi
+fetch "$IIO_SENSOR_PROXY_SRPM_URL" "$CACHE_DIR/$IIO_SENSOR_PROXY_SRPM"
+verify_sha256 "$CACHE_DIR/$IIO_SENSOR_PROXY_SRPM" "$IIO_SENSOR_PROXY_SRPM_SHA256"
 for pkg in $SENSORS_DEPS_PKGS; do
   if [ "${FORCE:-0}" = 1 ] || ! ls "$DEPS_DIR/$pkg"-[0-9]*.rpm >/dev/null 2>&1; then
     log "downloading $pkg (Fedora $FEDORA_RELEASE)"
@@ -99,4 +95,7 @@ for pkg in $SENSORS_DEPS_PKGS; do
     ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --arch=aarch64 "$pkg" ) || die "dnf download $pkg failed"
   fi
 done
+## Cameras (scripts/47): Fedora's libcamera source RPM (pinned in sp11.conf), rebuilt with payload/camera/.
+fetch "$LIBCAMERA_SRPM_URL" "$CACHE_DIR/$LIBCAMERA_SRPM"
+verify_sha256 "$CACHE_DIR/$LIBCAMERA_SRPM" "$LIBCAMERA_SRPM_SHA256"
 log "all sources present under $CACHE_DIR"

@@ -1,0 +1,379 @@
+#!/usr/bin/python3
+"""Measure the raw output of the Surface Pro 11's front (IMX681) or rear (OV13858) camera, bypassing libcamera.
+
+Usage: sudo python3 sp11-camera-probe front|rear [--dark | --frame-length | --gain-range]
+
+Routes the sensor straight to a CAMSS raw (RDI) video node with media-ctl, sets a fixed exposure and analogue gain
+on the sensor with v4l2-ctl, captures a few frames per setting with v4l2-ctl and prints the levels of the last one,
+per Bayer channel, in 10-bit units. The frames go to a private temporary directory and are deleted as soon as they
+are measured: the output is numbers only. Close every application that uses a camera first. --dark: the lens is
+covered; only the settings that show the black level and the noise run. --frame-length: lengthens the frame with
+the sensor's vertical blanking, the exposure at its maximum for each length, and prints the frame rate and the level
+at each length. --gain-range: steps the analogue gain up to the driver's maximum at one exposure and prints how the
+level follows. The sensor's default blanking, exposure and gain are restored at the end.
+"""
+import collections
+import glob
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+CAMERAS = {
+    # sensor entity prefix, CSIPHY, media bus code, size, V4L2 pixel format, Bayer order, black level (10 bit),
+    # analogue gain codes (the IMX681's gain is 1024 / (1024 - code), the OV13858's code / 128): the three of the
+    # level table, the ladder --frame-length picks its gain from, the steps of --gain-range; the frame lengths
+    # --frame-length tries besides the default (half as long again and twice the default of kernel revision 8 and
+    # later: 3554 lines on the IMX681, 3214 on the OV13858)
+    'front': dict(sensor='imx681', csiphy='msm_csiphy2', code='SRGGB10_1X10', size=(3840, 2640), pixfmt='pRAA',
+                  order='RGGB', black=64, gains=[('1x', 0), ('4x', 768), ('16x', 960)],
+                  ladder=[('1x', 0), ('2x', 512), ('4x', 768), ('8x', 896), ('16x', 960)],
+                  steps=[('4x', 768), ('8x', 896), ('16x', 960)], lengths=[5331, 7108],
+                  gain=lambda code: 1024 / (1024 - code)),
+    'rear': dict(sensor='ov13858', csiphy='msm_csiphy1', code='SGRBG10_1X10', size=(2112, 1188), pixfmt='pgAA',
+                 order='GRBG', black=64, gains=[('1x', 128), ('4x', 512), ('15.5x', 1984)],
+                 ladder=[('1x', 128), ('2x', 256), ('4x', 512), ('8x', 1024), ('15.5x', 1984)],
+                 steps=[('4x', 512), ('8x', 1024), ('15.5x', 1984), ('31x', 3968), ('64x', 8191)],
+                 lengths=[4821, 6428], gain=lambda code: code / 128),
+}
+FRAMES = 6          # frames per setting; the last one is measured
+ROW_STEP = 8        # measure every 8th pair of rows (a quarter of a million pixels or more per channel)
+
+
+def run(cmd, timeout=30):
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if r.returncode:
+        sys.exit(f"failed: {' '.join(cmd)}\n{r.stdout}{r.stderr}")
+    return r.stdout + r.stderr
+
+
+def media_device():
+    for m in sorted(glob.glob('/dev/media[0-9]*')):
+        out = subprocess.run(['media-ctl', '-d', m, '-p'], capture_output=True, text=True).stdout
+        if re.search(r'^driver\s+qcom-camss$', out, re.M):
+            return m, out
+    sys.exit('no qcom-camss media device (is kernel revision 6 or later running?)')
+
+
+def controls(subdev):
+    """name -> (min, max, default, value) of the integer controls of a subdevice."""
+    ctrls = {}
+    for line in run(['v4l2-ctl', '-d', subdev, '--list-ctrls']).splitlines():
+        m = re.match(r'\s*(\w+) 0x[0-9a-f]+ \(int(?:64)?\)\s*: min=(-?\d+) max=(-?\d+) step=\d+ default=(-?\d+) '
+                     r'value=(-?\d+)', line)
+        if m:
+            ctrls[m.group(1)] = tuple(int(x) for x in m.groups()[1:])
+    return ctrls
+
+
+def levels(path, cam, stride, fsize):
+    """Per-channel histograms of the last frame in path, from the high byte of each packed RAW10 pixel."""
+    w, h = cam['size']
+    size = os.path.getsize(path)
+    n = size // fsize
+    if n == 0:
+        return None, 0
+    with open(path, 'rb') as f:
+        f.seek((n - 1) * fsize)
+        frame = f.read(fsize)
+    names = {'RGGB': (('R', 'Gr'), ('Gb', 'B')), 'GRBG': (('Gr', 'R'), ('B', 'Gb'))}[cam['order']]
+    hist = {c: collections.Counter() for c in ('R', 'Gr', 'Gb', 'B')}
+    used = w * 5 // 4
+    for y in range(0, h - 1, 2 * ROW_STEP):
+        for parity in (0, 1):
+            row = frame[(y + parity) * stride:(y + parity) * stride + used]
+            even = row[0::5] + row[2::5]        # pixels 0 and 2 of each group of four
+            odd = row[1::5] + row[3::5]         # pixels 1 and 3
+            hist[names[parity][0]].update(even)
+            hist[names[parity][1]].update(odd)
+    return hist, n
+
+
+def stats(counter):
+    total = sum(counter.values())
+    mean = sum(v * c for v, c in counter.items()) / total
+    def pct(p):
+        acc = 0
+        for v in range(256):
+            acc += counter.get(v, 0)
+            if acc >= p * total:
+                return v
+        return 255
+    # high byte x 4 + 1.5 (the mean of the two low bits we do not read): 10-bit units
+    to10 = lambda v: v * 4 + 1.5
+    return dict(mean=to10(mean), p1=to10(pct(0.01)), p50=to10(pct(0.50)), p99=to10(pct(0.99)),
+                clip=100.0 * counter.get(255, 0) / total)
+
+
+class Probe:
+    def __init__(self, cam, subdev, video, stride, fsize, tmp):
+        self.cam, self.subdev, self.video = cam, subdev, video
+        self.stride, self.fsize, self.tmp = stride, fsize, tmp
+
+    def capture(self, *settings):
+        """Applies each group of controls with its own v4l2-ctl call, in order, captures FRAMES frames and returns
+        the per-channel statistics of the last one (the green channels together as 'G'), or None and why not."""
+        for group in settings:
+            run(['v4l2-ctl', '-d', self.subdev, '--set-ctrl=' + ','.join(group)])
+        path = os.path.join(self.tmp, 'frames.raw')
+        try:
+            r = subprocess.run(['v4l2-ctl', '-d', self.video, '--stream-mmap=4', f'--stream-count={FRAMES}',
+                                f'--stream-to={path}'], capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            if os.path.exists(path):
+                os.unlink(path)
+            return None, 'no frames within 30 s'
+        hist, n = levels(path, self.cam, self.stride, self.fsize) if os.path.exists(path) else (None, 0)
+        if os.path.exists(path):
+            os.unlink(path)
+        if not hist:
+            return None, f'no complete frame (v4l2-ctl: {(r.stdout + r.stderr).strip()[-200:]})'
+        st = {c: stats(hist[c]) for c in hist}
+        st['G'] = stats(hist['Gr'] + hist['Gb'])
+        return st, None
+
+    def frame_rate(self, count=60):
+        """The frame rate v4l2-ctl reports last over count frames that are not written anywhere, or None."""
+        try:
+            r = subprocess.run(['v4l2-ctl', '-d', self.video, '--stream-mmap=4', f'--stream-count={count}'],
+                               capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            return None
+        fps = re.findall(r'(\d+(?:\.\d+)?) fps', r.stdout + r.stderr)
+        return float(fps[-1]) if fps else None
+
+
+def levels_mode(probe, ctrls, dark):
+    """The level table: exposure and gain settings at the default blanking."""
+    cam = probe.cam
+    exp_min, exp_max = ctrls['exposure'][0], ctrls['exposure'][1]
+    fixed = []
+    if 'vertical_blanking' in ctrls:
+        fixed.append(f"vertical_blanking={ctrls['vertical_blanking'][2]}")
+    if 'digital_gain' in ctrls:
+        fixed.append(f"digital_gain={ctrls['digital_gain'][2]}")
+    gains = dict(cam['gains'])
+    g1, g4, gmax = (cam['gains'][0][0], cam['gains'][1][0], cam['gains'][2][0])
+    if dark:
+        settings = [(exp_max, g1), (exp_max, gmax)]
+    else:
+        settings = [(exp_max, g1), (exp_max, g4), (exp_max, gmax), (exp_max // 2, gmax), (exp_min, g1)]
+    results = {}
+    print(f"{'exposure':>8} {'gain':>6} | {'R':>6} {'Gr':>6} {'Gb':>6} {'B':>6} | "
+          f"{'G p1':>6} {'G p50':>6} {'G p99':>6} {'G clip %':>8}")
+    for exp, gname in settings:
+        st, why = probe.capture([f'exposure={exp}', f'analogue_gain={gains[gname]}'] + fixed)
+        if not st:
+            print(f'{exp:>8} {gname:>6}: {why}')
+            continue
+        g = st['G']
+        results[(exp, gname)] = (g['mean'], g['clip'])
+        print(f"{exp:>8} {gname:>6} | " +
+              ' '.join(f"{st[c]['mean']:6.1f}" for c in ('R', 'Gr', 'Gb', 'B')) +
+              f" | {g['p1']:6.1f} {g['p50']:6.1f} {g['p99']:6.1f} {g['clip']:8.2f}")
+    if not dark:
+        # The frame rate at the last setting.
+        fps = probe.frame_rate()
+        print(f"frame rate: {f'{fps:.2f} fps' if fps is not None else 'not reported'}")
+
+    black = cam['black']
+
+    def ratio(num, den):
+        # Signal above the black level; a setting with clipped green pixels gives no ratio.
+        if results[num][1] > 1 or results[den][1] > 1:
+            return 'clipped'
+        d = results[den][0] - black
+        return f'{(results[num][0] - black) / d:.2f}' if d > 0.5 else 'no signal'
+    if not dark and all(k in results for k in [(exp_max, g1), (exp_max, g4), (exp_max, gmax),
+                                               (exp_max // 2, gmax)]):
+        base = results[(exp_max, g1)][0] - black
+        print(f'green above the black level ({black}) at full exposure and {g1}: {base:.1f} of {1023 - black}')
+        print(f"signal ratio {g4}/{g1}: {ratio((exp_max, g4), (exp_max, g1))}, {gmax}/{g1}: "
+              f"{ratio((exp_max, gmax), (exp_max, g1))}; half/full exposure at {gmax}: "
+              f"{ratio((exp_max // 2, gmax), (exp_max, gmax))}")
+
+
+def frame_length_mode(probe, ctrls):
+    """Lengthens the frame through the vertical blanking, the exposure at its maximum for each length: a sensor that
+    takes the frame length the driver writes slows down in proportion and collects light in proportion. A sensor
+    that stretches its frame for a long exposure slows down too, so the frame rate is also read at a short exposure,
+    where only a frame length the sensor takes can slow it."""
+    cam = probe.cam
+    if 'vertical_blanking' not in ctrls:
+        sys.exit('the sensor has no vertical_blanking control')
+    h = cam['size'][1]
+    black = cam['black']
+    fl_def = h + ctrls['vertical_blanking'][2]
+    lengths = [fl_def] + [f for f in cam['lengths'] if f != fl_def]
+    fixed = [f"digital_gain={ctrls['digital_gain'][2]}"] if 'digital_gain' in ctrls else []
+
+    def at(length, gain_code):
+        # The blanking first, so that the driver widens the exposure range; then the exposure at its new maximum.
+        run(['v4l2-ctl', '-d', probe.subdev, f'--set-ctrl=vertical_blanking={length - h}'])
+        exp = controls(probe.subdev)['exposure'][1]
+        st, why = probe.capture([f'exposure={exp}', f'analogue_gain={gain_code}'] + fixed)
+        return exp, st, why
+
+    # The gain: the lowest step of the ladder at which the longest frame shows a clear level without clipping.
+    gname, gcode = cam['ladder'][0]
+    for name, code in cam['ladder']:
+        _, st, why = at(max(lengths), code)
+        if not st:
+            sys.exit(f'frame length {max(lengths)}, gain {name}: {why}')
+        if st['G']['clip'] > 1:
+            break
+        gname, gcode = name, code
+        if st['G']['p99'] >= 300:
+            break
+    print(f"gain {gname} (the longest frame at full exposure stays below clipping there, if the scene allows)")
+    # A quarter of the default frame's longest exposure: well inside any frame, so the exposure stretches none.
+    short = max(ctrls['exposure'][0], ctrls['exposure'][1] // 4)
+    print(f"{'frame':>6} {'blanking':>8} {'exposure':>8} | {'G mean':>7} {'G p99':>6} {'G clip %':>8} | "
+          f"{'fps':>6} {'fps at ' + str(short):>12} {'fps if':>7}")
+    rows = []
+    for length in lengths:
+        exp, st, why = at(length, gcode)
+        if not st:
+            print(f'{length:>6} {length - h:>8} {exp:>8}: {why}')
+            continue
+        fps = probe.frame_rate()
+        run(['v4l2-ctl', '-d', probe.subdev, f'--set-ctrl=exposure={short}'])
+        fps_short = probe.frame_rate()
+        rows.append((length, exp, st['G'], fps, fps_short))
+        expect = f'{rows[0][3] * fl_def / length:7.2f}' if rows[0][3] and rows[0][0] == fl_def else f"{'-':>7}"
+        show = lambda v, w: f'{v:{w}.2f}' if v is not None else f"{'-':>{w}}"
+        print(f"{length:>6} {length - h:>8} {exp:>8} | {st['G']['mean']:7.1f} {st['G']['p99']:6.1f} "
+              f"{st['G']['clip']:8.2f} | {show(fps, 6)} {show(fps_short, 12)} {expect}")
+    print("(fps: at the exposure in the row; fps at N: at a short exposure of N lines; fps if: the frame rate a "
+          "sensor that takes the driver's frame length runs at)")
+    if len(rows) >= 2 and rows[0][0] == fl_def:
+        base_len, base_exp, base_g, base_fps, _ = rows[0]
+        for length, exp, g, fps, fps_short in rows[1:]:
+            if fps is not None and fps_short is not None and base_fps:
+                print(f'frame length {length}: {fps:.2f} fps at full exposure, {fps_short:.2f} at {short} lines; '
+                      f'{base_fps * base_len / length:.2f} if the sensor takes the frame length, {base_fps:.2f} '
+                      f'at the short exposure if it keeps its own')
+            if g['clip'] > 1 or base_g['clip'] > 1:
+                print(f'frame length {length}: level clipped, no exposure ratio')
+            elif base_g['mean'] - black > 0.5:
+                print(f"frame length {length}: level x{(g['mean'] - black) / (base_g['mean'] - black):.2f} for "
+                      f'exposure x{exp / base_exp:.2f}')
+            else:
+                print(f'frame length {length}: no signal at the default frame, no exposure ratio')
+
+
+def gain_range_mode(probe, ctrls):
+    """Steps the analogue gain at one exposure, chosen so that the highest step does not clip: a sensor that applies
+    a gain raises the level in proportion."""
+    cam = probe.cam
+    black = cam['black']
+    exp_min, exp_max = ctrls['exposure'][0], ctrls['exposure'][1]
+    fixed = []
+    if 'vertical_blanking' in ctrls:
+        fixed.append(f"vertical_blanking={ctrls['vertical_blanking'][2]}")
+    if 'digital_gain' in ctrls:
+        fixed.append(f"digital_gain={ctrls['digital_gain'][2]}")
+    steps = [(n, c) for n, c in cam['steps'] if c <= ctrls['analogue_gain'][1]]
+    top = steps[-1]
+    exp = exp_max
+    while True:
+        st, why = probe.capture(fixed + [f'exposure={exp}', f'analogue_gain={top[1]}'])
+        if not st:
+            sys.exit(f'exposure {exp}, gain {top[0]}: {why}')
+        if st['G']['clip'] <= 0.5 and st['G']['p99'] < 1000:
+            break
+        if exp == exp_min:
+            print(f'too bright even at exposure {exp_min} and {top[0]}: point the camera at a dimmer scene')
+            break
+        exp = max(exp_min, exp // 2)
+    print(f'exposure {exp} (the highest gain stays below clipping there)')
+    print(f"{'gain':>6} {'code':>5} | {'G mean':>7} {'G p99':>6} {'G clip %':>8} | {'level':>6} {'x step':>7} "
+          f"{'x gain':>7}")
+    prev = None
+    for name, code in steps:
+        st, why = probe.capture(fixed + [f'exposure={exp}', f'analogue_gain={code}'])
+        if not st:
+            print(f'{name:>6} {code:>5}: {why}')
+            prev = None
+            continue
+        g = st['G']
+        level = g['mean'] - black
+        if prev and prev[1] > 0.5 and g['clip'] <= 1 and prev[2] <= 1:
+            step = f'{level / prev[1]:7.2f}'
+            want = f"{cam['gain'](code) / cam['gain'](prev[0]):7.2f}"
+        else:
+            step, want = f"{'-':>7}", f"{'-':>7}"
+        print(f"{name:>6} {code:>5} | {g['mean']:7.1f} {g['p99']:6.1f} {g['clip']:8.2f} | "
+              f'{level:6.1f} {step} {want}')
+        prev = (code, level, g['clip'])
+    print('(x step: the level against the previous gain; x gain: what the gain step asks for)')
+
+
+def main():
+    modes = {'--dark', '--frame-length', '--gain-range'}
+    args = sys.argv[1:]
+    if not args or args[0] not in CAMERAS or os.geteuid() != 0 or len(set(args[1:]) & modes) > 1 \
+            or set(args[1:]) - modes:
+        sys.exit(__doc__.split('\n\n')[1])
+    cam = CAMERAS[args[0]]
+    mode = (set(args[1:]) & modes or {''}).pop()
+    for tool in ('media-ctl', 'v4l2-ctl'):
+        if not shutil.which(tool):
+            sys.exit(f'{tool} is missing: sudo dnf install v4l-utils')
+
+    media, topo = media_device()
+    m = re.search(r'entity \d+: (' + cam['sensor'] + r' \d+-[0-9a-f]{4}) \(', topo)
+    if not m:
+        sys.exit(f"no {cam['sensor']} entity in {media}")
+    sensor = m.group(1)
+    w, h = cam['size']
+    fmt = f"{cam['code']}/{w}x{h}"
+    run(['media-ctl', '-d', media, '-r'])
+    run(['media-ctl', '-d', media, '-l', f'"{cam["csiphy"]}":1 -> "msm_csid0":0 [1]'])
+    run(['media-ctl', '-d', media, '-l', '"msm_csid0":1 -> "msm_vfe0_rdi0":0 [1]'])
+    for entity in (sensor, cam['csiphy'], 'msm_csid0', 'msm_vfe0_rdi0'):
+        run(['media-ctl', '-d', media, '-V', f'"{entity}":0 [fmt:{fmt}]'])
+    subdev = run(['media-ctl', '-d', media, '-e', sensor]).strip()
+    video = run(['media-ctl', '-d', media, '-e', 'msm_vfe0_video0']).strip()
+    out = run(['v4l2-ctl', '-d', video, f'--set-fmt-video=width={w},height={h},pixelformat={cam["pixfmt"]}',
+               '--get-fmt-video'])
+    m = re.search(r'Bytes per Line\s*:\s*(\d+)', out)
+    s = re.search(r'Size Image\s*:\s*(\d+)', out)
+    if not m or not s:
+        sys.exit(f'cannot read the video format of {video}:\n{out}')
+    stride, fsize = int(m.group(1)), int(s.group(1))
+
+    ctrls = controls(subdev)
+    if 'vertical_blanking' in ctrls and ctrls['vertical_blanking'][3] != ctrls['vertical_blanking'][2]:
+        # An interrupted run left the blanking changed: the exposure range follows it, so reset it first.
+        run(['v4l2-ctl', '-d', subdev, f"--set-ctrl=vertical_blanking={ctrls['vertical_blanking'][2]}"])
+        ctrls = controls(subdev)
+    exp_min, exp_max = ctrls['exposure'][0], ctrls['exposure'][1]
+    defaults =[f'{n}={ctrls[n][2]}' for n in ('vertical_blanking', 'digital_gain') if n in ctrls]
+    print(f"{args[0]} camera: {sensor} -> {cam['csiphy']} -> msm_csid0 -> msm_vfe0_rdi0 ({video}), {fmt}, "
+          f"{cam['pixfmt']}, stride {stride}, exposure {exp_min}-{exp_max}, {', '.join(defaults) or 'no fixed'}")
+
+    tmp = tempfile.mkdtemp(prefix='sp11-camera-probe-')
+    probe = Probe(cam, subdev, video, stride, fsize, tmp)
+    try:
+        if mode == '--frame-length':
+            frame_length_mode(probe, ctrls)
+        elif mode == '--gain-range':
+            gain_range_mode(probe, ctrls)
+        else:
+            levels_mode(probe, ctrls, mode == '--dark')
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        # The blanking first (it narrows the exposure range again), then the exposure and the gain: libcamera
+        # starts from the values it finds and does not set the blanking itself.
+        for name in ('vertical_blanking', 'exposure', 'analogue_gain'):
+            if name in ctrls:
+                subprocess.run(['v4l2-ctl', '-d', subdev, f'--set-ctrl={name}={ctrls[name][2]}'],
+                               capture_output=True, text=True, timeout=30)
+    print('frames deleted; nothing but the numbers above was kept; default blanking, exposure and gain restored')
+
+
+if __name__ == '__main__':
+    main()

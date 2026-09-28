@@ -54,3 +54,7 @@ only, and their changes reached the device with the next version installed there
   next sleep). `sp11-diag` lists the power-domain and interconnect providers still holding their boot-time votes and
   the devices they wait for. Verified in a chroot on both install paths (over 2.6 and 3.1) and on the device from a
   fresh installation on 2026-09-24.
+- 3.3: `sp11-diag` reports the cameras: the camera packages, what the camera drivers bound, the device nodes and
+  LEDs, the media graph, `cam -l`, and the kernel's and libcamera's camera messages. Goes with kernel revision 6.
+  Verified in a chroot on both install paths (over 3.2 and 2.6) and on the device as an upgrade from 3.2 on
+  2026-09-26.

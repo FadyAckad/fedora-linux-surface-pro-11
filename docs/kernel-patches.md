@@ -6,10 +6,11 @@ tarball carries. `sp11.conf` pins the base and the head commit (`KERNEL_PATCH_BA
 `scripts/10-fetch-sources.sh` fetches them (a shallow partial clone of a few MB) and writes the series with
 `git format-patch`; `scripts/20-build-kernel.sh` checks that the series rebuilds the pinned commit's tree and
 concatenates it into Fedora's `linux-kernel-test.patch` (the slot `kernel.spec` provides for local builds, applied
-with `git apply` after Fedora's own `patch-<x.y>-redhat.patch`). `payload/kernel-local` sets the one new
-configuration symbol and enables two drivers Fedora's configuration leaves out. Nothing else about Fedora's kernel
-changes. Every change needs a new `KERNEL_SP11_REV` (see `docs/kernel.md`). A pushed branch is never rewritten, so
-every pinned commit stays fetchable: fixes go on top as new commits, a new kernel base on a new branch.
+with `git apply` after Fedora's own `patch-<x.y>-redhat.patch`). `payload/kernel-local` sets the three new
+configuration symbols (the touch controller and two camera sensors) and enables two drivers Fedora's configuration
+leaves out. Nothing else about Fedora's kernel changes. Every change needs a new `KERNEL_SP11_REV` (see
+`docs/kernel.md`). A pushed branch is never rewritten, so every pinned commit stays fetchable: fixes go on top as
+new commits, a new kernel base on a new branch.
 
 The patches are derived from the Linux kernel and, like the files they modify, licensed GPL-2.0 (the new
 `mshw0485_touch.c` and headers carry their own SPDX lines). Authorship is in each commit; this repository does not
@@ -54,6 +55,32 @@ as the SP11 version already did, and keeps 7.2.6's guard in `q6apm_graph_stop()`
 CPS feedback to (port 13 of the WSA controller's 13). Old numbers to new: 0001–0023 unchanged, 0025–0031 to
 0024–0030, 0033 to 0031, 0035–0044 to 0032–0041, 0046–0061 to 0042–0057.
 
+Revision 6 (2026-09-26) adds the cameras (`docs/camera.md`) as twelve new commits on top of revision 5's branch
+(0059–0070; the branch grows, nothing is rewritten): the ten camera commits of turbineBMW/surface-pro-11-linux's
+reviewed branch `sp11-camera-review` (`kernel/sp11-camera-review.bundle` at that repository's commit `15e590c3`,
+sha256 `bacf60dc…` as turbineBMW published it, on their `sp11-sanitized2`, Linux 7.1.3) without its three ath12k
+rfkill commits (this series has its own, 0015 and 0016); their OV13858 retry (branch
+`integration/review10-camera-switch`); and ooaklee's IMX681 exposure fix (linux_ms_dev_kit-sp11 `b1754869f458`,
+only its `imx681.c` hunk). Every commit carries an `[sp11: ...]` note naming its source; four say what changed:
+the C-PHY support (0064) is rebased around the test pattern generator routing 7.2 added to the CSID code
+(`4b14db418b6e`, `51fe835c485b`), as in turbineBMW's own 7.3 port; the two Denali device-tree commits (0065,
+0068) add the same lines to this series' Denali tree; the sensor drivers (0062) put the IMX681 Kconfig entry and
+Makefile line after the MAX9271 library entry, because Fedora's `patch-7.2-redhat.patch` adds an IMX471 driver at
+their alphabetical place and `git apply` refuses the hunks there (the first build of revision 6 stopped in
+`%prep`). Every driver file equals turbineBMW's 7.3 port, their daily kernel.
+
+Revision 7 (2026-09-26) adds 0071 (this repository): the front camera's light, on TLMM GPIO 225, the pin Windows'
+camera platform device (ACPI `QCOM0C32`) drives and mainline's Denali tree already names `cam_indicator_en`, as a
+GPIO LED that the IMX681 gets as its `privacy` LED, so the V4L2 core switches it with the sensor's stream. Active
+high, as on the other X1 laptops; the ACPI resource states no polarity.
+
+Revision 8 (2026-09-27) adds 0072 (this repository): the IMX681's frame length goes to the 24-bit register `0x033d`
+the sensor uses (the driver wrote `0x0340`, which it ignores; `docs/camera.md`), the mode's 3554 lines are the
+default and the shortest frame (30 fps), the exposure keeps 8 lines to the frame length instead of 48, and the line
+is counted in the 548.57 MHz CSI-2 pixel rate the driver reports (5144 pixels, the sensor's 9.378 us). The exposure
+reaches 3546 lines at 30 fps instead of 2660. Revisions 6 to 8 went to the fork in one push on 2026-09-28 (head
+`95a74f27`, tree `9d1a0c38`); revisions 6 and 7 were built from the trees of its commits 0070 and 0071.
+
 Proven on the host before the first build: the series applied to kernel.org 7.2.5 reproduces 70 of the 80 files it
 touches byte for byte from the v23.2 source; the other 10 differ only by the left-out parts listed below. The Denali
 OLED device tree it builds has the same enabled nodes as v23.2's, minus the camera, the privacy LED, the PMK8550 ADC
@@ -67,6 +94,15 @@ Proven on the host for revision 5: Fedora's `linux-7.2.7.tar.xz` holds exactly t
 and blob); with Fedora's 7.2.7 configuration plus `kernel-local`, every directory the series touches compiles
 without an error or a warning, as do all arm64 device trees; `git am` of the series onto `v7.2.7` reproduces the
 branch's tree with the same authors, dates and messages.
+
+Proven on the host for revision 6: with Fedora's 7.2.7 configuration plus `kernel-local`, every directory the series
+touches compiles without an error or a warning (the camera directories also with `W=1`), as do all arm64 device
+trees; the series applies with `git apply` to Fedora's `linux-7.2.7.tar.xz` after `patch-7.2-redhat.patch`, and
+every file it touches then equals the branch's, but for the three Fedora's patch changes as well (the media
+`Kconfig` and `Makefile`, `MAINTAINERS`); the Denali OLED DTB enables the camera clock controller, CAMSS, both CCI
+buses, the three sensors, the PM8010 camera regulators and the IR flash LED, and `scripts/sync-state-drivers.py`
+finds a driver in Fedora's packages for every new user of the rails and the interconnect. Revision 7: every arm64
+device tree compiles without a warning, and `checkpatch.pl --strict` reports only the missing `Signed-off-by`.
 
 ## Contents
 
@@ -97,6 +133,15 @@ branch's tree with the same authors, dates and messages.
 | 0056 | Denali device tree: touch controller, audio feedback links, volume keys, USB PHY re-init, no cluster idle states | x1e-nixos, ooaklee, Leon Silcott | touch, audio, volume keys, suspend |
 | 0057 | POS tablet-mode switch for the Surface Pro 11 | this repository | tablet mode, auto-rotation |
 | 0058 | SoundWire: accept the controller's highest master port again (7.2.6's port check refuses it) | this repository | speakers (the CPS feedback of the speaker protection) |
+| 0059–0061 | CAMSS binding resources, OV13858 and VD55G0 bindings, the X1E80100 camera nodes (camera clock controller, CAMSS, CCI) | turbineBMW | cameras |
+| 0062 | camera sensors: IMX681 driver, OV13858 device-tree support and Surface Pro 11 mode, VD55G0 (STMicroelectronics' GPL driver) | turbineBMW | cameras |
+| 0063, 0064, 0067 | CAMSS: unwind failed stream starts, X1E80100 C-PHY links, the Denali C-PHY sequence observed on the device | turbineBMW | front camera |
+| 0065, 0068 | Denali device tree: camera rails, clocks, CCI buses and CAMSS endpoints of the three cameras; the IR illuminator on the PM8550 flash controller | turbineBMW | cameras |
+| 0066 | provenance record of the camera sources | turbineBMW | — |
+| 0069 | OV13858: retry the first register write after power-up | turbineBMW | rear camera |
+| 0070 | IMX681: exposure through the 24-bit coarse integration register | Leon Silcott (ooaklee) | front camera exposure |
+| 0071 | Denali device tree: the front camera's privacy LED on GPIO 225 | this repository | the light next to the front camera while it streams |
+| 0072 | IMX681: the frame length at `0x033d`, the sensor's line time, an exposure margin of 8 lines | this repository | a third more exposure at 30 fps; the vertical blanking sets the frame rate |
 
 ## Left out of v23.2, and the device check for each
 
@@ -113,8 +158,9 @@ Nothing here drives hardware the feature table depends on; each entry ends with 
 - The clock `sync_state` series and a gcc UFS log change — boot, suspend (the kernel arguments keep unused clocks
   and power domains on).
 - The PCIe ASPM API series and ath12k's MAC-from-device-tree hack — Wi-Fi and NVMe, also after resume.
-- The camera stack (IMX681, CAMSS, CCI, C-PHY, privacy LED): on v23.2 its picture was far too dark to use (checked
-  2026-09-23), and the feature table lists cameras as not working; left out until a camera fix.
+- v23.2's camera stack (IMX681, CAMSS, CCI, C-PHY through a separate CSI PHY driver, privacy LED): its picture was
+  far too dark to use (checked 2026-09-23), so revisions 1 to 5 carry no camera; revision 6 carries turbineBMW's
+  camera branch instead (0059–0070, `docs/camera.md`), which has no privacy LED.
 - The spi-hid series (unused: the MSHW0485 driver frames HID-over-SPI itself) and the uncalled
   `qcom_geni_spi_biosref_xfer()` helper.
 - Debug output (DP, QMP combo, drm_dp_helper, UCSI feature print), the DPU underflow colour, DP audio (the Denali

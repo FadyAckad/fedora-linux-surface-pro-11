@@ -210,3 +210,115 @@ boot, which had no suspend, did not show: one `dpu_crtc_disable` frame-done time
 a PM ordering warning of a PHY's hwmon device, none with a visible effect. Confirmed by the owner afterwards for
 revision 5 as well: GPU acceleration, USB-C charging and data, Flatpak, the Windows entry in GRUB, tablet mode's
 keyboard lock-out, automatic screen brightness.
+
+## Kernel revision 6 (7.2.7-300.sp11.6), libcamera 0.7.2-3.sp11.1, support RPM 3.3: cameras (2026-09-26)
+
+`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.6.fc45` (revision 5 plus the camera
+commits 0059–0070, `docs/camera.md`) installed with `dnf install` next to `7.2.5-300.sp11.4` and `7.2.7-300.sp11.5`,
+in the same transaction as support 3.3 over 3.2; dracut printed only its two Bluetooth notes. The boot entry carries
+the Denali device tree and the SP11 arguments, and `saved_entry` names it. Confirmed on the device: kernel
+`7.2.7-300.sp11.6` with the SP11 arguments, SELinux enforcing; both speakers with
+`SP11 stage SP/SPVI enabled with VI+CPS feedback accepted`; both DSPs answering the ping, on a second boot too; no
+provider waiting for sync_state before and after camera use (the camera clock controller and CAMSS bound); 438 bound
+devices, the camera clock controller, both CCI buses, CAMSS, the three sensors (`imx681 7-001a`, `ov13858 5-0010`,
+`vd55g0 4-0060`) and the PM8550 flash LED among them; `imx681 7-001a: detected model id 0x0681 (IMX681)`. `cam -l`
+lists `Internal front camera`, `Internal back camera` and `'vd55g0'` by their device-tree paths. With Fedora's
+libcamera the IPA's signature is not valid, the software ISP uses `uncalibrated.yaml` and a raw gain range of
+`0-960`; with 0.7.2-3.sp11.1 the signature is valid and it uses `imx681.yaml` and a gain of `1-16`. The IR camera
+delivers 320x240 8-bit frames at about 59 fps; GNOME Snapshot leaves it out (`IR Camera ignored: vd55g0`). One
+`i2c-qcom-cci ac15000.cci: master 1 queue 0 timeout` when Snapshot switched from the front to the rear camera, which
+the OV13858 retry (0069) recovered. Confirmed by the owner: front and rear camera in Snapshot and in Firefox
+(WebRTC), both cameras after a suspend and resume, touch, pen, keyboard, Wi-Fi, Bluetooth and rotation. Not working:
+the picture is very dark and washed out, with a grey tint; in every 3-second capture the software ISP's brightness
+statistic stayed at its floor (all pixels in the darkest fifth) while the exposure sat at its maximum and the gain
+rose, to 5x on the front and about 30x on the rear camera. The camera light stays off while the front camera streams
+and comes on while the rear camera streams (owner). The journal's errors are the ADSP's
+`Handover signaled, but it already happened` and, once in the diag's boot, the CDSP firmware's known `sleep_stats`
+assert, which remoteproc recovered.
+
+## Kernel revision 7 (7.2.7-300.sp11.7): the front camera's light, raw sensor levels (2026-09-26)
+
+`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.7.fc45` (revision 6 plus the light's
+device-tree commit 0071, `docs/camera.md`) installed with `dnf install`; dnf removed `7.2.5-300.sp11.4` (it keeps
+three kernels) and dracut printed only its two Bluetooth notes; the boot entry carries the Denali device tree and
+`saved_entry` names it. Confirmed on the device: kernel `7.2.7-300.sp11.7`, SELinux enforcing, both DSPs answering
+the ping, the CDSP again on a second boot; no provider waiting for sync_state. The LED `white:camera-indicator` is
+registered, reads 0 with no camera in use, 1 while `cam` streams the front camera and 0 afterwards, and a write to
+it during the stream fails with `Device or resource busy`. `sp11-camera-probe` in the evening, lens open on the room
+and then covered, green levels in 10-bit steps (range 64 to 1023): front camera at 30.01 fps, full exposure (2660
+lines), 65.2 at 1x and 71.3 at 16x against 64.8 and 64.2 covered, so 0.4 and 7.1 steps of light; half the exposure
+gives half the signal (0.50). Rear camera at 29.95 fps, full exposure (3206 lines), 65.5 at 1x and 75.8 at 15.5x
+against 65.4 and 64.5 covered; half exposure 0.50. Nine `i2c-qcom-cci ac15000.cci: master 1 queue 0 timeout` on the
+rear camera's bus in two bursts, 6 and 14 minutes after boot; every probe capture completed. The light sensor
+reported 0 lux in this diag and in both diags of revision 6, and 13 to 14 lux in the revision-4 ISO's diag of the
+evening of 2026-09-24. The CDSP firmware's `sleep_stats` assert once, during the diag's sensor readings, recovered.
+One PipeWire `running -> error (error changing node state: Device or resource busy)` on the front camera's node in
+the Snapshot session after the resume. Confirmed by the owner: the light comes on while the front camera streams.
+
+## Kernel revision 7 in daylight: camera levels, light sensor (2026-09-27)
+
+Revision 7 again, in daylight. The light sensor read 97 to 99 lux in the room and 2,697 to 2,812 lux with the screen
+facing a window, so it works; its 0 lux in the diags of 2026-09-26 mean dim rooms (the owner: a weak lamp in the
+evening). GPIO 105 and 106 sit in the CCI function with pull-up (input, high), GPIO 225 is an output, low with no
+camera in use. `sp11-camera-probe` facing the window: front camera 644.7 green at full exposure and 1x (44 % of the
+green pixels clipped, 86 % at 16x) and 68.6 at the shortest exposure (8 lines), 30.00 fps; rear camera on a bright
+scene 714.8 at full exposure and 1x (36 % clipped), 67.1 at the shortest exposure (4 lines), 29.95 fps. Both sensors
+deliver a normal signal; the dark pictures of the evening came from the room.
+
+## libcamera 0.7.2-3.sp11.2, frame length and gain range (2026-09-27)
+
+libcamera `0.7.2-3.sp11.2` installed over sp11.1 with `dnf install` (three packages upgraded); after PipeWire's
+restart `cam -l` uses `imx681.yaml` and the new `ov13858.yaml`, and the IR camera falls back to `uncalibrated.yaml`.
+The light sensor read 0 lux in the room of the tests. The exposure logs of Part B were not captured: in a new
+terminal the camera numbers were empty, so `cam` had no camera to open. `sp11-camera-probe front --frame-length` at
+16x: 30.01 fps at the default frame length (2708 lines to the driver), 30.01 fps at 3554 with the level x1.33 for
+the exposure x1.32, and 19.84 fps at 5416 with the level x2.06 for the exposure x2.02. The IMX681 ignores the frame
+length the driver writes to `0x0340`: it keeps the mode table's 3554 lines at 30 fps (a line of 9.38 us, not the
+driver's 12.3), takes an exposure of 3506 lines within that frame, and lengthens the frame to the exposure plus 8
+lines beyond it (1 / (5376 x 9.38 us) = 19.8 fps). `rear --frame-length`: 29.95, 19.97 and 14.98 fps at 3214, 4821
+and 6428 lines, the level x1.49 and x1.99 for the exposure x1.50 and x2.00. `rear --gain-range` (full exposure, a
+dark scene): the level x2.05 from 4x to 8x, x1.80 to 15.5x, x1.00 to 31x and x1.00 to 64x: the OV13858 applies no
+analogue gain above 15.5x (code 1984). A Snapshot photo of the dark room with the front camera shows a chessboard of
+faintly coloured squares of 240 output pixels, aligned to the frame's top-left corner: libcamera's GPU debayering
+(`docs/camera.md`).
+
+## Kernel revision 8 (7.2.7-300.sp11.8) and libcamera 0.7.2-3.sp11.3 (2026-09-28)
+
+`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.8.fc45` (revision 7 plus 0072, the
+IMX681's frame length) and libcamera `0.7.2-3.sp11.3` installed in one `dnf install`; dnf removed `7.2.7-300.sp11.5`
+and dracut printed only its two Bluetooth notes; the boot entry carries the Denali device tree and `saved_entry`
+names it. Confirmed on the device: kernel `7.2.7-300.sp11.8`, SELinux enforcing, both DSPs answering the ping, no
+provider waiting for sync_state, no DSP crash and no CCI timeout in the boot.
+`sp11-camera-probe front --frame-length`: the default is now 3554 lines (vertical blanking 914) with the exposure up
+to 3546, and at 3554, 5331 and 7108 lines the front camera ran at 30.01, 20.00 and 15.00 fps both at full exposure
+and at 886 lines, the level x1.50 and x1.97 for the exposure x1.50 and x2.00: the sensor takes the frame length the
+driver writes. `front`: 30.01 fps at the new maximum exposure. In a dark spot (the light sensor at 1 lux) the
+exposure control reached the front camera's maximum (3546 lines, 16x, digital 4x) 0.93 s after its first adjustment,
+with the brightness statistic at 1.07, and the rear camera's (3206 lines,
+`Analogue gain limited to 15.5 by the tuning file`, 15.5x, digital 4x) in 0.92 s, at 1.02: both at their limit in
+that light. The ping after a second boot answered too. Confirmed by the owner: the coloured squares are gone from
+dark pictures (a photo in the dark spot). A daylight photo with the front camera was too bright: the picture
+averaged 169 of 255, 72 % of the face was at 245 or above, 5.7 % of the frame at 250 or above (libcamera's exposure
+target, `docs/camera.md`).
+
+## libcamera 0.7.2-3.sp11.4 and sp11.5: the exposure target (2026-09-28)
+
+libcamera `0.7.2-3.sp11.4` (exposure target 1.8 from the tuning file) installed over sp11.3:
+`Exposure target 1.8 by the tuning file`; the owner tried 1.6, 1.0 and 1.4 on the front camera in daylight by
+editing the tuning file and chose 1.4. `0.7.2-3.sp11.5` (1.4 for both cameras, the exposure control's thresholds
+scaled with the target) installed over sp11.4: both tuning files say 1.4, `Exposure target 1.4 by the tuning file`;
+in a dark spot the front camera's exposure control stepped by 1.96x per update and reached its maximum (3546 lines,
+16x, digital 4x) 1.2 s after its first adjustment, the brightness statistic then at 1.01. Confirmed by the owner:
+both cameras look right in daylight, and settle within a few seconds in dim light without pumping.
+
+## libcamera 0.7.2-3.sp11.6: the nearest gain code (2026-09-28)
+
+libcamera `0.7.2-3.sp11.6` (0009: the sensor's nearest gain code; 0008: the exposure target clamped to 1.3 to 5)
+installed over sp11.5 with `dnf install` (three packages upgraded). In a 1 lux spot (the light sensor at 0 to 1 lux)
+the front camera's exposure log with sp11.5 and then with sp11.6: sp11.5 reached 3546 lines and then 16x in five
+1.96x steps (through 14.65x, which the next jump overshot to the 16x limit) and 4x digital gain; sp11.6, starting
+from the values the sensor kept, reached 4x digital gain within 0.3 s; both ended at a brightness statistic of
+1.077, and sp11.6's lines come from its longer `agc.cpp` (line 274 instead of 257). The spot was darker than the
+band where 0009 acts (about 12 to 17 lux in the model), so the round shows the new build working and unchanged at
+the limits, not the fix's effect. Confirmed by the owner: both cameras by hand in GNOME Snapshot, in the dim spot
+and in daylight; the cameras in Firefox (a WebRTC test page), and after suspend and resume and after reboots.

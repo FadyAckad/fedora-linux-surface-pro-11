@@ -1,0 +1,131 @@
+software_isp: debayer_egl: Sample whole Bayer quads when downscaling
+
+When the output is smaller than the input, the packed shader samples one
+input pixel per output pixel and interpolates around it, so the colour
+of an output pixel depends on which Bayer position it hits. The scale is
+the output size over the native size (1920/3832 for a 1920x1080 stream
+of a 3840x2640 sensor, 0.501), so that position drifts across the frame
+and changes about every 240 output pixels in both directions. In a
+dark, noisy picture each position gives a different cast once the black
+level subtraction clips the noise, and the drift draws a chessboard of
+coloured squares.
+
+Below three quarters of the native size, take the red, blue and mean
+green of the 2x2 quad the sample falls in instead, which treats every
+output pixel the same way.
+
+[sp11: seen on the Surface Pro 11's front camera in a dark room; reproduced with this shader under Mesa's llvmpipe
+(flat dark noisy frame, 1920x1080 from 3840x2640: squares 4 levels apart, 0.6 with quads; a smooth scene renders
+within one level of the interpolating path for RGGB and GRBG)]
+---
+ src/libcamera/shaders/bayer_1x_packed.frag | 44 ++++++++++++++++++++++
+ src/libcamera/software_isp/debayer_egl.cpp |  7 ++++
+ src/libcamera/software_isp/debayer_egl.h   |  1 +
+ 3 files changed, 52 insertions(+)
+
+diff --git a/src/libcamera/shaders/bayer_1x_packed.frag b/src/libcamera/shaders/bayer_1x_packed.frag
+index 0b641a5f3..ffc15013f 100644
+--- a/src/libcamera/shaders/bayer_1x_packed.frag
++++ b/src/libcamera/shaders/bayer_1x_packed.frag
+@@ -70,6 +70,10 @@ uniform mat3 ccm;
+ uniform vec3 blacklevel;
+ uniform float gamma;
+ uniform float contrastExp;
++/*
++ * 1.0 when the output is downscaled to three quarters or less, see quad_rgb().
++ */
++uniform float quad;
+ 
+ float apply_contrast(float value)
+ {
+@@ -80,6 +84,43 @@ float apply_contrast(float value)
+ 		return 1.0 - 0.5 * pow((1.0 - value) / 0.5, contrastExp);
+ }
+ 
++/*
++ * The colours of the 2x2 Bayer quad the pixel lies in: its red and blue pixels
++ * and the mean of its two green ones.
++ *
++ * When the output is downscaled, each output pixel samples one input pixel, and
++ * interpolating around it gives colours that depend on which Bayer position was
++ * hit. At a scale that is not exactly a half, that position drifts across the
++ * frame and changes every few hundred output pixels in both directions. In a
++ * dark, noisy picture each position gives a different cast once the black level
++ * clips the noise, so the drift draws a chessboard of coloured squares. Taking
++ * the whole quad treats every output pixel the same way.
++ */
++vec3 quad_rgb(vec2 pixel)
++{
++	vec2 q = floor(pixel * 0.5) * 2.0;
++
++	/* The quad's two columns are adjacent bytes of one packed group. */
++	float x = floor(BPP * q.x + 0.02);
++	float p00 = texture2D(tex_y, vec2(x, q.y) * tex_step).r;
++	float p10 = texture2D(tex_y, vec2(x + 1.0, q.y) * tex_step).r;
++	float p01 = texture2D(tex_y, vec2(x, q.y + 1.0) * tex_step).r;
++	float p11 = texture2D(tex_y, vec2(x + 1.0, q.y + 1.0) * tex_step).r;
++
++	/*
++	 * tex_bayer_first_red is 0.0 or 1.0 in each direction: red at (fx, fy),
++	 * blue at (1 - fx, 1 - fy), green at the other two positions.
++	 */
++	float fx = tex_bayer_first_red.x;
++	float fy = tex_bayer_first_red.y;
++	float r = mix(mix(p00, p10, fx), mix(p01, p11, fx), fy);
++	float b = mix(mix(p11, p01, fx), mix(p10, p00, fx), fy);
++	float g = (mix(mix(p10, p00, fx), mix(p11, p01, fx), fy) +
++		   mix(mix(p01, p11, fx), mix(p00, p10, fx), fy)) * 0.5;
++
++	return vec3(r, g, b);
++}
++
+ void main(void)
+ {
+ 	vec3 rgb;
+@@ -226,6 +267,9 @@ void main(void)
+ 			vec3(patterns.y, C, patterns.x) :
+ 			vec3(patterns.wz, C));
+ 
++	if (quad > 0.5)
++		rgb = quad_rgb(center_pixel);
++
+ 	/*
+ 	 * \todo: Black level normalising, AWB and digital gain could be
+ 	 * reworked into a single multiplication.
+diff --git a/src/libcamera/software_isp/debayer_egl.cpp b/src/libcamera/software_isp/debayer_egl.cpp
+index 02651fe87..3821864e7 100644
+--- a/src/libcamera/software_isp/debayer_egl.cpp
++++ b/src/libcamera/software_isp/debayer_egl.cpp
+@@ -127,6 +127,7 @@ int DebayerEGL::getShaderVariableLocations(void)
+ 	textureUniformStrideFactor_ = glGetUniformLocation(programId_, "stride_factor");
+ 	textureUniformBayerFirstRed_ = glGetUniformLocation(programId_, "tex_bayer_first_red");
+ 	textureUniformProjMatrix_ = glGetUniformLocation(programId_, "proj_matrix");
++	textureUniformQuad_ = glGetUniformLocation(programId_, "quad");
+ 
+ 	LOG(Debayer, Debug) << "vertexIn " << attributeVertex_ << " textureIn " << attributeTexture_
+ 			    << " tex_y " << textureUniformBayerDataIn_
+@@ -462,6 +463,12 @@ void DebayerEGL::setShaderVariableValues(eGLImage &eglImageIn, const DebayerPara
+ 	glUniform2fv(textureUniformStep_, 1, Step);
+ 	glUniform1f(textureUniformStrideFactor_, Stride);
+ 	glUniformMatrix4fv(textureUniformProjMatrix_, 1, GL_FALSE, projMatrix);
++	/*
++	 * Downscaled to three quarters or less, take whole Bayer quads (only
++	 * the packed shader has the uniform; elsewhere the location is -1 and
++	 * the call does nothing).
++	 */
++	glUniform1f(textureUniformQuad_, scale < 0.75f ? 1.0f : 0.0f);
+ 
+ 	LOG(Debayer, Debug) << "vertexIn " << attributeVertex_ << " textureIn " << attributeTexture_
+ 			    << " tex_y " << textureUniformBayerDataIn_
+diff --git a/src/libcamera/software_isp/debayer_egl.h b/src/libcamera/software_isp/debayer_egl.h
+index d6223f3a9..4622e76a0 100644
+--- a/src/libcamera/software_isp/debayer_egl.h
++++ b/src/libcamera/software_isp/debayer_egl.h
+@@ -93,6 +93,7 @@ private:
+ 	GLint textureUniformStrideFactor_;
+ 	GLint textureUniformBayerFirstRed_;
+ 	GLint textureUniformProjMatrix_;
++	GLint textureUniformQuad_;
+ 
+ 	GLint textureUniformBayerDataIn_;
+ 

@@ -44,6 +44,14 @@ check_kernel_rpms() {
   # By compatible: the node's path depends on the SoC dtsi (spi10 sits under the QUP wrapper, /soc@0/geniqup@ac0000).
   dtc -q -I dtb -O dts "$MOD/dtb/$SP11_DTB" | grep -F 'compatible = "microsoft,mshw0485";' >/dev/null \
     || die "the SP11 device tree lacks the touch controller (patch set not applied?)"
+  # The three camera sensors (revision 6), under the CCI buses the camera nodes enable.
+  for c in sony,imx681 ovti,ov13858 st,vd55g0; do
+    dtc -q -I dtb -O dts "$MOD/dtb/$SP11_DTB" | grep -F "compatible = \"$c\";" >/dev/null \
+      || die "the SP11 device tree lacks the $c camera sensor (patch set not applied?)"
+  done
+  # The front camera's privacy LED (revision 7): the V4L2 core lights it while the IMX681 streams.
+  dtc -q -I dtb -O dts "$MOD/dtb/$SP11_DTB" | grep -F 'led-names = "privacy";' >/dev/null \
+    || die "the SP11 device tree gives the front camera no privacy LED"
   # Every enabled user of the RPMh power domains and of the interconnect in that tree has a driver in the packages:
   # otherwise those providers never reach sync_state and Linux keeps its boot-time maximum rail and bus votes for
   # good, and the CDSP never wakes from its first sleep (kernel-local enables the drivers Fedora leaves out).
@@ -63,7 +71,8 @@ check_kernel_rpms() {
           | grep -vE -f <(sed -nE 's/^(# )?(CONFIG_[A-Za-z0-9_]+)(=.*| is not set)$/^< (# )?\2( is not set|=)/p' \
                             "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT") || true)
   [ -z "$delta" ] || die "the configuration differs from Fedora's $KERNEL_STOCK_CORE_RPM beyond kernel-local ('<' Fedora, '>' SP11): $(printf '%s\n' "$delta" | tr '\n' ';')"
-  for m in mshw0485_touch soundwire-qcom snd-soc-wsa884x surface_aggregator_registry; do
+  for m in mshw0485_touch soundwire-qcom snd-soc-wsa884x surface_aggregator_registry \
+           qcom-camss i2c-qcom-cci camcc-x1e80100 imx681 ov13858 vd55g0 leds-qcom-flash leds-gpio; do
     find "$MOD" -name "$m.ko*" | grep . >/dev/null || die "module $m missing from the kernel packages"
   done
   # The parameters the SP11 userspace relies on: the pen's HIDRAW bridge and the SoundWire argument on the command line.

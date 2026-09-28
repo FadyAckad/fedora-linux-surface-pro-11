@@ -3,7 +3,8 @@
 The license of this repository, and the origin and license of everything the build downloads, patches or copies.
 
 The scripts, templates and documentation in this repository are licensed under the GNU General Public License,
-version 3 or later (`LICENSE`). Everything third-party is downloaded and packaged at build time:
+version 3 or later (`LICENSE`). Everything third-party is downloaded and packaged at build time, but for the
+libcamera patches in `payload/camera/` (see Cameras below):
 
 - Kernel: Fedora's `kernel` source RPM (GPL-2.0), rebuilt with the patch set (the project's kernel fork, GPL-2.0
   like the kernel; each commit names its author), which was extracted from
@@ -32,6 +33,15 @@ version 3 or later (`LICENSE`). Everything third-party is downloaded and package
   [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The sensor configuration
   and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files copied from your own
   Windows installation at build time, like the firmware below.
+- Cameras: the kernel's camera commits come from
+  [turbineBMW/surface-pro-11-linux](https://github.com/turbineBMW/surface-pro-11-linux) (GPL-2.0 like the kernel;
+  its VD55G0 driver is STMicroelectronics' GPL driver, and its provenance record, carried in the kernel as
+  `Documentation/driver-api/media/sp11-camera-provenance.rst`, names every other source), with Leon Silcott's IMX681
+  exposure fix. libcamera is Fedora's source RPM (LGPL-2.1-or-later) with the patches in `payload/camera/`
+  (LGPL-2.1-or-later; the tuning files CC0-1.0): turbineBMW's three IMX681 patches, rebased onto Fedora's version;
+  Robert Bozik's faster exposure control with digital gain, from his software ISP series on libcamera-devel
+  (2026-08-26), backported; this project's analogue-gain bound, exposure target, tuning, GPU downscaling fix and
+  gain-code rounding. Each third-party patch names its author.
 - Base media: Fedora Workstation live images, or a spin (`FEDORA_EDITION`). Bring-up notes:
   rjindael/fedora-surface-pro-11.
 - ADSP/CDSP/GPU firmware: proprietary Qualcomm and Microsoft files copied from your own Windows
@@ -42,4 +52,5 @@ Upstream files modified during the build, with changes that are not upstream: th
 `sp11-bt-set-addr.c` (the Bluetooth address in [`docs/guide/design.md`](design.md)), the ALSA UCM device matcher in
 `x1e80100.conf`, which gains the `( with 5G)?` alternative, and the Mic device in `SP11-HiFi.conf`, which gains the
 microphone gain; in the kernel, everything the SP11 patch set changes (none of it is in Linux 7.2.5;
-[`docs/kernel-patches.md`](../kernel-patches.md) lists where each patch comes from).
+[`docs/kernel-patches.md`](../kernel-patches.md) lists where each patch comes from); in libcamera, the patches
+of `payload/camera/` and the directory Fedora's spec re-signs the IPA modules in.

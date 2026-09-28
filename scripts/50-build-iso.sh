@@ -2,7 +2,8 @@
 # Step 6: remaster the Fedora live ISO (FEDORA_EDITION: Workstation or a spin) for the Surface Pro 11.
 #   - extract the LZMA EROFS live root, replace Fedora's stock kernel packages with the SP11 build of the same packages
 #     (scripts/20), install sp11-surface-support, sp11-iptsd and the sensors stack (hexagonrpc, libssc,
-#     iio-sensor-proxy, sp11-sensors; inert on the live media, see below)
+#     iio-sensor-proxy, sp11-sensors; inert on the live media, see below), and replace Fedora's libcamera with the
+#     cameras' rebuild (scripts/47)
 #   - generate a dracut-live initramfs for the SP11 kernel
 #   - repack the root as LZMA EROFS with SELinux labels; Fedora's own live GRUB menu gains the Denali OLED DTB, the
 #     kernel arguments and the large console font
@@ -29,6 +30,18 @@ SENSOR_RPMS=()
 for n in hexagonrpc libssc iio-sensor-proxy sp11-sensors; do
   r=$(rpm_of "$n"); [ -n "$r" ] || die "$n RPM missing (run scripts/75-export-sensor-registry.sh once, then scripts/45-build-sensors-rpms.sh)"
   SENSOR_RPMS+=("$r")
+done
+# The cameras' libcamera (scripts/47): replaces Fedora's build of the same version, so the installed system has it
+# from its first boot; libcamera-tools comes along for `cam`. Section 4 adds any other libcamera subpackage the live
+# root carries, since each one requires the same release.
+CAMERA_RPMS=()
+camera_rpm() {
+  local r; r=$(rpm_of "$1")
+  [ -n "$r" ] && [[ $(rpm -qp --qf '%{RELEASE}' "$r") == *".$LIBCAMERA_RPM_SUFFIX."* ]] || return 1
+  CAMERA_RPMS+=("$r")
+}
+for n in libcamera libcamera-ipa libcamera-tools; do
+  camera_rpm "$n" || die "$n RPM of the libcamera rebuild ($LIBCAMERA_RPM_SUFFIX) missing (run scripts/47-build-camera-rpms.sh)"
 done
 [ "$SP11_DTB_SELECTED" = "$SP11_DTB" ] || die "hardware.env selects DTB $SP11_DTB_SELECTED, config expects $SP11_DTB"
 
@@ -125,14 +138,20 @@ if [ ${#STOCK_PKGS[@]} -gt 0 ]; then
   as_root rpm --root "$ROOTFS" -e --noscripts "${STOCK_PKGS[@]}" >"$W/rpm-erase.log" 2>&1 \
     || { cat "$W/rpm-erase.log" >&2; die "stock kernel removal failed"; }
 fi
+while read -r n; do
+  case " libcamera libcamera-ipa libcamera-tools " in *" $n "*) continue ;; esac
+  camera_rpm "$n" || die "the live root carries $n, which the libcamera rebuild has to replace: no $n RPM of it (run scripts/47-build-camera-rpms.sh)"
+done < <(as_root rpm --root "$ROOTFS" -qa --qf '%{NAME}\n' 'libcamera*' 'python3-libcamera*' | sort -u)
 log "installing the SP11 kernel and RPMs into the live root"
-as_root rpm --root "$ROOTFS" -U --test --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-test.log" 2>&1 \
+as_root rpm --root "$ROOTFS" -U --test --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" "${CAMERA_RPMS[@]}" >"$W/rpm-test.log" 2>&1 \
   || { cat "$W/rpm-test.log" >&2; die "SP11 RPMs have unmet dependencies in the live root (add the package to LIVE_EXTRA_PKGS or SENSORS_DEPS_PKGS)"; }
-as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacefiles --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-install.log" 2>&1 \
+as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacefiles --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" "${CAMERA_RPMS[@]}" >"$W/rpm-install.log" 2>&1 \
   || { cat "$W/rpm-install.log" >&2; die "rpm install into live root failed"; }
 # shellcheck disable=SC2086
-as_root rpm --root "$ROOTFS" -q $KERNEL_PKGS sp11-surface-support sp11-iptsd hexagonrpc libssc iio-sensor-proxy sp11-sensors >/dev/null \
-  || die "RPMs not registered in the live root database"
+as_root rpm --root "$ROOTFS" -q $KERNEL_PKGS sp11-surface-support sp11-iptsd hexagonrpc libssc iio-sensor-proxy sp11-sensors \
+  libcamera libcamera-ipa libcamera-tools >/dev/null || die "RPMs not registered in the live root database"
+fedora_lc=$(as_root rpm --root "$ROOTFS" -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 'libcamera*' 'python3-libcamera*' | grep -v "\.$LIBCAMERA_RPM_SUFFIX\." || true)
+[ -z "$fedora_lc" ] || die "Fedora's libcamera build is still in the live root: $(printf '%s\n' "$fedora_lc" | tr '\n' ' ')"
 as_root chroot "$ROOTFS" /usr/libexec/sp11/sp11-ucm-apply || die "UCM matcher install failed"
 for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device; do
   as_root chroot "$ROOTFS" "$bin" --help >/dev/null 2>&1 || die "$bin cannot run in the live root (missing shared library?)"
@@ -293,7 +312,7 @@ awk -v snip="$SNIPPET" '
 log "live menu: Fedora's $(grep -c '^[[:space:]]*menuentry ' "$W/grub.cfg") entries with the Denali DTB, the SP11 arguments and the console font"
 
 ## 9. /sp11 payload: the RPMs the media carries, and a note
-rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" "$W/sp11/rpms/"
+rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" "${CAMERA_RPMS[@]}" "$W/sp11/rpms/"
 render "$PAYLOAD_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" \
   KERNEL="Fedora ${KERNEL_SRPM%.src.rpm} + SP11 revision $KERNEL_SP11_REV ($KERNEL_PATCH_BASE + ${KERNEL_PATCH_COMMIT:0:12})" \
   DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE" \

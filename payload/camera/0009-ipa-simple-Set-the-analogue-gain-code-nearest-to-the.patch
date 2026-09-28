@@ -1,0 +1,73 @@
+ipa: simple: Set the analogue gain code nearest to the requested gain
+
+The camera sensor helper's gainCode() truncates, and the IPA reads the
+gain of the code it set back for the next frame. On a sensor with a
+reciprocal gain curve, such as the IMX681 (1024 / (1024 - code)), one
+code is worth more than the AGC's smallest step (a hundredth of the gain
+range, 0.15 on the IMX681) above about 12.4x: a small increase truncates
+to the same code, the AGC reads the same gain back and asks for the same
+small step again. The analogue gain then stays below its maximum, and
+the digital gain, which the AGC adds only once the analogue gain is at
+its maximum, never starts. In a model of the AGC, dim scenes of about 12
+to 17 lux settled between 12.3x and 15.75x without digital gain, about
+0.4 stop darker than the target asks for.
+
+Set the code whose gain is nearest to the requested one instead. Half a
+code step is at most 0.125 up to 16x, less than the smallest step, so
+every step moves the gain, and 15.9x reaches 16x.
+
+[sp11: for the Surface Pro 11's front camera (IMX681); the rear camera's
+OV13858 gain (code / 128) has steps far below the AGC's]
+---
+ src/ipa/simple/soft_simple.cpp | 27 +++++++++++++++++++++++++--
+ 1 file changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/src/ipa/simple/soft_simple.cpp b/src/ipa/simple/soft_simple.cpp
+index 629e1a32d..ed44c35ed 100644
+--- a/src/ipa/simple/soft_simple.cpp
++++ b/src/ipa/simple/soft_simple.cpp
+@@ -73,6 +73,7 @@ protected:
+ 
+ private:
+ 	void updateExposure(double exposureMSV);
++	int32_t gainCode(double gain) const;
+ 
+ 	DebayerParams *params_;
+ 	SwIspStats *stats_;
+@@ -322,12 +323,34 @@ void IPASoftSimple::processStats(const uint32_t frame,
+ 
+ 	auto &againNew = frameContext.sensor.gain;
+ 	ctrls.set(V4L2_CID_EXPOSURE, frameContext.sensor.exposure);
+-	ctrls.set(V4L2_CID_ANALOGUE_GAIN,
+-		  static_cast<int32_t>(camHelper_ ? camHelper_->gainCode(againNew) : againNew));
++	ctrls.set(V4L2_CID_ANALOGUE_GAIN, gainCode(againNew));
+ 
+ 	setSensorControls.emit(ctrls);
+ }
+ 
++/*
++ * The sensor's gain code for a gain: the code whose gain is nearest. The
++ * helper's gainCode() truncates, and the gain of the code set is what the
++ * AGC reads back for the next frame. Where one code is worth more than the
++ * AGC's smallest step, as near the top of a reciprocal gain curve, a
++ * truncated small increase would give the same code again and again.
++ */
++int32_t IPASoftSimple::gainCode(double gain) const
++{
++	if (!camHelper_)
++		return static_cast<int32_t>(gain);
++
++	const int32_t max =
++		sensorInfoMap_.find(V4L2_CID_ANALOGUE_GAIN)->second.max().get<int32_t>();
++	int32_t code = static_cast<int32_t>(camHelper_->gainCode(gain));
++	if (code >= max)
++		return max;
++	if (camHelper_->gain(code + 1) - gain < gain - camHelper_->gain(code))
++		code++;
++
++	return code;
++}
++
+ std::string IPASoftSimple::logPrefix() const
+ {
+ 	return "IPASoft";

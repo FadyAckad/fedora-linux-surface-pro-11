@@ -37,8 +37,10 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
    `build/` first, section 4), check them against Fedora's signed copies, and record the sha256 of the files the
    pipeline downloads.
 4. Compare the old and new source RPMs: `kernel.spec` still has the local-build slots step 20 relies on, Fedora's
-   `patch-<x.y>-redhat.patch` touches none of the patch set's files, and Fedora's configuration changes (the
-   stock `kernel-core` configurations) touch no symbol `kernel-local` sets.
+   `patch-<x.y>-redhat.patch` touches no file of the patch set but the three it shares since revision 6 (the
+   media `Kconfig` and `Makefile`, `MAINTAINERS`), after which the series must still apply with `git apply` (Fedora
+   adds an IMX471 driver next to the IMX681's entries), and Fedora's configuration changes (the stock
+   `kernel-core` configurations) touch no symbol `kernel-local` sets.
 5. Fedora's `linux-<new>.tar.xz` must be the new tag's tree (`docs/kernel.md` records this per version).
 
 ## 2. Rebase rehearsal
@@ -99,7 +101,7 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
   the version, what this rebase met in the rebase section, a History line.
 - `docs/kernel-patches.md`: a paragraph for the revision (dropped, adapted and new patches, old-to-new numbers),
   the host proof paragraph, the renumbered Contents table. Patch numbers are cited in `docs/kernel.md`,
-  `docs/hardware.md` and `docs/sensors.md` as well.
+  `docs/hardware.md`, `docs/sensors.md` and `docs/camera.md` as well.
 - `docs/guide/new-release.md`: the default revision.
 - Any other note whose facts the update changed; a new fact goes into its note first (`CLAUDE.md`, Conventions).
 - Lines of at most 116 columns with code spans whole; the MAC grep of `CLAUDE.md` before handing over.

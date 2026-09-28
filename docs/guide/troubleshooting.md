@@ -11,11 +11,12 @@ string and the hardware IDs (`systemd-analyze chid`), the security modules with 
 the boot, the touchscreen driver and the pen's HIDRAW bridge with the iptsd units, the input devices, the boot's
 suspend and resume history, the Bluetooth controller with `bluetoothctl info` for every device BlueZ knows, the
 sound card's raw controls (`amixer -D hw:N`) and PipeWire's default source, the sensors stack (`sp11-sensors-check`,
-when `sp11-sensors` is installed), a section that diffs cleanly between two kernels (every device bound to a driver,
-the loaded modules, the remote processors, the FastRPC nodes, cpufreq, power supplies, hwmon, the platform
-profile), the power-domain and interconnect providers still holding their boot-time votes and the devices they wait
-for, and the boot's kernel warnings and journal errors. The file names the Bluetooth controller and every device
-BlueZ knows by address.
+when `sp11-sensors` is installed), the cameras (the camera packages, what the camera drivers bound, the media graph,
+`cam -l`, and the kernel's and libcamera's camera messages), a section that diffs cleanly between two kernels (every
+device bound to a driver, the loaded modules, the remote processors, the FastRPC nodes, cpufreq, power supplies,
+hwmon, the platform profile), the power-domain and interconnect providers still holding their boot-time votes and
+the devices they wait for, and the boot's kernel warnings and journal errors. The file names the Bluetooth
+controller and every device BlueZ knows by address.
 
 `sudo /usr/libexec/sp11/sp11-sensors-check`, run from a terminal in the desktop, covers the sensors stack and
 tablet mode ([`docs/guide/sensors.md`](sensors.md)).

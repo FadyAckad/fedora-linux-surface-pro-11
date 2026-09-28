@@ -11,12 +11,16 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`. First build: `kernel-7.2.5-300.fc45` with revision 1, uname
   `7.2.5-300.sp11.1.fc45.aarch64` (2026-09-23); revision 2 (a CDSP boot-order patch, dropped again) the same day;
-  revisions 3 and 4 (configuration additions only) on 2026-09-24; revision 5 (`kernel-7.2.7-300.fc45`, the patch
-  set rebased onto `v7.2.7`) on 2026-09-25.
+  revisions 3 and 4 (configuration additions only) on 2026-09-24; revision 5 (`kernel-7.2.7-300.fc45`, the patch set
+  rebased onto `v7.2.7`) on 2026-09-25; revision 6 (the cameras, `docs/camera.md`) and revision 7 (the front
+  camera's privacy LED) on 2026-09-26; revision 8 (the IMX681's frame length) on 2026-09-27.
 - Fedora's `linux-<version>.tar.xz` inside the source RPM is the stable tag's tree: for 7.2.5 byte-identical to
   kernel.org's `linux-7.2.tar.xz` plus `patch-7.2.5.xz`, for 7.2.7 every path, mode and blob of `v7.2.7`. Fedora's
-  own `patch-7.2-redhat.patch` touches 61 files in 7.2.5 and 63 in 7.2.7, none of the patch set's (crypto and
-  lockdown policy, secure-boot state in `/chosen`, some x86/s390, a few quirks).
+  own `patch-7.2-redhat.patch` touches 61 files in 7.2.5 and 63 in 7.2.7 (crypto and lockdown policy, secure-boot
+  state in `/chosen`, some x86/s390, a few quirks, an IMX471 camera driver), none of the patch set's up to revision
+  5. Revision 6's camera commits share three with it, the media `Kconfig` and `Makefile` and `MAINTAINERS`, and
+  apply after it (`docs/kernel-patches.md`); test a changed series with `git apply` on Fedora's source after its
+  patch.
 
 ## kernel.spec slots and the build
 
@@ -29,9 +33,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   concatenates it; `Source3001: kernel-local` (comments only in the SRPM) is merged into every configuration. The
   spec applies patches with `git --work-tree=. apply`, which is strict: no fuzz, exact hunk line counts (GNU `patch`
   accepted the old tablet-switch patch with a hunk one line short, `git apply` refuses it). `process_configs.sh`
-  runs with checks that fail on a new symbol no configuration sets, which is why `kernel-local` sets
-  `CONFIG_TOUCHSCREEN_MSHW0485=m` (the only symbol the patch set adds) and spells out every symbol Kconfig derives
-  from its other lines.
+  runs with checks that fail on a new symbol no configuration sets, which is why `kernel-local` sets the symbols
+  the patch set adds (`CONFIG_TOUCHSCREEN_MSHW0485`, since revision 6 also `CONFIG_VIDEO_IMX681` and
+  `CONFIG_VIDEO_VD55G0`) and spells out every symbol Kconfig derives from its other lines.
 - Build (step 20): `rpmbuild -bs` on the host with `dist .fc<n>` and `fedora <n>`, then `mock --rebuild` in the
   `MOCK_CONFIG` buildroot with `--uniqueext=sp11-kernel` (a root of its own, so the long build neither waits for nor
   blocks the root steps 40/45 use; `mock_rebuild_family` in `lib.sh`) and `KERNEL_MOCK_OPTS`: `--with baseonly` (no
@@ -47,7 +51,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 ## Checks on the result
 
 - Step 20's checks on the result: every `KERNEL_PKGS` package at the configured uname; `vmlinuz` and the Denali OLED
-  DTB in `kernel-core` (compatible `microsoft,denali-oled`, a `microsoft,mshw0485` touch controller node); a driver
+  DTB in `kernel-core` (compatible `microsoft,denali-oled`, a `microsoft,mshw0485` touch controller node and, since
+  revision 6, the `sony,imx681`, `ovti,ov13858` and `st,vd55g0` camera sensors, since revision 7 a `privacy` LED
+  for the front camera); a driver
   in the packages for every enabled user of the RPMh power domains and of the interconnect in that DTB
   (`scripts/sync-state-drivers.py`: the module aliases `depmod` writes for the unpacked packages,
   `modules.builtin.modinfo`, and for built-in drivers that record no alias the compatible strings in the unpacked
@@ -55,7 +61,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   same version (`KERNEL_STOCK_CORE_RPM`, pinned) plus exactly the `kernel-local` lines (and Fedora's own line of
   each symbol `kernel-local` overrides), compared in both directions and without the values Kconfig derives from the
   toolchain (`CC_VERSION_TEXT`, `GCC_VERSION`, `CC_HAS_*`, ...); the modules `mshw0485_touch`, `soundwire-qcom`,
-  `snd-soc-wsa884x`, `surface_aggregator_registry` and the parameters `ipts_hid_bridge` and
+  `snd-soc-wsa884x`, `surface_aggregator_registry`, the camera modules (`qcom-camss`, `i2c-qcom-cci`,
+  `camcc-x1e80100`, `imx681`, `ov13858`, `vd55g0`, `leds-qcom-flash`, `leds-gpio`) and the parameters
+  `ipts_hid_bridge` and
   `sp11_feedback_active_offset2_zero`. The source RPM's `kernel-aarch64-fedora.config` is no reference: it is the
   input Kconfig resolves during the build (options with unmet dependencies drop out, derived ones are added).
 
@@ -77,9 +85,11 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   (`SURFACE_AGGREGATOR_REGISTRY`, `_TABLET_SWITCH`, `SURFACE_HID`, `SURFACE_PLATFORM_PROFILE`,
   `SENSORS_SURFACE_FAN`, `BATTERY_SURFACE` — patch 0055 keeps it from binding on the SP11), battmgr and UCSI over
   pmic_glink, PAS remoteproc and pd-mapper, FastRPC and QRTR, ath12k, `BT_QCA`, the X1E audio drivers, GPI DMA,
-  `SPI_QCOM_GENI`, `HIDRAW=y`, `KEYBOARD_GPIO`, `PINCTRL_QCOM_SPMI_PMIC`. `ARM_SCMI_CPUFREQ=m` does not load on its
-  own (modpost cannot generate SCMI-bus aliases; ooaklee's config had it built in), so the support RPM loads it
-  through `modules-load.d`, the fix Fedora's "Snapdragon WoA Laptop Install" wiki page gives.
+  `SPI_QCOM_GENI`, `HIDRAW=y`, `KEYBOARD_GPIO`, `PINCTRL_QCOM_SPMI_PMIC`, and the camera stack but its two new
+  sensor drivers (`VIDEO_QCOM_CAMSS`, `I2C_QCOM_CCI`, `CLK_X1E80100_CAMCC`, `VIDEO_OV13858`, `LEDS_QCOM_FLASH`;
+  `docs/camera.md`). `ARM_SCMI_CPUFREQ=m` does not load on its own (modpost cannot generate SCMI-bus aliases;
+  ooaklee's config had it built in), so the support RPM loads it through `modules-load.d`, the fix Fedora's
+  "Snapdragon WoA Laptop Install" wiki page gives.
 
 ## Extraction from v23.2
 
@@ -130,7 +140,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   way: the CDSP's boot order against the ADSP (revision 2), FastRPC's load time (loaded in the initramfs), the QDSS
   clock. `sp11-diag` lists the providers still waiting. Once the CDSP sleeps and wakes, its firmware can report a
   `sleep_stats` fatal error once in a boot (`fatal error received: sleep_statsi.c…`; v23.2 and revision 4 alike, and
-  Qualcomm's public tracker shows it on other boards); remoteproc restarts the CDSP by itself.
+  Qualcomm's public tracker shows it on other boards); remoteproc restarts the CDSP by itself. Revision 6's camera
+  nodes add two users, each with a driver in Fedora's packages: the camera clock controller (of the RPMh power
+  domains) and CAMSS (of the interconnect); the CCI buses use the clock controller's own power domain.
 
 ## Rebase to a new Fedora kernel
 
@@ -186,10 +198,14 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 
 ## History
 
-2026-09-13 to 2026-09-22 the project built ooaklee's linux_ms_dev_kit-sp11 v23 (Linux 7.2.0) from source
-with its Ubuntu-derived configuration, later with the kernel.org 7.2.5 update, a configuration policy for Fedora's
-LSM stack (revision 1, 2026-09-18) and the POS tablet switch (revision 2, 2026-09-21), packaged as `kernel-sp11`
+2026-09-13 to 2026-09-22 the project built ooaklee's linux_ms_dev_kit-sp11 v23 (Linux 7.2.0) from source with its
+Ubuntu-derived configuration, later with the kernel.org 7.2.5 update, a configuration policy for Fedora's LSM stack
+(revision 1, 2026-09-18) and the POS tablet switch (revision 2, 2026-09-21), packaged as `kernel-sp11`
 (`7.2.5-jg-0sp11v23.2-qcom-x1e`). 2026-09-23: replaced by Fedora's `kernel-7.2.5-300.fc45` with the patch set
 extracted from that tree (revision 1, tested on the device that day), then the CDSP boot order (revision 2, no
 effect). 2026-09-24: the CDSP's fault traced to the boot-time votes Linux never released, fixed by configuration
 (revisions 3 and 4). 2026-09-25: rebased onto Fedora's `kernel-7.2.7-300.fc45` (revision 5, branch `sp11/7.2.7`).
+2026-09-26: the cameras, turbineBMW's camera branch on top of `sp11/7.2.7` (revision 6: both cameras stream on the
+device, with a dark picture and without the front camera's light; `docs/camera.md`). The same day revision 7: the
+front camera's light. 2026-09-27: revision 8, the IMX681's frame length at the register the sensor uses. 2026-09-28:
+revision 8 passed on the device, and revisions 6 to 8 were pushed to `sp11/7.2.7` (head `95a74f27`).

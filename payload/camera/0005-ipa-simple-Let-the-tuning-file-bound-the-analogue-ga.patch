@@ -1,0 +1,84 @@
+ipa: simple: Let the tuning file bound the analogue gain
+
+A sensor driver can offer more analogue gain than the sensor applies:
+the OV13858 driver's control range ends at code 0x1fff, about 64x in
+libcamera's helper. If the sensor stops earlier, the AGC keeps raising a
+gain that changes nothing and never reaches the digital gain. The new
+optional maxAnalogueGain parameter of the Agc algorithm bounds the
+analogue gain the AGC uses; the minimum gain step shrinks with the range
+it was derived from.
+
+[sp11: for the Surface Pro 11's rear camera (OV13858); sp11-camera-probe measures where its gain stops]
+---
+ src/ipa/simple/algorithms/agc.cpp | 30 +++++++++++++++++++++++++++++-
+ src/ipa/simple/algorithms/agc.h   |  3 +++
+ 2 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/src/ipa/simple/algorithms/agc.cpp b/src/ipa/simple/algorithms/agc.cpp
+index 234af8334..1f7275cb8 100644
+--- a/src/ipa/simple/algorithms/agc.cpp
++++ b/src/ipa/simple/algorithms/agc.cpp
+@@ -92,13 +92,41 @@ int Agc::init([[maybe_unused]] IPAContext &context, const ValueNode &tuningData)
+ 		maxDigitalGain_ = 1.0;
+ 	}
+ 
++	maxAnalogueGain_ = tuningData["maxAnalogueGain"].get<double>();
++	if (maxAnalogueGain_ && *maxAnalogueGain_ < 1.0) {
++		LOG(IPASoftExposure, Warning)
++			<< "maxAnalogueGain " << *maxAnalogueGain_ << " below 1.0, ignored";
++		maxAnalogueGain_.reset();
++	}
++
+ 	return 0;
+ }
+ 
+ int Agc::configure(IPAContext &context, [[maybe_unused]] const IPAConfigInfo &configInfo)
+ {
++	auto &agc = context.configuration.agc;
++
++	/*
++	 * A sensor driver can offer analogue gain codes beyond the gain the
++	 * sensor applies. The tuning file then bounds the analogue gain the AGC
++	 * uses (maxAnalogueGain), so that it goes on to the digital gain where
++	 * the sensor stops. The minimum gain step shrinks with the range it was
++	 * derived from.
++	 */
++	if (maxAnalogueGain_ && *maxAnalogueGain_ < agc.againMax) {
++		const double range = agc.againMax - agc.againMin;
++		const double limit = std::max(*maxAnalogueGain_, agc.againMin);
++
++		if (range > 0.0)
++			agc.againMinStep *= (limit - agc.againMin) / range;
++		agc.againMax = limit;
++		LOG(IPASoftExposure, Info)
++			<< "Analogue gain limited to " << agc.againMax
++			<< " by the tuning file";
++	}
++
+ 	context.activeState.agc.dgain = 1.0;
+-	context.configuration.agc.dgainMax = maxDigitalGain_;
++	agc.dgainMax = maxDigitalGain_;
+ 
+ 	return 0;
+ }
+diff --git a/src/ipa/simple/algorithms/agc.h b/src/ipa/simple/algorithms/agc.h
+index 813fca0b1..c8aeb71c7 100644
+--- a/src/ipa/simple/algorithms/agc.h
++++ b/src/ipa/simple/algorithms/agc.h
+@@ -7,6 +7,8 @@
+ 
+ #pragma once
+ 
++#include <optional>
++
+ #include "algorithm.h"
+ 
+ namespace libcamera {
+@@ -33,6 +35,7 @@ private:
+ 	void updateExposure(IPAContext &context, IPAFrameContext &frameContext, double exposureMSV);
+ 
+ 	double maxDigitalGain_;
++	std::optional<double> maxAnalogueGain_;
+ };
+ 
+ } /* namespace ipa::soft::algorithms */

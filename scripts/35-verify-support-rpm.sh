@@ -116,6 +116,8 @@ assert_payload() {
   check as_root test ! -e "$M/usr/libexec/sp11/sp11-cdsp-check"
   check as_root test ! -e "$M/usr/lib/systemd/system/sp11-cdsp-check.service"
   check as_root test ! -L "$M/usr/lib/systemd/system/multi-user.target.wants/sp11-cdsp-check.service"
+  # 3.3: sp11-diag reports the cameras.
+  check as_root grep -q '^sec "cameras"' "$M/usr/libexec/sp11/sp11-diag"
 }
 
 # dnf5 with the override in place: a stock kernel offered by a configured repository is hidden, the same package as a

@@ -68,7 +68,11 @@ grep -cE '^# define buildid \.local$|^Patch999999: linux-kernel-test\.patch$|^So
 git -C "$FORK" diff --name-only "v$OLD" "$PIN" | sort > "$R/series-files.txt"; grep '^diff --git' "$R/srpm-$NEW-$REL"/patch-*-redhat.patch | awk '{print $3}' | sed 's|^a/||' | sort -u > "$R/redhat-files.txt"; wc -l < "$R/series-files.txt"; comm -12 "$R/series-files.txt" "$R/redhat-files.txt"
 ```
 
-Expected: `4`; the number of files the series touches (80 at 7.2.5), and no file both touch.
+Expected: `4`; the number of files the series touches (80 at 7.2.5, 100 since revision 6), and no file both touch
+but `MAINTAINERS`, `drivers/media/i2c/Kconfig` and `drivers/media/i2c/Makefile` (revision 6). kernel.spec applies
+the series after Fedora's patch, so prove it on a copy of Fedora's tarball: `git --work-tree=. apply` of
+`patch-<x.y>-redhat.patch`, then of the series (`git format-patch --stdout v<new>..HEAD`); the first build of
+revision 6 stopped in `%prep` on exactly this.
 
 Fedora's configuration change between the two stock `kernel-core` packages (the old one is in the cache of the
 checkout that built the pinned revision):
@@ -152,10 +156,11 @@ git -C "$R/linux" range-diff "v$OLD..$PIN" "v$NEW..HEAD" > "$R/range-diff.txt"; 
 Expected: `<` lines only for the dropped patches and `>` only for new ones; in the range-diff, `!` for every
 adapted patch, and a partly upstream patch as a `<` and `>` pair.
 
-The stable changes of the subsystems the SP11 relies on (read the list; 236 commits from 7.2.5 to 7.2.7):
+The stable changes of the subsystems the SP11 relies on (read the list; 236 commits from 7.2.5 to 7.2.7, before the
+camera paths were added):
 
 ```bash
-git -C "$R/linux" log --no-merges --format='%h %s' "v$OLD..v$NEW" -- drivers/remoteproc drivers/misc/fastrpc.c drivers/soc/qcom drivers/pmdomain/qcom drivers/interconnect/qcom drivers/clk/qcom drivers/pinctrl/qcom drivers/net/wireless/ath/ath12k drivers/bluetooth drivers/platform/surface drivers/usb/dwc3 drivers/usb/typec drivers/power/supply/qcom_battmgr.c drivers/gpu/drm/msm drivers/iommu/arm drivers/cpufreq drivers/firmware/arm_scmi drivers/firmware/qcom drivers/spi/spi-geni-qcom.c drivers/dma/qcom sound/soc/qcom sound/soc/codecs/wsa884x.c 'sound/soc/codecs/lpass-*' drivers/soundwire drivers/hid drivers/input drivers/nvme drivers/pci/controller/dwc net/qrtr drivers/rpmsg drivers/thermal/qcom drivers/iio drivers/phy/qualcomm drivers/crypto/qce arch/arm64/boot/dts/qcom/hamoa.dtsi arch/arm64/boot/dts/qcom/x1-microsoft-denali.dtsi > "$R/stable-relevant.txt"; wc -l < "$R/stable-relevant.txt"
+git -C "$R/linux" log --no-merges --format='%h %s' "v$OLD..v$NEW" -- drivers/remoteproc drivers/misc/fastrpc.c drivers/soc/qcom drivers/pmdomain/qcom drivers/interconnect/qcom drivers/clk/qcom drivers/pinctrl/qcom drivers/net/wireless/ath/ath12k drivers/bluetooth drivers/platform/surface drivers/usb/dwc3 drivers/usb/typec drivers/power/supply/qcom_battmgr.c drivers/gpu/drm/msm drivers/iommu/arm drivers/cpufreq drivers/firmware/arm_scmi drivers/firmware/qcom drivers/spi/spi-geni-qcom.c drivers/dma/qcom sound/soc/qcom sound/soc/codecs/wsa884x.c 'sound/soc/codecs/lpass-*' drivers/soundwire drivers/hid drivers/input drivers/nvme drivers/pci/controller/dwc net/qrtr drivers/rpmsg drivers/thermal/qcom drivers/iio drivers/phy/qualcomm drivers/crypto/qce drivers/media/platform/qcom/camss drivers/media/i2c drivers/media/v4l2-core drivers/i2c/busses/i2c-qcom-cci.c drivers/leds drivers/regulator arch/arm64/boot/dts/qcom/hamoa.dtsi arch/arm64/boot/dts/qcom/x1-microsoft-denali.dtsi > "$R/stable-relevant.txt"; wc -l < "$R/stable-relevant.txt"
 ```
 
 A new fix: edit the files in `$R/linux`, write the message to `$R/msg-fix.txt`, then commit it on top with the
@@ -178,7 +183,7 @@ grep -E '^(CONFIG_|# CONFIG_)' payload/kernel-local | while IFS= read -r l; do g
 ```
 
 ```bash
-git -C "$R/linux" diff --name-only "v$NEW" HEAD | sed 's|/[^/]*$||' | sort -u | grep -vE '^(include|Documentation|arch/arm64/boot/dts)|^drivers/hid/bpf' | sed 's|$|/|' > "$R/build-targets.txt"; rm -rf "$R/kbuild/drivers" "$R/kbuild/sound" "$R/kbuild/net" "$R/kbuild/arch/arm64/boot/dts"
+git -C "$R/linux" diff --name-only "v$NEW" HEAD | grep / | sed 's|/[^/]*$||' | sort -u | grep -vE '^(include|Documentation|arch/arm64/boot/dts)|^drivers/hid/bpf' | sed 's|$|/|' > "$R/build-targets.txt"; rm -rf "$R/kbuild/drivers" "$R/kbuild/sound" "$R/kbuild/net" "$R/kbuild/arch/arm64/boot/dts"
 ```
 
 ```bash
@@ -186,8 +191,8 @@ make -C "$R/linux" O=../kbuild ARCH=arm64 -j"$(nproc)" prepare modules_prepare >
 ```
 
 Expected: the `olddefconfig` override warnings for the `kernel-local` symbols, no `LOST:` line; three `rc=0`, no
-`warning:` or `error:` line. `build-targets.txt` must list only kernel make targets: drop any other directory the
-series touches (tools, scripts) the same way.
+`warning:` or `error:` line. `build-targets.txt` must list only kernel make targets: top-level files such as `MAINTAINERS` (touched since
+revision 6) are left out by the `grep /`; drop any other directory the series touches (tools, scripts) the same way.
 
 ## 4. Pins and build directory
 

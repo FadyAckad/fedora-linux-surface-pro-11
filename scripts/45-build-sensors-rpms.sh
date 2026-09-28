@@ -15,9 +15,9 @@
 require_cmd git rpmbuild mock createrepo_c rpm2cpio cpio rpm cmp
 load_hardware
 
-DEPS_DIR="$CACHE_DIR/rpm-deps/f$FEDORA_RELEASE"
-ISP_SRPM=$(ls -t "$DEPS_DIR"/iio-sensor-proxy-[0-9]*.src.rpm 2>/dev/null | head -1 || true)
-[ -n "$ISP_SRPM" ] || die "no iio-sensor-proxy source RPM under $DEPS_DIR (run scripts/10-fetch-sources.sh)"
+ISP_SRPM="$CACHE_DIR/$IIO_SENSOR_PROXY_SRPM"
+[ -s "$ISP_SRPM" ] || die "missing $ISP_SRPM (run scripts/10-fetch-sources.sh)"
+verify_sha256 "$ISP_SRPM" "$IIO_SENSOR_PROXY_SRPM_SHA256"
 ISP_VERSION=$(rpm -qp --qf '%{VERSION}' "$ISP_SRPM"); ISP_FEDREL=$(rpm -qp --qf '%{RELEASE}' "$ISP_SRPM")
 ISP_BASEREL=${ISP_FEDREL%%.fc*}                                   # 3.fc45 -> 3
 [ "$ISP_BASEREL" != "$ISP_FEDREL" ] || die "unexpected release '$ISP_FEDREL' in $(basename "$ISP_SRPM")"

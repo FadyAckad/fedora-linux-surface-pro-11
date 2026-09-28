@@ -1,0 +1,64 @@
+ipa: simple: Add digital gain to the Surface Pro 11 cameras' tuning
+
+Let the AGC add up to 4x digital gain in low light on the front camera
+(IMX681), and give the rear camera (OV13858) a tuning file with its
+measured black level, the same digital gain, and its analogue gain
+bounded at 15.5x, where the sensor stops applying it, instead of the
+uncalibrated defaults.
+---
+ src/ipa/simple/data/imx681.yaml  |  3 +++
+ src/ipa/simple/data/meson.build  |  1 +
+ src/ipa/simple/data/ov13858.yaml | 20 ++++++++++++++++++++
+ 3 files changed, 24 insertions(+)
+ create mode 100644 src/ipa/simple/data/ov13858.yaml
+
+diff --git a/src/ipa/simple/data/imx681.yaml b/src/ipa/simple/data/imx681.yaml
+index f2bfac67b..c83fe69ce 100644
+--- a/src/ipa/simple/data/imx681.yaml
++++ b/src/ipa/simple/data/imx681.yaml
+@@ -13,4 +13,7 @@ algorithms:
+   # enabling Ccm. The generic identity matrix is not a calibration.
+   - Adjust:
+   - Agc:
++      # Digital gain the software ISP adds in low light, once the exposure
++      # and the analogue gain are at their maximum.
++      maxDigitalGain: 4.0
+ ...
+diff --git a/src/ipa/simple/data/meson.build b/src/ipa/simple/data/meson.build
+index df76092ad..ea4d1174b 100644
+--- a/src/ipa/simple/data/meson.build
++++ b/src/ipa/simple/data/meson.build
+@@ -2,6 +2,7 @@
+ 
+ conf_files = files([
+     'imx681.yaml',
++    'ov13858.yaml',
+     'uncalibrated.yaml',
+ ])
+ 
+diff --git a/src/ipa/simple/data/ov13858.yaml b/src/ipa/simple/data/ov13858.yaml
+new file mode 100644
+index 000000000..7a0787ab7
+--- /dev/null
++++ b/src/ipa/simple/data/ov13858.yaml
+@@ -0,0 +1,20 @@
++# SPDX-License-Identifier: CC0-1.0
++%YAML 1.1
++---
++version: 1
++algorithms:
++  # The black pedestal is 64 at 10 bits (65.4 at 1x and 64.5 at 15.5x with the
++  # lens covered, on a Surface Pro 11), 4096 on libcamera's 16-bit scale.
++  - BlackLevel:
++      blackLevel: 4096
++  - Awb:
++  - Adjust:
++  - Agc:
++      # Digital gain the software ISP adds in low light, once the exposure
++      # and the analogue gain are at their maximum.
++      maxDigitalGain: 4.0
++      # The sensor applies no analogue gain above 15.5x (gain code 0x7c0),
++      # although its driver offers codes up to 0x1fff (measured on a Surface
++      # Pro 11: the level stays the same from 15.5x to 31x and to 64x).
++      maxAnalogueGain: 15.5
++...

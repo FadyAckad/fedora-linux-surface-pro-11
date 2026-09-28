@@ -8,6 +8,12 @@
 # The touch controller driver the SP11 patch set adds (Fedora's configuration checks refuse an unset new symbol).
 CONFIG_TOUCHSCREEN_MSHW0485=m
 
+# The front (IMX681) and IR (VD55G0) camera sensor drivers the SP11 patch set adds. The rest of the camera stack the
+# Denali device tree enables (CAMSS, CCI, the camera clock controller, the rear OV13858, the PM8550 flash LED) is in
+# Fedora's configuration already.
+CONFIG_VIDEO_IMX681=m
+CONFIG_VIDEO_VD55G0=m
+
 # Drivers for two devices the X1E80100 device tree enables and Fedora leaves out: the video clock controller (a user
 # of the RPMh power domains) and the crypto engine (a user of the interconnect). Until every user of a power domain
 # or interconnect provider has its driver, the provider never reaches sync_state and Linux keeps its boot-time

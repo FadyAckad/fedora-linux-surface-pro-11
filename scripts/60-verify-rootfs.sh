@@ -65,6 +65,14 @@ check test "$(r stat -c %Y "$ROOTFS/var/lib/sp11/hexagonrpc/sensors/persist/regi
 check r grep -q 'iio-sensor-proxy' "$ROOTFS/etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf"
 check r test ! -e "$ROOTFS/usr/lib/dracut/modules.d/95sp11-sensors"
 check sh -c "! lsinitrd '$WORK_DIR/iso/initrd' | grep -qE 'sp11-sensors|hexagonrpc'"
+# The cameras' libcamera is the rebuild (scripts/47) in place of Fedora's build, as packaged; step 48 checks the
+# rebuild itself (linkage, tuning files) in an overlay of this root.
+check r rpm --root "$ROOTFS" -q libcamera libcamera-ipa libcamera-tools
+lc_fedora=$(r rpm --root "$ROOTFS" -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 'libcamera*' 'python3-libcamera*' | grep -v "\.$LIBCAMERA_RPM_SUFFIX\." || true)
+check test "${lc_fedora:-none}" = none
+check r rpm --root "$ROOTFS" -V libcamera libcamera-ipa libcamera-tools
+lc_ver=$(r rpm --root "$ROOTFS" -q --qf '%{VERSION}' libcamera 2>/dev/null || true)
+check ipa_signatures_ok "$ROOTFS/usr/lib64/libcamera.so.$lc_ver" "$ROOTFS/usr/lib64/libcamera/ipa"
 for rpmf in "$(rpm_of kernel-core)" "$(rpm_of sp11-surface-support)" "$(rpm_of sp11-iptsd)"; do
   check r rpm --root "$ROOTFS" -U --test --replacepkgs "$rpmf"
 done

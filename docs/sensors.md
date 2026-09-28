@@ -130,7 +130,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   `protoc-gen-c`; the spec deletes the installed mock server; Codeberg serves `git fetch --depth 1 origin <sha>`
   only with the full hash). `iio-sensor-proxy` = Fedora's SRPM of the target release with `-Dssc-support=enabled`,
   release `<fedora>.sp11.1` (step 45 refuses an SRPM with patches, and since 2026-09-22 one whose spec differs from
-  the copy the template was made from, `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`: refresh the template, then the pin).
+  the copy the template was made from, `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`: refresh the template, then the pin). The
+  SRPM itself is pinned since 2026-09-28 (`IIO_SENSOR_PROXY_SRPM`, Koji's unsigned copy with its checksum;
+  `docs/pipeline.md`); before, step 10 took the newest build.
   `sp11-sensors`: payload under `/usr/share/qcom/x1e80100/Microsoft/denali-oled` (the DriverStore package's 65 JSONs
   and `golden_color_calibration.bin`, its `json.lst`, `sns_reg_config` and platform files converted to LF, plus this
   unit's registry of 343 entries, its two parent-directory files and 6 calibration overrides from
