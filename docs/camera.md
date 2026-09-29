@@ -93,13 +93,19 @@ camera's sensor, what the host checks prove and what only the device can show.
   analogue gain are at their maximum it adds digital gain in the ISP (the colour gains, after black-level
   subtraction), bounded by the Agc tuning key `maxDigitalGain` (default 1, off) and reported as `DigitalGain`; the
   MSV is taken from the histogram scaled by the frame's digital gain. The gain multiplies what `Awb` sets each
-  frame, so a tuning file must list `Awb` before `Agc` (all three of ours do). 0005 (this project) adds the Agc key
-  `maxAnalogueGain`, which bounds the AGC's analogue gain where a driver's control goes beyond the sensor's gain
-  (the OV13858 driver's goes to code 0x1fff, 64x in libcamera's helper) and scales the minimum gain step with the
-  range. 0006 sets `maxDigitalGain: 4.0` in `imx681.yaml` and adds `ov13858.yaml` (black level 4096, the same
-  digital gain, and since sp11.3 `maxAnalogueGain: 15.5`, where `sp11-camera-probe rear --gain-range` found the
-  OV13858's gain stops). Our own patches carry no author line (`payload/` names no one); the three from turbineBMW
-  and Bozik's keep theirs. On the device (0.7.2-3.sp11.3, revision 8, 1 lux): each camera reached its maximum
+  frame, so a tuning file must list `Awb` before `Agc` (all three of ours do); the ISP's parameters persist from
+  frame to frame and only `Awb` resets the colour gains, so a file without `Awb`, or with it disabled, has to keep
+  `maxDigitalGain` at 1, or the gains grow every frame. 0005 (this project) adds the Agc key `maxAnalogueGain`,
+  which bounds the AGC's analogue gain where a driver's control goes beyond the sensor's gain (the OV13858
+  driver's goes to code 0x1fff, 64x in libcamera's helper) and scales the minimum gain step with the range. The
+  bound has to be a code's exact gain (2026-09-28, found in a review): the AGC compares it with the gain of the
+  code it set, so a bound between two codes whose nearer code lies below it stops the analogue gain there and the
+  digital gain never starts (the skill's `agc-model.py --sensor ov13858 --again-max 15.4` or `14.4`: digital
+  gain 1.00 at 1 lux, against 4.00 with 15.5, which is code 0x7c0). 0006 sets `maxDigitalGain: 4.0` in
+  `imx681.yaml` and adds `ov13858.yaml` (black level 4096, the same digital gain, and since sp11.3
+  `maxAnalogueGain: 15.5`, where `sp11-camera-probe rear --gain-range` found the OV13858's gain stops). Our own
+  patches carry no author line (`payload/` names no one); the three from turbineBMW and Bozik's keep theirs.
+  On the device (0.7.2-3.sp11.3, revision 8, 1 lux): each camera reached its maximum
   exposure, analogue gain and 4x digital gain about 0.9 s after the first adjustment. The target itself, a mean
   sample value of 2.5 of the five bins, puts the linear image's mean at about 40 % of full scale: a daylight photo
   with the front camera averaged 169 of 255 after the gamma curve, with most of a face at 245 or above. Since
@@ -115,8 +121,9 @@ camera's sensor, what the host checks prove and what only the device can show.
   (1.96x steps), and both cameras right in daylight and settling within seconds in dim light (owner, 2026-09-28).
 - Upstream after 0.7.2 (master, 2026-07): the simple IPA moved to `src/ipa/softisp` (module `ipa_softisp.so`, tuning
   files under `ipa/softisp`) and its AGC into libipa (`AgcAlgorithm`, `agc_msv`). A release with those changes
-  cannot take 0004, 0005 and 0008 by rebase: they have to be ported onto the new AGC, and steps 47 and 48 name the
-  old module, directory and tuning keys.
+  cannot take 0004, 0005, 0008 and 0009 by rebase: they have to be ported onto the new AGC (on master of
+  2026-09-22 libipa's `agc.h` sets the gain code, still truncated), and steps 47 and 48 name the old module,
+  directory and tuning keys.
 - The analogue gain code (2026-09-28, found in a review and reproduced with the skill's `agc-model.py`; not seen on
   the device): up to sp11.5 the IMX681 got the gain code `CameraSensorHelper::gainCode()` truncates, and the IPA
   reads that code's gain back. Above about 12.4x one code is worth more than the AGC's smallest step (0.15) and than
@@ -173,7 +180,10 @@ camera's sensor, what the host checks prove and what only the device can show.
   the same link as `libcamera-v4l2`).
 - Device access: PipeWire runs libcamera as the desktop user. Fedora's `70-uaccess.rules` hands the seat user every
   `video4linux` node (the subdevices included), every `media` node and `/dev/udmabuf`; `70-libcamera.rules` gives
-  `/dev/dma_heap` to the `video` group only, so libcamera allocates its buffers from `/dev/udmabuf` instead.
+  `/dev/dma_heap` to the `video` group only, so libcamera allocates its buffers from `/dev/udmabuf` instead. Since
+  systemd 262 (on the device by 2026-09-26; the ISO's root has 261) udev also creates a `/dev/media` directory of
+  by-path links next to `/dev/media0`, so scripts take the media devices as `/dev/media[0-9]*`
+  (`sp11-camera-probe`, `sp11-diag` since support 3.4).
 - The IR camera: the software ISP has no monochrome path in 0.7.2, so libcamera can offer the VD55G0 only as a raw
   stream, which ordinary applications cannot use. Face login would need Howdy and a bridge of its own (turbineBMW
   tested one), none of which Fedora packages.
@@ -188,7 +198,11 @@ camera's sensor, what the host checks prove and what only the device can show.
   new build, step 47 then asks for the template's refresh and the new `LIBCAMERA_BASE_SPEC_SHA256`, and a new
   libcamera version needs the patches rebased or ported (`.claude/skills/sp11-camera-update`). Rerunning step 47
   alone rebuilds the old version, which dnf does not install over Fedora's newer one. An exclusion like
-  iio-sensor-proxy's would also hold back PipeWire's plugin once Fedora bumps libcamera's soname.
+  iio-sensor-proxy's would also hold back PipeWire's plugin once Fedora bumps libcamera's soname. Each libcamera
+  subpackage requires its own build's `libcamera`, so installing another one from Fedora later (`libcamera-v4l2`,
+  `libcamera-gstreamer`, `libcamera-qcam`, `libcamera-devel`, `python3-libcamera`), or `dnf distro-sync`, has dnf
+  offer to downgrade the rebuild to Fedora's build of the same version (dnf5 with test packages on the host,
+  2026-09-28); the rebuilt subpackages are in `build/rpms/`, an ISO carries only the three.
 
 ## On the device
 
@@ -221,9 +235,9 @@ camera's sensor, what the host checks prove and what only the device can show.
   camera was at 5.2x after 3 s). Its target, a mean sample value of 2.5 of 5 histogram bins, needs about 50 lux of
   the light sensor at full exposure and 16x.
 - The OV13858 applies no analogue gain above 15.5x (`sp11-camera-probe rear --gain-range`, 2026-09-27: the level
-  x1.00 from 15.5x to 31x and to 64x), while its driver offers codes up to 0x1fff (64x in libcamera's helper): the
-  rear camera's exposure control reaches its digital gain only with `maxAnalogueGain: 15.5` in `ov13858.yaml`, which
-  0006 sets since 0.7.2-3.sp11.3.
+  x1.00 from 15.5x to 31x and to 64x), while its driver offers codes up to 0x1fff (64x in libcamera's helper):
+  without `maxAnalogueGain: 15.5` in `ov13858.yaml`, which 0006 sets since 0.7.2-3.sp11.3, the rear camera's
+  exposure control raises the gain through codes that do nothing, up to 64x, before its digital gain starts.
 - Colours: both tuning files run grey-world white balance without a colour-correction matrix (`imx681.yaml` and,
   since sp11.2, `ov13858.yaml`: black level 4096 at 16 bits, `Awb`, `Adjust`, `Agc`; the IR camera
   `uncalibrated.yaml`), so colours stay muted; a matrix needs a colour-chart measurement.

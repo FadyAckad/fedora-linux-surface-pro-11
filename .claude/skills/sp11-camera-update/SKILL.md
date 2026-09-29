@@ -26,8 +26,9 @@ command below with its expected output: [reference.md](reference.md). Device-rou
   the maintainer asks. Commits prepared for the maintainer carry no `Co-Authored-By` trailer.
 - This project's patches carry no `From:` or `Date:` lines (`payload/` names no one); a third-party patch keeps its
   author and date and gets an `[sp11: ...]` note naming its source and what changed.
-- Every change to `rpm/libcamera.spec.in` or `payload/camera/` needs the next `LIBCAMERA_RPM_SUFFIX`: step 47
-  refuses a changed input at the same release, because dnf ignores a same-release rebuild.
+- Every change to `rpm/libcamera.spec.in` or to a patch in `payload/camera/` needs the next
+  `LIBCAMERA_RPM_SUFFIX`: step 47 refuses a changed input at the same release, because dnf ignores a same-release
+  rebuild. The probe (`sp11-camera-probe`) is not packaged and needs none.
 - A change reaches `README.md` and the guides only after a device round. A new fact goes into `docs/camera.md`
   first; `docs/verified.md` gets the round's results.
 - The ISO is rebuilt only on request. Tracked files carry no per-unit identifiers or local paths (`CLAUDE.md`,
@@ -62,8 +63,9 @@ rebase carries the camera commits with the rest.
    comment and a changelog entry.
 3. Before rebasing, read upstream's changes since the old version: a patch that landed (turbineBMW's IMX681
    support, a debayering fix) drops out; upstream master moved `src/ipa/simple` to `src/ipa/softisp` and ports the
-   AGC to a common algorithm, so a release with that needs 0004, 0005 and 0008 ported, not rebased; changes to
-   `swstats_cpu.cpp` (histogram, statistics period) or `debayer_egl.cpp` meet 0004 and 0007.
+   AGC to a common algorithm, so a release with that needs 0004, 0005, 0008 and 0009 ported, not rebased (master
+   sets the gain code in libipa's `agc.h`); changes to `swstats_cpu.cpp` (histogram, statistics period) or
+   `debayer_egl.cpp` meet 0004 and 0007.
 4. Rebase in the scratch clone (`build/camera-wip/libcamera-up`, blobless; never `/tmp`): detach at `v<new>`, apply
    0001–0009 in order, resolve, export (reference.md, section 3). Keep turbineBMW's and Bozik's authorship.
 5. Pins: the source RPM's (step 1), `LIBCAMERA_BASE_SPEC_SHA256` as step 47 printed it, the next
@@ -75,16 +77,22 @@ rebase carries the camera commits with the rest.
 
 - Tuning values live in the patches: `imx681.yaml` is created by 0003 (turbineBMW's file) and changed by 0006 and
   0008, `ov13858.yaml` is created by 0006 and changed by 0008. Step 47 rebuilds both files from the patches and
-  compares them with the packaged ones, so a value is changed in the patch that last touches it.
+  compares them with the packaged ones, so a value is changed in the patch that sets it and in every later patch
+  that carries its line as context: 0008's hunks end with 0006's `maxDigitalGain: 4.0` and the two comment lines
+  above it, so a change there goes into 0006 and 0008 alike (or amend 0006 in the scratch clone and export again).
 - `exposureTarget` is clamped to 1.3 to 5 (0008). The MSV's floor is 1 (every sample in the darkest fifth), so a
   target near 1 leaves little room below it: 0008 scales the thresholds and the proportional gain with the target
   and squares the jump ratio when brightening; keep that when changing the control law.
-- In a tuning file `Awb` comes before `Agc`: the digital gain multiplies the colour gains Awb sets each frame.
+- In a tuning file `Awb` comes before `Agc`: the digital gain multiplies the colour gains Awb sets each frame. A
+  tuning file without `Awb` (or with it disabled) keeps `maxDigitalGain` at 1, or the colour gains grow every frame.
 - The IPA sets the sensor's nearest gain code (0009): the helper's truncated code kept the IMX681 below 16x in some
   dim scenes, where one code is worth more than the AGC's smallest step. `agc-model.py --gain-codes truncate` shows
   the old behaviour.
 - The OV13858 driver offers gain codes up to 64x, the sensor stops at 15.5x: `maxAnalogueGain: 15.5` in
-  `ov13858.yaml`, or the exposure control never reaches its digital gain on the rear camera.
+  `ov13858.yaml`, or the exposure control raises the gain through codes that do nothing before its digital gain
+  starts. The bound has to be a code's exact gain (code/128 on the OV13858, 1024/(1024 - code) on the IMX681): the
+  IPA reads the set code's gain back, and while that stays below the bound the exposure control keeps asking for
+  more analogue gain and never starts the digital gain.
 - Code changes: amend the commit in the scratch clone, export again, and add a `PatchNN:` line for a new patch.
 
 ## 4. Build and verify on the host

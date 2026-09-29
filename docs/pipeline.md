@@ -54,7 +54,7 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   3.1), and the live path runs dnf5 in the chroot against a probe `kernel-core` RPM in a local repository: hidden by
   the override, visible with `--setopt=disable_excludes='*'`, installable as a file (`@commandline`). Passed on
   2026-09-23 for 3.0 over 2.6 and, with `SUPPORT_PREVIOUS_RPM`, over 2.7, for 3.1 over 2.6 and 3.0, on 2026-09-24
-  for 3.2 over 2.6 and 3.1, and on 2026-09-26 for 3.3 over 3.2 and 2.6.
+  for 3.2 over 2.6 and 3.1, on 2026-09-26 for 3.3 over 3.2 and 2.6, and on 2026-09-29 for 3.4 over 3.3 and 2.6.
 - `36-verify-kernel-install.sh` (standalone, not in `build-all.sh`: after a full pipeline run the live root already
   carries the kernel under test) installs the freshly built SP11 kernel packages (`KERNEL_PKGS`) into an overlay of
   the live root the way `dnf install` does on an installed system — `rpm -i` with scriptlets, one transaction, next

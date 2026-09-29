@@ -63,13 +63,14 @@ run sh -c 'u=${SUDO_USER:-}; uid=$(id -u "$u" 2>/dev/null); if [ -n "$u" ] && [ 
 # Sensors (Snapdragon Sensor Core stack, sp11-sensors): the check script carries its own sections.
 if [ -x /usr/libexec/sp11/sp11-sensors-check ]; then /usr/libexec/sp11/sp11-sensors-check; else sec "sensors"; echo "sp11-sensors not installed"; fi
 # Cameras: the kernel side (CAMSS, the CCI buses, the IMX681, OV13858 and VD55G0 sensors, the IR flash LED), what each
-# camera driver bound, the media graph, and what libcamera sees. media-ctl comes with v4l-utils, cam with
-# libcamera-tools; neither is installed by default.
+# camera driver bound, the media graph, and what libcamera sees. media-ctl comes with v4l-utils (not installed by
+# default), cam with libcamera-tools. The media devices are /dev/media[0-9]*: udev also creates a /dev/media
+# directory (its by-path links), which a /dev/media* glob would take for a device.
 sec "cameras"; run sh -c "rpm -qa 'libcamera*' pipewire-plugin-libcamera v4l-utils | sort"
 run sh -c 'for d in /sys/bus/i2c/drivers/imx681 /sys/bus/i2c/drivers/ov13858 /sys/bus/i2c/drivers/vd55g0 /sys/bus/platform/drivers/qcom-camss /sys/bus/platform/drivers/i2c-qcom-cci; do printf "%s:" "${d##*/}"; for l in "$d"/*; do case "$(readlink -f "$l")" in /sys/devices/*) printf " %s" "${l##*/}" ;; esac; done; echo; done'
-run sh -c 'echo "$(ls /dev/media* /dev/video* /dev/v4l-subdev* 2>/dev/null | wc -l) media, video and subdevice nodes"; ls -l /dev/media* /dev/udmabuf /dev/dma_heap/ 2>&1'
+run sh -c 'echo "$(ls /dev/media[0-9]* /dev/video* /dev/v4l-subdev* 2>/dev/null | wc -l) media, video and subdevice nodes"; ls -l /dev/media[0-9]* /dev/udmabuf /dev/dma_heap/ 2>&1'
 run ls /sys/class/leds/
-LINES_MAX=1500 run sh -c 'command -v media-ctl >/dev/null || { echo "media-ctl not installed (v4l-utils)"; exit 0; }; for m in /dev/media*; do [ -e "$m" ] && media-ctl -d "$m" -p; done'
+LINES_MAX=1500 run sh -c 'command -v media-ctl >/dev/null || { echo "media-ctl not installed (v4l-utils)"; exit 0; }; for m in /dev/media[0-9]*; do [ -e "$m" ] && media-ctl -d "$m" -p; done'
 run sh -c 'command -v cam >/dev/null || { echo "cam not installed (libcamera-tools)"; exit 0; }; cam -l'
 run sh -c "dmesg | grep -iE 'camss|cci|imx681|ov13858|vd55g0|csiphy|camcc|flash' | tail -n 80"
 run sh -c "journalctl -b --no-pager -o cat -g 'libcamera|IPAManager|IPASoft|SoftwareIsp|imx681|ov13858|vd55g0' | tail -n 80"

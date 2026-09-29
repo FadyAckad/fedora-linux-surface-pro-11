@@ -340,3 +340,10 @@ reads 216 to 474.24 MHz (revision 8: from 432 MHz). `cam` without a stream size 
 pixel rate read 216 MHz where revision 8's minimum was 432 MHz, 29.95 fps at CAMSS's clock for that rate, a covered
 full exposure of 3206 lines reported as 33306 us. Confirmed by the owner: both cameras in GNOME Snapshot, Wi-Fi,
 Bluetooth, the pen, tablet mode and the other by-hand checks, suspend and resume.
+
+## Support RPM 3.4: sp11-diag's media nodes (2026-09-29)
+
+`sp11-surface-support` `3.4-1.fc45` installed over 3.3 with `dnf install` (one package upgraded; kernel revision 9,
+libcamera `0.7.2-3.sp11.6`). `sp11-diag`'s camera section counts `48 media, video and subdevice nodes` (3.3 counted
+51, with the `/dev/media` directory of by-path links systemd 262's udev creates), lists only `/dev/media0` and the
+buffer devices, and prints the media graph without the `Failed to enumerate /dev/media (-21)` line.

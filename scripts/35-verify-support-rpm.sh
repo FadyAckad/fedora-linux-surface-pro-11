@@ -118,6 +118,9 @@ assert_payload() {
   check as_root test ! -L "$M/usr/lib/systemd/system/multi-user.target.wants/sp11-cdsp-check.service"
   # 3.3: sp11-diag reports the cameras.
   check as_root grep -q '^sec "cameras"' "$M/usr/libexec/sp11/sp11-diag"
+  # 3.4: only the media device nodes, not the /dev/media directory udev creates next to them.
+  check as_root grep -qF 'for m in /dev/media[0-9]*;' "$M/usr/libexec/sp11/sp11-diag"
+  check as_root sh -c "! grep -v '^#' '$M/usr/libexec/sp11/sp11-diag' | grep -qF '/dev/media*'"
 }
 
 # dnf5 with the override in place: a stock kernel offered by a configured repository is hidden, the same package as a

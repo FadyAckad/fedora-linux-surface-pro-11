@@ -36,8 +36,11 @@ The packages replace Fedora's libcamera of the same version. Nothing holds back 
 Fedora build replaces the rebuild, and the cameras fall back to Fedora's build (no IMX681 support: a dark front
 camera with a slow exposure control, and coloured squares in dark pictures) until the rebuild is redone for the new
 version. If dnf reports that another libcamera package, such as `libcamera-v4l2` or `libcamera-gstreamer`, requires
-Fedora's build, add its rebuild from `build/rpms/` to the same command. `rpm -q libcamera` shows which build is
-installed (`.sp11.` in the release is the rebuild).
+Fedora's build, add its rebuild from `build/rpms/` to the same command. Installing such a package from Fedora
+later (`sudo dnf install libcamera-v4l2`, for example), or `sudo dnf distro-sync`, makes dnf offer to downgrade the
+rebuild to Fedora's build: answer no, and install the package's rebuild from `build/rpms/` instead (an ISO carries
+only the three packages above). `rpm -q libcamera` shows which build is installed (`.sp11.` in the release is the
+rebuild).
 
 ## Check
 
@@ -51,10 +54,10 @@ the front and the rear camera and leaves the infrared camera out by itself. `sud
 graph, `cam -l` and libcamera's messages from the journal.
 
 The exposure control aims at `exposureTarget: 1.4` in `/usr/share/libcamera/ipa/simple/imx681.yaml` (front camera)
-and `ov13858.yaml` (rear camera), lower is darker, higher brighter. Values from 1.3 to 2.5 (libcamera's own default)
-work; a value outside 1.3 to 5 is clamped to that range, with a warning in the log
-(`exposureTarget ... outside 1.3 to 5, using ...`). A changed value takes effect after the PipeWire restart above; a
-libcamera update replaces the file.
+and `ov13858.yaml` (rear camera), lower is darker, higher brighter. 1.4 was chosen on the device; libcamera's own
+default of 2.5 turned faces white in daylight. A value outside 1.3 to 5 is clamped to that range, with a warning in
+the log (`exposureTarget ... outside 1.3 to 5, using ...`). A changed value takes effect after the PipeWire restart
+above; a libcamera update replaces the file.
 
 ## Limits
 

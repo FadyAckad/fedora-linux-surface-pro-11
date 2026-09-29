@@ -58,3 +58,7 @@ only, and their changes reached the device with the next version installed there
   LEDs, the media graph, `cam -l`, and the kernel's and libcamera's camera messages. Goes with kernel revision 6.
   Verified in a chroot on both install paths (over 3.2 and 2.6) and on the device as an upgrade from 3.2 on
   2026-09-26.
+- 3.4: `sp11-diag` takes the media devices as `/dev/media[0-9]*`. Updated installations also have a `/dev/media`
+  directory (udev's by-path links), which the camera section had counted as three more device nodes and passed to
+  `media-ctl`, printing `Failed to enumerate /dev/media (-21)` before the media graph. Verified in a chroot on both
+  install paths (over 3.3 and 2.6) and on the device as an upgrade from 3.3 on 2026-09-29.

@@ -28,10 +28,12 @@ SENSORS = {
     # exposure lines (min, max at 30 fps with kernel revision 8), analogue gain range and the IPA's minimum step
     # ((max - min) / 100), the driver's default exposure and gain the stream starts from, and the sensor's gain
     # codes (the helper's gainCode() before truncation, the gain of a code, the highest code): the IPA sets a code
-    # and reads that code's gain back for the next frame
+    # and reads that code's gain back for the next frame. The top of the range is the highest code's gain exactly,
+    # as in the IPA, or the gain read back never reaches it. The OV13858's stop at 15.5x is not simulated: run the
+    # rear camera with --again-max 15.5, its tuning.
     'imx681': dict(exp=(8, 3546), again=(1.0, 16.0), start=(1600, 1.0),
                    code=lambda g: 1024 - 1024 / g, gain=lambda c: 1024.0 / (1024 - c), cmax=960),
-    'ov13858': dict(exp=(4, 3206), again=(0.0, 63.9922), start=(3206, 1.0),
+    'ov13858': dict(exp=(4, 3206), again=(0.0, 8191 / 128.0), start=(3206, 1.0),
                     code=lambda g: 128 * g, gain=lambda c: c / 128.0, cmax=8191),
 }
 

@@ -28,12 +28,13 @@ On the device, which build runs and what the front camera's image processing loa
 no other camera application open):
 
 ```bash
-rpm -q libcamera libcamera-ipa libcamera-tools; F=$(cam -l 2>/dev/null | sed -n 's/^\([0-9]*\): .*camera@1a)$/\1/p'); LIBCAMERA_LOG_LEVELS=IPAManager:DEBUG,IPASoft:INFO,IPASoftExposure:DEBUG cam -c "$F" -C30 2>&1 | grep -E 'signature is|Using tuning file|Exposure target|Exposure [0-9]+-[0-9]+, gain'
+rpm -q libcamera libcamera-ipa libcamera-tools; F=$(cam -l 2>/dev/null | sed -n 's/^\([0-9]*\): .*camera@1a)$/\1/p'); LIBCAMERA_LOG_LEVELS=IPAManager:DEBUG,IPASoft:INFO,IPASoftExposure:DEBUG cam -c "$F" -C30 2>&1 | grep -E 'signature is|Using tuning file|falling back|Exposure target|Exposure [0-9]+-[0-9]+, gain'
 ```
 
 Expected: `.sp11.` in each release; `signature is valid`, `Using tuning file .../imx681.yaml`,
-`Exposure target 1.4 by the tuning file`, `Exposure 8-3546, gain 1-16 (0.15)` (Fedora's build: `signature is not
-valid`, `uncalibrated.yaml`, `gain 0-960 (1)`). The rear camera is `camera@10)`.
+`Exposure target 1.4 by the tuning file`, `Exposure 8-3546, gain 1-16 (0.15)`. Fedora's build instead:
+`signature is not valid`, `Configuration file 'imx681.yaml' not found ..., falling back to '.../uncalibrated.yaml'`
+and `gain 0-960 (1)`. The rear camera is `camera@10)`.
 
 ## 2. A new Fedora libcamera
 
@@ -74,10 +75,10 @@ B=$PWD/build/cache; d=$(mktemp -d); for v in old new; do mkdir $d/$v; done; (cd 
 ## 3. Scratch clone, rebase, export
 
 The clone (once; blobless, a few MB of history), detached at the new tag, with a placeholder identity for this
-project's commits:
+project's commits and without signing (a global `commit.gpgsign` would stop every `git am` and `git commit` below):
 
 ```bash
-[ -d $C ] || git clone -q --filter=blob:none https://gitlab.freedesktop.org/camera/libcamera.git $C; git -C $C fetch -q --tags origin && git -C $C checkout -q --detach v<new> && git -C $C config user.name sp11-scratch && git -C $C config user.email scratch@invalid && git -C $C log --oneline -1
+[ -d $C ] || git clone -q --filter=blob:none https://gitlab.freedesktop.org/camera/libcamera.git $C; git -C $C fetch -q --tags origin && git -C $C checkout -q --detach v<new> && git -C $C config user.name sp11-scratch && git -C $C config user.email scratch@invalid && git -C $C config commit.gpgsign false && git -C $C log --oneline -1
 ```
 
 Expected: `<hash> libcamera v<new>`.
@@ -86,12 +87,13 @@ Apply the series in order. The third-party patches (0001–0004) are mails; this
 headers, so they are applied and committed with their first paragraph as the message:
 
 ```bash
-for p in payload/camera/0*.patch; do if head -1 "$p" | grep -q '^From '; then git -C $C am -q "$PWD/$p" || break; else git -C $C apply --index "$PWD/$p" && git -C $C commit -q -F <(sed '/^---$/,$d' "$p") || break; fi; done; git -C $C log --oneline v<new>..HEAD | wc -l
+n=$(git -C $C rev-list --count v<new>..HEAD); for p in $(ls payload/camera/0*.patch | tail -n +$((n + 1))); do if head -1 "$p" | grep -q '^From '; then git -C $C am -q "$PWD/$p" || break; else git -C $C apply --index "$PWD/$p" && git -C $C commit -q -F <(sed '/^---$/,$d' "$p") || break; fi; done; git -C $C log --oneline v<new>..HEAD | wc -l
 ```
 
 Expected: `9`; on 0.7.2 the result's tree is the one the payload was exported from (checked 2026-09-28). A patch
 that does not apply stops the loop: resolve it in the clone (`git am --continue` for a mail; `git apply --reject`,
-fix, `git add`, commit for this project's), then run the loop again from the next patch.
+fix, `git add`, commit for this project's), then run the loop again: it skips the patches already committed on top
+of the tag.
 
 Export again, then strip the mail headers from this project's patches (its commits are by `sp11-scratch`):
 
@@ -127,7 +129,7 @@ Expected: `libcamera RPMs: libcamera-<version>-<rel>.<suffix>.fc45.aarch64.rpm .
 overlay of the live root: ...`, no `FAIL` or `ERROR`; no compiler warning in the mock log
 (`grep -c 'warning:' build/work/mock-libcamera/build.log` against the previous build's count).
 
-The exposure control, for a changed control law or target (about ten seconds per run):
+The exposure control, for a changed control law or target (about 20 seconds per run):
 
 ```bash
 python3 -B $S/agc-model.py --target 1.4; python3 -B $S/agc-model.py --sensor ov13858 --again-max 15.5; python3 -B $S/agc-model.py --lux 12.5 14.5 16.5 --gain-codes truncate
@@ -151,11 +153,13 @@ Expected: the numbers in `debayer-model.py`'s docstring (dark flat frame: spread
 The raw-capture probe, for a probe change (needs `sudo -n`; about ten seconds):
 
 ```bash
-$S/probe-fake.sh 2>&1 | grep -E '^===|at 886 lines|at 665 lines|x step|^ 15.5x|^   31x'
+$S/probe-fake.sh 2>&1 | grep -E '^===|^FAIL|at 886 lines|at 665 lines|x step|^ 15.5x|^   31x'
 ```
 
 Expected: `rev8`: 20.00 and 15.00 fps at 886 lines; `rev8-ignored` and `rev7`: 30.00 at the short exposure;
-`FAKE_GAIN_STOP=15.5`: `x step 1.00` from 31x on, without it about 2 per step.
+`FAKE_GAIN_STOP=15.5`: `x step 1.00` from 31x on, without it about 2 per step; no `FAIL` line (a scenario whose
+probe fails, or a `sudo -n` that asks for a password, prints one with the last line of its output, and the script
+exits 1).
 
 ## 5. On the device
 

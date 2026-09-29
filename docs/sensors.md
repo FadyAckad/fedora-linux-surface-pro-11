@@ -106,7 +106,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
 
 - Packaging: `hexagonrpc` 0.5.0 from the project's fork (`HEXAGONRPC_REPO` github.com/FadyAckad/hexagonrpc, branch
   `sp11-sensors` = upstream 598b591 plus five commits, pinned by `HEXAGONRPC_COMMIT`; `git_pin` fetches the commit
-  by full hash, which GitHub serves for any reachable commit). The commits: hexagonfs
+  by full hash, which GitHub serves for any reachable commit; the pin has to be a commit of the pushed branch: the
+  head of 2026-09-20, which the re-created branch left on no branch, was still served on 2026-09-29, but nothing
+  keeps such a commit). The commits: hexagonfs
   create/write/truncate/unlink/rename for mapped directories; `apps_std` `fopen` 0, `fwrite` 5, `fsync` 23,
   `fremove` 24, `ftrunc` 32, `frename` 33 (ids from quic/fastrpc `inc/apps_std.h`; the extended ids above 30 travel
   in the first prim word), and `fopen_with_env` opening `w`/`a`/`+` modes read-write and accepting absolute names
@@ -309,8 +311,10 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   implements the large-buffer fetch, the temporary file's directory or `ftrunc`/`frename`/`fsync`: none of
   upstream's 14 forks carries write support beyond PR #21's branch, and denisix only mentions a private patch
   ("method 24 stub", "write support"); main has not moved past 598b591. The fork was created on 2026-09-19 at
-  598b591 and its `sp11-sensors` branch pushed on 2026-09-20; its commits carry the owner as author and committer
-  and no other trailer. Owner's decision: fork only for now, no pull request yet.
+  598b591 and its `sp11-sensors` branch pushed on 2026-09-20; on 2026-09-21 the branch was re-created with the
+  owner's sign-off on each of the five commits, signed, and pushed again (head 40e5041; every commit has the tree
+  of its earlier version). Its commits carry the owner as author and committer and no trailer but the sign-off.
+  Owner's decision: fork only for now, no pull request yet.
 
 ## History
 
@@ -327,3 +331,7 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
     the POS switch; 1.8 and 1.9 for the compass; auto-rotation confirmed on the desktop.
   - 2026-09-24: hexagonrpc 0.5.0-7 changes only a comment in its sysusers file (a Debian reference removed); built
     and checked in the live root (step 46), not yet on the device.
+  - 2026-09-29: hexagonrpc 0.5.0-8 is 0.5.0-7's source from the branch's head 40e5041 (the pin had stayed at the
+    head of 2026-09-20, on no branch since 2026-09-21); `.text` and `.rodata` of its four binaries are
+    byte-identical to 0.5.0-7's. Built and checked in the live root (steps 45 and 46, also as an upgrade from
+    0.5.0-7), not on the device.

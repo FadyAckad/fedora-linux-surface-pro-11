@@ -13,7 +13,7 @@ that built it. Secure Boot has to be off and Windows stays on the device (see St
 ## What works
 
 Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`) with the kernel above in its current revision 9
-(`7.2.7-300.sp11.9.fc45.aarch64`, installed as an update on 2026-09-28), support RPM 3.3 and the libcamera RPMs
+(`7.2.7-300.sp11.9.fc45.aarch64`, installed as an update on 2026-09-28), support RPM 3.4 and the libcamera RPMs
 `0.7.2-3.sp11.6`, on an installation from the ISO built on 2026-09-24.
 [`docs/verified.md`](docs/verified.md) has the details and what was confirmed with earlier kernels, including
 ooaklee's v23 tree the project built until 2026-09-22.

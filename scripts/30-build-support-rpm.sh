@@ -9,7 +9,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.3"
+VERSION="3.4"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
