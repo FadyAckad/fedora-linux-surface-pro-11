@@ -35,8 +35,13 @@ settings in `sp11.conf`, also accepted from the environment, select the source m
   `FEDORA_COMPOSE=<stamp>`). Only Fedora 45 is supported: the kernel source RPM is pinned per release. A release
   other than the host's is fine: the kernel, `sp11-iptsd` and the sensors libraries are built in `mock` buildroots
   of the target release.
-- `FEDORA_EDITION`: `Workstation` (default) or a Fedora spin, named as in its ISO file name. The kernel
-  and RPMs are the same for every edition. The KDE edition has its own mirror layout and is not covered.
+- `FEDORA_EDITION`: `Workstation` (default), `KDE-Desktop` (the KDE Plasma Desktop edition) or a Fedora spin,
+  named as in its ISO file name. The kernel and RPMs are the same for every edition, and the RPMs already built are
+  reused: `FEDORA_EDITION=KDE-Desktop scripts/build-all.sh` downloads the KDE image and remasters it. The KDE image
+  was installed on the tested unit on 2026-09-30 ([`docs/verified.md`](../verified.md)); its installer is set to
+  open in Firefox, as on Workstation, because Fedora's own viewer for KDE drew it corrupted
+  ([`docs/fedora-media.md`](../fedora-media.md)). No spin has been tested, and step 50 stops on one whose image
+  ships no Firefox for the installer (LXQt and SoaS in 45 Beta).
 
 `build/rpms/` holds the RPMs of one Fedora release at a time: copy them elsewhere before building for another
 release.
@@ -106,10 +111,10 @@ never touches the host; what each one asserts in detail is in [`docs/pipeline.md
   does, next to the kernel already there and with their scriptlets, then the support RPM, and checks both packages,
   the boot entry with the Denali DTB, the initramfs and the kernel arguments, the new kernel as the saved GRUB
   default, the regenerated menu, and that removing the new kernel puts the previous one back.
-- Step 60, optional, checks the root step 50 left behind: RPM dependencies, loadable binaries, the installer, the
-  firmware against the device tree, the SP11 build in place of the stock kernel, the sensors stack, the libcamera
-  rebuild in place of Fedora's, the boot entry and GRUB settings an installation would get (Denali DTB, kernel
-  arguments) and the Windows GRUB entry.
+- Step 60, optional, checks the root step 50 left behind: RPM dependencies, loadable binaries, the installer and
+  the viewer it opens in (Firefox), the firmware against the device tree, the SP11 build in place of the stock
+  kernel, the sensors stack, the libcamera rebuild in place of Fedora's, the boot entry and GRUB settings an
+  installation would get (Denali DTB, kernel arguments) and the Windows GRUB entry.
 
 ## Building the sensors RPMs alone
 

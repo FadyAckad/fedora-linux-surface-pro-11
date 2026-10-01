@@ -21,9 +21,9 @@ a guide says only what concretely works.
   fork pins (`KERNEL_PATCH_*` in `sp11.conf`) or SELinux.
 - `docs/kernel-patches.md`: the patch manifest: the kernel fork's branch, where each commit comes from, what it is
   needed for, what was left out of v23.2.
-- `docs/fedora-media.md`: the live media and Fedora's live menu, GRUB, Anaconda's installation order, the
-  kernel-install plugin, the live initramfs and root, `kernel-uki-dtbloader`, the dnf repository override, and the
-  Fedora 45 differences. Read before touching steps 50 and 60, GRUB, the installer
+- `docs/fedora-media.md`: the live media and Fedora's live menu, GRUB, Anaconda's installation order and the
+  installer's viewer, the kernel-install plugin, the live initramfs and root, `kernel-uki-dtbloader`, the dnf
+  repository override, and the Fedora 45 differences. Read before touching steps 50 and 60, GRUB, the installer
   path or a Fedora release switch.
 - `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors), tablet
   mode and auto-rotation; its dated history is at the end. Read before touching steps 45, 46 and 75,

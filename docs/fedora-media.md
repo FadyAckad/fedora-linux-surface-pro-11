@@ -11,11 +11,13 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   `Fedora-Workstation-iso-<n>-<arch>-<stamp>-CHECKSUM` — so each branch spells its own out rather than deriving one
   from another. The file body is the same clearsigned BSD digest in all three, so the
   `sha256sum -c --ignore-missing` check is unchanged.
-- `FEDORA_EDITION` (default `Workstation`) picks the desktop; any other value is a spin, named as in its ISO file
-  name. Every spin of a compose sits under `Spins/` and shares one CHECKSUM whose product is `Spins`
-  (`Fedora-Spins-44-1.7-aarch64-CHECKSUM`), hence the separate `FEDORA_PRODUCT`. Workstation names resolve exactly
-  as before the switch existed. KDE is its own product (`KDE/`, `Fedora-KDE-44-1.7-aarch64-CHECKSUM`,
-  `Fedora-KDE-Desktop-Live-...`) and is not covered.
+- `FEDORA_EDITION` (default `Workstation`) picks the desktop, named as in its ISO file name: `KDE-Desktop` is the
+  KDE Plasma Desktop edition, any other value a spin. Every spin of a compose sits under `Spins/` and shares one
+  CHECKSUM whose product is `Spins` (`Fedora-Spins-44-1.7-aarch64-CHECKSUM`), hence the separate `FEDORA_PRODUCT`.
+  Workstation names resolve exactly as before the switch existed. KDE is its own product: directory `KDE/`,
+  CHECKSUM `Fedora-KDE-iso-45_Beta-1.3-aarch64-CHECKSUM` (GA: `Fedora-KDE-44-1.7-aarch64-CHECKSUM`), ISO
+  `Fedora-KDE-Desktop-Live-...`, so its product (`KDE`) differs from the edition name in the ISO (`KDE-Desktop`).
+  `KDE-Mobile` is a spin under `Spins/`.
 
 ## ISO layout
 
@@ -27,6 +29,19 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   `/boot/aarch64/loader/grub2/fonts/unicode.pf2` (step 50 maps `sp11-console.pf2` in beside it, lifted out of the
   live root rather than generated a second time). `xorriso ... -boot_image any replay -map ...` reproduces the
   layout; `50-build-iso.sh` reads these paths from the ISO instead of assuming them.
+- KDE Plasma Desktop (`Fedora-KDE-Desktop-Live-45_Beta-1.3.aarch64.iso`, 3.4 GB, volume id `Fedora-KDE-Live-45`,
+  read on 2026-09-30): the same kiwi layout, loader paths and live menu (three entries, `set default="1"`), so step
+  50 remasters it unchanged. Its live root (Plasma 6.7.4, 2191 packages) carries the stock kernel 7.2.0-61 as
+  `kernel`, `kernel-modules{,-core,-extra}` and `kernel-uki-dtbloader` like Workstation, Anaconda 45.22 with
+  `anaconda-webui`, and already `spdlog`, `fmt`, `inih`, `inih-cpp` and every sensors dependency, so step 50
+  installs no dependency RPM. Of libcamera it has `libcamera` and `libcamera-ipa` (plus PipeWire's libcamera
+  plugin), and it ships Fedora's `iio-sensor-proxy`; step 50 replaces all three with the SP11 builds. KWin reads the
+  orientation and the light level from iio-sensor-proxy over D-Bus itself (`net.hadess.SensorProxy`, not through
+  `qt6-qtsensors`), and its package requires `iio-sensor-proxy`, which the SP11 build satisfies. Steps 60, 35, 46
+  and 48 pass on that root. Installed on the device on 2026-09-30 (`docs/verified.md`); the installer needed
+  Firefox (see Anaconda).
+  `sp11-sensors-check` asks mutter for `PanelOrientationManaged`, which a Plasma session answers with a D-Bus
+  error; the rest of its output applies.
 
 ## GRUB image, font and modules
 
@@ -99,6 +114,29 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   truncated again and grub2-mkconfig rewrites every entry's options and `/etc/kernel/cmdline` from Anaconda's
   arguments, after the kernel-install plugin ran. The entry's `devicetree` line, the initramfs and the removed
   denylist survive; the GRUB settings and the SP11-only arguments do not.
+- The Web UI's viewer is `webui_web_engine` in the `[User Interface]` section: `firefox` in the `fedora` profile
+  Workstation's derives from, `slitherer` (a QtWebView runner on Qt WebEngine, package `slitherer`) in the KDE
+  edition's profile (`/etc/anaconda/profile.d/fedora-kde.conf`) and in those of the spins that have one (COSMIC and
+  SoaS have none in Anaconda 45.22 and resolve to `fedora`). `/usr/bin/anaconda` reads the defaults, the profile
+  detected from os-release and then `/etc/anaconda/conf.d/*.conf`, and writes the result to
+  `/run/anaconda/anaconda.conf`, from which `/usr/libexec/anaconda/webui-desktop` greps the viewer and starts it as
+  the live user. In slitherer the installer is drawn corrupted on the device (KDE 45 Beta image, 2026-09-30:
+  truncated text, the language list missing, stale window contents) while the Plasma desktop around it draws
+  correctly. It is slitherer's GPU rendering: started with `QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu`, it draws a
+  page correctly on the device, while KHelpCenter, a widget-based user of the same Qt WebEngine, draws correctly
+  with the GPU on the installed system (2026-09-30), so the fault is not the engine as such and nothing system-wide
+  is changed. Two differences between slitherer and KHelpCenter were not separated: slitherer shows the page in
+  QtWebView's Qt Quick `WebView`, and Fedora's build of it (`slitherer-0~git20251108.d230dba-6.fc45`) forces
+  `QT_QPA_PLATFORM=xcb` with a patch its spec calls temporary (RHBZ 2483236), so in the Plasma live session, which
+  is Wayland only, it is an XWayland client; nothing forces a platform on KHelpCenter
+  (`QT_QPA_PLATFORM=xcb khelpcenter` on the installed system would separate them). Re-check slitherer when Fedora's
+  build drops the patch. Step 50 therefore writes `/etc/anaconda/conf.d/90-sp11-webui.conf`
+  (`webui_web_engine = firefox`) into a root that has `/usr/bin/slitherer`, whatever viewer its profile names, and
+  stops when such a root has no Firefox (of the 45 Beta 1.3 aarch64 images LXQt and SoaS, by their package lists in
+  Koji); the Workstation root has no slitherer and stays as it is. Step 60 resolves the viewer with the root's own
+  pyanaconda the way `/usr/bin/anaconda` does and wants `firefox` (the KDE root without the drop-in fails it).
+  Firefox as the viewer passed on the device with Workstation and, on 2026-09-30, under Plasma (what Fedora's
+  Kinoite profile sets as well).
 
 ## kernel-install and BLS entries
 

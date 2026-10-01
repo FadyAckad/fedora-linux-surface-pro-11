@@ -19,6 +19,9 @@ SPEC_DIR="$SP11_ROOT/rpm"
 # The SP11 patch set: a partial clone of the kernel fork's pinned commits, and the series step 10 writes from it.
 KERNEL_PATCH_GIT="$CACHE_DIR/kernel-patches.git"
 KERNEL_PATCH_SERIES="$CACHE_DIR/kernel-patches/$KERNEL_PATCH_COMMIT"
+# Anaconda drop-in step 50 writes into a live root that has slitherer, so the installer opens in Firefox; step 60
+# checks it.
+ANACONDA_WEBUI_DROPIN="etc/anaconda/conf.d/90-sp11-webui.conf"
 mkdir -p "$CACHE_DIR" "$WORK_DIR" "$RPM_DIR" "$OUT_DIR"
 
 log()  { printf '\033[1;34m[sp11]\033[0m %s\n' "$*" >&2; }

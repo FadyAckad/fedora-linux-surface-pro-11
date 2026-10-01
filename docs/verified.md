@@ -347,3 +347,20 @@ Bluetooth, the pen, tablet mode and the other by-hand checks, suspend and resume
 libcamera `0.7.2-3.sp11.6`). `sp11-diag`'s camera section counts `48 media, video and subdevice nodes` (3.3 counted
 51, with the `/dev/media` directory of by-path links systemd 262's udev creates), lists only `/dev/media0` and the
 buffer devices, and prints the media graph without the `Failed to enumerate /dev/media (-21)` line.
+
+## Fedora 45 Beta KDE Plasma Desktop: live session and installation (2026-09-30)
+
+`Fedora-KDE-Desktop-Live-45_Beta-1.3` remastered with kernel `7.2.7-300.sp11.9`, support RPM 3.4, the sensors stack
+(hexagonrpc `0.5.0-8`, sp11-sensors 1.10) and libcamera `0.7.2-3.sp11.6`: the RPMs already built for Workstation,
+none rebuilt. First build (sha256 `d6c57aeb…d80a`), from the owner's recording of the live session: the Plasma
+desktop draws correctly at 2880x1920, scale 200%; the installer's window, opened in slitherer (Qt WebEngine)
+as Fedora's KDE profile sets it, was corrupted (truncated text, the language list missing, stale window contents).
+With `QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu` slitherer draws a web page correctly; KHelpCenter, on the same Qt
+WebEngine, draws correctly with the GPU on the installed system. The second build (sha256 `f84b60ba…cc01`) opens
+the installer in Firefox (`/etc/anaconda/conf.d/90-sp11-webui.conf`, `docs/fedora-media.md`); the installation from
+it succeeded. Confirmed by the owner on the installed Plasma system: the cameras, Bluetooth, the keyboard, the pen,
+multi-touch, tablet mode, auto-rotation and automatic screen brightness. On 2026-10-01 the owner confirmed the rest
+of the README's feature table there too: the display with GPU acceleration, the brightness slider, Wi-Fi, the
+speakers and the microphone, battery status, power profiles, USB-C charging and data, suspend and resume, Flatpak,
+the Windows entry in the GRUB menu, the Flex Keyboard and Slim Pen 2 pairings shared with Windows, the sensor
+readings and the front camera's light.

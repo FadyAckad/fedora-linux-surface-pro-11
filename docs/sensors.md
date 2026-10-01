@@ -335,3 +335,5 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
     head of 2026-09-20, on no branch since 2026-09-21); `.text` and `.rodata` of its four binaries are
     byte-identical to 0.5.0-7's. Built and checked in the live root (steps 45 and 46, also as an upgrade from
     0.5.0-7), not on the device.
+  - 2026-09-30: hexagonrpc 0.5.0-8 and sp11-sensors 1.10 on the device with the KDE Plasma installation: tablet
+    mode, auto-rotation and automatic screen brightness confirmed (`docs/verified.md`).

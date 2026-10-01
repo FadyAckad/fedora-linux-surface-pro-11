@@ -42,7 +42,7 @@ libcamera patches in `payload/camera/` (see Cameras below):
   Robert Bozik's faster exposure control with digital gain, from his software ISP series on libcamera-devel
   (2026-08-26), backported; this project's analogue-gain bound, exposure target, tuning, GPU downscaling fix and
   gain-code rounding. Each third-party patch names its author.
-- Base media: Fedora Workstation live images, or a spin (`FEDORA_EDITION`). Bring-up notes:
+- Base media: Fedora Workstation or KDE Plasma Desktop live images, or a spin (`FEDORA_EDITION`). Bring-up notes:
   rjindael/fedora-surface-pro-11.
 - ADSP/CDSP/GPU firmware: proprietary Qualcomm and Microsoft files copied from your own Windows
   DriverStore at build time. Never part of this repository; see

@@ -16,37 +16,39 @@ Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`) with the kernel a
 (`7.2.7-300.sp11.9.fc45.aarch64`, installed as an update on 2026-09-28), support RPM 3.4 and the libcamera RPMs
 `0.7.2-3.sp11.6`, on an installation from the ISO built on 2026-09-24.
 [`docs/verified.md`](docs/verified.md) has the details and what was confirmed with earlier kernels, including
-ooaklee's v23 tree the project built until 2026-09-22.
+ooaklee's v23 tree the project built until 2026-09-22. The KDE Plasma Desktop image
+(`FEDORA_EDITION=KDE-Desktop`) was installed on the same unit on 2026-09-30 with the same kernel and RPMs; its
+column holds what was confirmed there.
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.7-300 (sp11.9) |
-|---|:-:|
-| Boot from the internal NVMe drive | yes |
-| Display with GPU acceleration | yes |
-| Backlight (brightness slider) | yes |
-| Wi-Fi | yes |
-| Bluetooth | yes |
-| Touchscreen | yes |
-| Multi-touch (pinch, two-finger scroll) | yes |
-| Pen | yes |
-| Speakers | yes |
-| Microphone | yes |
-| Keyboard and touchpad | yes |
-| Battery status | yes |
-| Power profiles (GNOME's Power Mode sets the Surface's platform profile) | yes |
-| USB-C charging and data | yes |
-| Suspend and resume | yes |
-| Flatpak | yes |
-| Windows in the GRUB menu | yes |
-| Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes |
-| Sensors: readings from the accelerometer, gyroscope, magnetometer/compass and ambient light sensor (`ssccli`, `monitor-sensor`), with the sensors RPMs | yes |
-| Sensors: auto-rotation on the desktop with the keyboard folded back or detached (GNOME's auto-rotate button), with the sensors RPMs | yes |
-| Tablet mode: keyboard and touchpad off while the keyboard is folded back | yes |
-| Sensors: automatic screen brightness | yes |
-| 5G modem | no |
-| Cameras: front and rear in GNOME Snapshot and Firefox, with the libcamera RPMs | yes |
-| Front camera's light while the camera is in use | yes |
-| IR camera (face login) | no |
-| NPU (AI acceleration) | no |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.7-300 (sp11.9) | Fedora 45 Beta KDE Plasma Desktop, same kernel and RPMs |
+|---|:-:|:-:|
+| Boot from the internal NVMe drive | yes | yes |
+| Display with GPU acceleration | yes | yes |
+| Backlight (brightness slider) | yes | yes |
+| Wi-Fi | yes | yes |
+| Bluetooth | yes | yes |
+| Touchscreen | yes | yes |
+| Multi-touch (pinch, two-finger scroll) | yes | yes |
+| Pen | yes | yes |
+| Speakers | yes | yes |
+| Microphone | yes | yes |
+| Keyboard and touchpad | yes | yes |
+| Battery status | yes | yes |
+| Power profiles (GNOME: its Power Mode sets the Surface's platform profile) | yes | yes |
+| USB-C charging and data | yes | yes |
+| Suspend and resume | yes | yes |
+| Flatpak | yes | yes |
+| Windows in the GRUB menu | yes | yes |
+| Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes | yes |
+| Sensors: readings from the accelerometer, gyroscope, magnetometer/compass and ambient light sensor (`ssccli`, `monitor-sensor`), with the sensors RPMs | yes | yes |
+| Sensors: auto-rotation on the desktop, with the sensors RPMs (GNOME: its auto-rotate button, with the keyboard folded back or detached) | yes | yes |
+| Tablet mode: keyboard and touchpad off while the keyboard is folded back | yes | yes |
+| Sensors: automatic screen brightness | yes | yes |
+| 5G modem | no | no |
+| Cameras: front and rear, with the libcamera RPMs (on Workstation in GNOME Snapshot and Firefox) | yes | yes |
+| Front camera's light while the camera is in use | yes | yes |
+| IR camera (face login) | no | no |
+| NPU (AI acceleration) | no | no |
 
 *yes*: confirmed on the tested unit. *no*: not covered by this project.
 
@@ -84,8 +86,15 @@ Then build (the kernel takes about an hour after the downloads; keep WSL running
 scripts/build-all.sh
 ```
 
+For the KDE Plasma Desktop image instead of Workstation (the kernel and RPMs are the same and are reused):
+
+```bash
+FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
+```
+
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.9.fc45.aarch64.iso`, with a `.sha256` beside it. Every
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.9.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.9.fc45.aarch64.iso`, with a `.sha256` beside it. Every
 option and step: [`docs/guide/build.md`](docs/guide/build.md). Writing the media and installing:
 [`docs/guide/install.md`](docs/guide/install.md). Updating an installed system:
 [`docs/guide/update.md`](docs/guide/update.md).

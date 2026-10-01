@@ -104,6 +104,27 @@ trap cleanup EXIT
 r mount -t overlay overlay -o "lowerdir=$ROOTFS,upperdir=$T/upper,workdir=$T/work" "$T/merged" || die "overlay mount failed"
 M="$T/merged"
 for d in dev proc sys; do r mount --rbind "/$d" "$M/$d"; r mount --make-rslave "$M/$d"; done
+# The installer's window opens in Firefox, the viewer confirmed on the device: the configuration as /usr/bin/anaconda
+# builds it (defaults, the profile detected from os-release, conf.d); webui-desktop takes the viewer from the copy
+# Anaconda writes under /run. Step 50 adds a drop-in to a root that has slitherer (docs/fedora-media.md, Anaconda).
+# The log's "Failed to setup DBus connection" line is libblockdev, loaded with pyanaconda, finding no system bus in
+# the chroot: not an error.
+viewer=$(r chroot "$M" /usr/bin/python3 -B - 2>"$T/anaconda-conf.log" <<'EOF'
+from pyanaconda.core.configuration.anaconda import AnacondaConfiguration
+from pyanaconda.core.util import get_os_release_value
+c = AnacondaConfiguration.from_defaults()
+c.set_from_detected_profile(get_os_release_value("ID"), get_os_release_value("VARIANT_ID"))
+c.set_from_files()
+p = c.get_parser()
+print(p.get("Profile", "profile_id", fallback=""), p.get("User Interface", "webui_web_engine", fallback=""))
+EOF
+) || warn "Anaconda's configuration did not load (see $T/anaconda-conf.log)"
+profile=${viewer% *}; engine=${viewer##* }
+log "installer: profile ${profile:-unknown}, viewer ${engine:-unknown}"
+check test "$engine" = firefox
+if r test -x "$ROOTFS/usr/bin/slitherer"; then check r grep -qx 'webui_web_engine = firefox' "$ROOTFS/$ANACONDA_WEBUI_DROPIN"
+else check r test ! -e "$ROOTFS/$ANACONDA_WEBUI_DROPIN"; fi
+check r test -x "$ROOTFS/usr/bin/firefox"
 # Anaconda's bootloader step writes /etc/default/grub from scratch (only the preserved live arguments reach
 # GRUB_CMDLINE_LINUX) and its grub2-mkconfig writes /etc/kernel/cmdline from it; its payload step has already turned
 # the live media's modprobe.blacklist= into anaconda-denylist.conf. kernel-install add comes next. (On a BTRFS root

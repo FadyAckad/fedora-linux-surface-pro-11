@@ -48,7 +48,9 @@ that resets the SoC.
 the daemon and what the framework wrote, one reading per sensor (`ssccli`), what iio-sensor-proxy sees
 (`monitor-sensor`) and the tablet-mode state GNOME uses. GNOME offers its auto-rotate button while the
 keyboard is folded back or detached. Its automatic screen brightness uses the same light sensor
-(confirmed on 2026-09-24). The gyroscope and magnetometer have no desktop consumer and are read with
+(confirmed on 2026-09-24). Under KDE Plasma, auto-rotation and automatic brightness were confirmed on
+2026-09-30; there the check's query to GNOME's mutter ends in a D-Bus error, and the rest of its output
+applies. The gyroscope and magnetometer have no desktop consumer and are read with
 `ssccli --sensor gyroscope` / `--sensor magnetometer`.
 
 Reference implementation: denisix/ubuntu-surface-pro-11 (`SENSORS.md`), which reports all 13 sensors of the

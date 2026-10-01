@@ -101,13 +101,14 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   into `libcamera.so` (`ipa_signatures_ok` in `lib.sh`; Fedora's own 0.7.2-3 fails it). `48-verify-camera-rpms.sh`
   installs `libcamera`, `libcamera-ipa` and `libcamera-tools` over the build the live root carries in an overlay
   (Fedora's before step 50 ran with the rebuild, the rebuild itself after it: a reinstall) (no extra dependency RPMs
-  are needed: the Workstation root has every library `cam` links), checks the linkage of the library, the IPA, `cam`
-  and PipeWire's libcamera plugin, repeats the package checks on the installed files and parses both cameras' tuning
-  files with the root's Python. Step 50 takes the three RPMs, plus the rebuild of every other libcamera subpackage
-  the live root carries (each requires the same release; the Workstation 45 Beta root has only `libcamera` and
-  `libcamera-ipa`), refuses RPMs whose release lacks `LIBCAMERA_RPM_SUFFIX`, installs them with the other SP11 RPMs
-  (they have no scriptlets), stops when a package of Fedora's build is left, and copies the three to `/sp11/rpms`;
-  step 60 checks them with `rpm -V` and the IPA signatures in the remastered root.
+  are needed: the Workstation and KDE Desktop roots have every library `cam` links), checks the linkage of the
+  library, the IPA, `cam` and PipeWire's libcamera plugin, repeats the package checks on the installed files and
+  parses both cameras' tuning files with the root's Python. Step 50 takes the three RPMs, plus the rebuild of every
+  other libcamera subpackage the live root carries (each requires the same release; the Workstation and KDE Desktop
+  45 Beta roots have only `libcamera` and `libcamera-ipa`), refuses RPMs whose release lacks
+  `LIBCAMERA_RPM_SUFFIX`, installs them with the other SP11 RPMs (they have no scriptlets), stops when a package of
+  Fedora's build is left, and copies the three to `/sp11/rpms`; step 60 checks them with `rpm -V` and the IPA
+  signatures in the remastered root.
 
 ## Versions and content pins
 

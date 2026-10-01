@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# Step 6: remaster the Fedora live ISO (FEDORA_EDITION: Workstation or a spin) for the Surface Pro 11.
+# Step 6: remaster the Fedora live ISO (FEDORA_EDITION: Workstation, KDE Plasma Desktop or a spin) for the Surface Pro 11.
 #   - extract the LZMA EROFS live root, replace Fedora's stock kernel packages with the SP11 build of the same packages
 #     (scripts/20), install sp11-surface-support, sp11-iptsd and the sensors stack (hexagonrpc, libssc,
 #     iio-sensor-proxy, sp11-sensors; inert on the live media, see below), and replace Fedora's libcamera with the
@@ -46,19 +46,22 @@ done
 [ "$SP11_DTB_SELECTED" = "$SP11_DTB" ] || die "hardware.env selects DTB $SP11_DTB_SELECTED, config expects $SP11_DTB"
 
 W="$WORK_DIR/iso"; ROOTFS="$W/rootfs"; OUT="$OUT_DIR/$OUTPUT_ISO_NAME"
-# User-visible name of the base media ("Xfce 44", "Workstation 45 Beta"): pre-release composes carry an
-# underscore (45_Beta) that reads badly in a boot menu, and the ISO's README says plainly when the media is
-# not a supported Fedora release.
-MEDIA_LABEL="$FEDORA_EDITION ${FEDORA_MEDIA_VERSION/_/ }"
+# Name of the base media in the ISO's README ("Xfce 44", "Workstation 45 Beta", "KDE Desktop 45 Beta"): the ISO
+# names join words with a hyphen (KDE-Desktop) and pre-release composes carry an underscore (45_Beta), which reads
+# badly in its text. The README also says plainly when the media is not a supported Fedora release.
+EDITION_LABEL="${FEDORA_EDITION//-/ }"
+MEDIA_LABEL="$EDITION_LABEL ${FEDORA_MEDIA_VERSION/_/ }"
 case "$FEDORA_TARGET" in
   ga) MEDIA_NOTE="Fedora $MEDIA_LABEL, compose $FEDORA_COMPOSE" ;;
   *)  MEDIA_NOTE="Fedora $MEDIA_LABEL, compose $FEDORA_COMPOSE - PRE-RELEASE media, not a supported Fedora release" ;;
 esac
-# The hardware notes in the ISO's README were verified with the Workstation image; a spin shares the kernel,
-# firmware and RPMs but not that test history, and its README says so.
+# The hardware notes in the ISO's README were verified with the Workstation image; another edition shares the
+# kernel, firmware and RPMs but not that test history, and its README says so. Part of them was confirmed with the
+# KDE edition as well (docs/verified.md).
 case "$FEDORA_EDITION" in
   Workstation) EDITION_NOTE="Fedora Workstation (GNOME)" ;;
-  *)           EDITION_NOTE="Fedora $FEDORA_EDITION spin; the hardware notes below were verified with the Workstation image" ;;
+  KDE-Desktop) EDITION_NOTE="Fedora KDE Plasma Desktop; the notes below were verified with Workstation, in part also under Plasma" ;;
+  *)           EDITION_NOTE="Fedora $EDITION_LABEL spin; the hardware notes below were verified with the Workstation image" ;;
 esac
 mkdir -p "$W"
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(date -u +%s)}"
@@ -190,6 +193,16 @@ if as_root test -d "$ROOTFS/boot/loader/entries"; then
 fi
 [ "$(as_root find "$ROOTFS/boot" -maxdepth 1 -name 'vmlinuz-*' -printf '%f\n')" = "vmlinuz-$KERNEL_ABI" ] || die "unexpected kernels left in /boot"
 as_root rm -f "$ROOTFS/etc/modprobe.d/anaconda-denylist.conf"
+# The installer's window. Workstation's Anaconda profile opens the Web UI in Firefox; the KDE edition and the spins
+# ship slitherer (Qt WebEngine) for it, which draws it corrupted on the device (docs/fedora-media.md, Anaconda, has
+# the observations). /etc/anaconda/conf.d is read after the profile, so a drop-in there selects Firefox; it goes
+# into every root that has slitherer, whatever viewer that root's profile names.
+if as_root test -x "$ROOTFS/usr/bin/slitherer"; then
+  as_root test -x "$ROOTFS/usr/bin/firefox" || die "the live root has slitherer and no Firefox to open the installer in instead"
+  printf '%s\n' '# Surface Pro 11: the installer in Firefox instead of slitherer (scripts/50-build-iso.sh).' \
+    '[User Interface]' 'webui_web_engine = firefox' | as_root tee "$ROOTFS/$ANACONDA_WEBUI_DROPIN" >/dev/null
+  log "installer: Firefox selected by /$ANACONDA_WEBUI_DROPIN (the root has slitherer)"
+fi
 as_root tee "$ROOTFS/etc/default/grub" >/dev/null <<GRUB
 GRUB_DEFAULT=saved
 GRUB_DISABLE_SUBMENU=true
@@ -316,7 +329,7 @@ rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM
 render "$PAYLOAD_DIR/README-iso.txt.in" "$W/sp11/README.txt" RELEASE="$MEDIA_LABEL" ABI="$KERNEL_ABI" \
   KERNEL="Fedora ${KERNEL_SRPM%.src.rpm} + SP11 revision $KERNEL_SP11_REV ($KERNEL_PATCH_BASE + ${KERNEL_PATCH_COMMIT:0:12})" \
   DTB="$SP11_DTB" DATE="$(date -u +%FT%TZ)" SKU="$SP11_SKU" MEDIA="$MEDIA_NOTE" \
-  EDITION="$FEDORA_EDITION" EDITION_NOTE="$EDITION_NOTE"
+  EDITION="$EDITION_LABEL" EDITION_NOTE="$EDITION_NOTE"
 
 ## 10. Assemble the ISO by replaying the source boot layout (GPT, El Torito, appended ESP), then implant the
 ##     checksum Fedora's media check ("Test this media", the live menu's default entry) verifies; xorriso does not

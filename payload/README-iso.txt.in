@@ -19,8 +19,8 @@ Sensors:       hexagonrpcd, libssc and iio-sensor-proxy with its Qualcomm Sensor
                and serve the accelerometer, light sensor and compass on the installed system.
 Cameras:       libcamera is this project's rebuild of Fedora's package (the front camera's IMX681 sensor, a faster
                exposure control with digital gain, the exposure tuned on the device), with its "cam" tool. The front
-               and rear cameras work in GNOME Snapshot and Firefox on the installed system; the infrared camera is
-               not supported.
+               and rear cameras work on the installed system (verified in GNOME Snapshot and Firefox on
+               Workstation); the infrared camera is not supported.
 
 RPMs used to build this media are under /sp11/rpms.
 
