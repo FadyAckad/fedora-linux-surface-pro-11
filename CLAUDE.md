@@ -28,10 +28,9 @@ a guide says only what concretely works.
 - `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors), tablet
   mode and auto-rotation; its dated history is at the end. Read before touching steps 45, 46 and 75,
   `payload/sensors/` or the hexagonrpc fork.
-- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), libcamera rebuilt
-  with the IMX681 support and a faster exposure control (steps 47 and 48, `payload/camera/`), what the host checks
-  prove and what the device has to show. Read before touching steps 47 and 48, `payload/camera/`,
-  `rpm/libcamera.spec.in` or the kernel fork's camera commits.
+- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), Fedora's libcamera
+  (the project's rebuild was dropped on 2026-10-02), the raw-capture probe, what the device has shown. Read before
+  touching `payload/camera/` or the kernel fork's camera commits.
 - `docs/verified.md`: what has been confirmed on the device, by date and package version. Read before stating
   that something works; add to it after a device round.
 - `docs/guide/*.md`: the user guides (`build`, `install`, `update`, `support-rpm-history`, `bluetooth-pairings`,
@@ -45,16 +44,12 @@ a guide says only what concretely works.
   (spec templates).
 - `payload/`: payload of the support RPM (`payload/15-sp11-surface.install` is the kernel-install plugin), the
   kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files and the unpackaged
-  posture probe) and `payload/camera/` (libcamera's patches, the unpackaged raw-capture probe). The kernel
-  patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in `sp11.conf`.
+  posture probe) and `payload/camera/` (the unpackaged raw-capture probe). The kernel patches are commits of the
+  project's kernel fork (GPL-2.0, authors in each commit), pinned in `sp11.conf`.
 - `docs/`: the working notes; `docs/guide/`: the user guides. `build/` (git-ignored): caches, work trees, RPMs and
   output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
   command with its expected output in `reference.md`, hand-off templates, the DSP ping tool).
-- `.claude/skills/sp11-camera-update/`: camera maintenance as a Claude Code skill (libcamera for a new Fedora
-  release, tuning and patch changes, device rounds; `reference.md`, `handoff.md`) with host models of the exposure
-  control (`agc-model.py`) and the GPU debayering (`debayer-model.sh`), and the probe against simulated sensors
-  (`probe-fake.sh`).
 
 ## Rules
 
@@ -83,9 +78,7 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec), `IIO_SENSOR_PROXY_RPM_SUFFIX` (its
   template; for a new SRPM its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum, and
   `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`), `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the registry
-  export), `LIBCAMERA_RPM_SUFFIX` (`rpm/libcamera.spec.in`, `payload/camera/`; for a new SRPM its pin
-  `LIBCAMERA_SRPM` with URL and checksum, and `LIBCAMERA_BASE_SPEC_SHA256`; a new version needs the patches rebased
-  or ported: the `sp11-camera-update` skill).
+  export).
 
 ## Conventions
 

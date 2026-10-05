@@ -22,7 +22,7 @@ Revision 1 (2026-09-23) was extracted from the kernel the project had verified o
 linux_ms_dev_kit-sp11 release `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (commit `ce78e6ebc3d7`) with the kernel.org 7.2.5
 stable update, built as `7.2.5-jg-0sp11v23.2-qcom-x1e`. That tree is Ubuntu's qcom-x1e concept kernel with jglathe's
 X1E tree (jglathe/linux_ms_dev_kit) and ooaklee's Surface Pro 11 work on top. The extraction kept 61 patches; in the
-numbering of the current branch `sp11/7.2.7`:
+numbering of the current branch `sp11/7.2.8`:
 
 - 0001–0041: commits of jglathe's 7.2.0 tree (`746b3477`) that change code or device-tree nodes this machine uses,
   as the original commits (author, message and diff; 0014 without a jglathe-only X1P file, 0030 with only its
@@ -89,6 +89,12 @@ GNOME Snapshot gets) reported 432 instead of 216 MHz, which halved the line and 
 so a control set from userspace meanwhile no longer interleaves with them. Revision 9 went to the fork on 2026-09-28
 (head `30c57e66`, tree `5ef459c8`), after the device round of the kernel built from that tree.
 
+Revision 10 (2026-10-02) is the branch `sp11/7.2.8`: the 74 commits of `sp11/7.2.7` rebased onto `v7.2.8` in one
+step (`git rebase --onto v7.2.8 v7.2.7`) without a conflict. None is upstream in 7.2.8, none needed an adaptation
+and none is new, so every number stays; five of 7.2.8's stable commits touch files of the series, none of them its
+code (`docs/kernel.md`). It went to the fork on 2026-10-05 (head `c9a90d97`, tree `6b506039`), after the device
+round of the kernel built from that tree.
+
 Proven on the host before the first build: the series applied to kernel.org 7.2.5 reproduces 70 of the 80 files it
 touches byte for byte from the v23.2 source; the other 10 differ only by the left-out parts listed below. The Denali
 OLED device tree it builds has the same enabled nodes as v23.2's, minus the camera, the privacy LED, the PMK8550 ADC
@@ -115,6 +121,13 @@ Revision 9: `drivers/media/i2c/` compiles without an error or a warning (the two
 `checkpatch.pl --strict` reports only the missing `Signed-off-by`. Its packages hold the same modules as revision
 8's; the IMX681 module imports `v4l2_ctrl_handler_setup` instead of `__v4l2_ctrl_handler_setup`, and the OV13858
 module's code differs from revision 8's only in the constant of the pixel rate's minimum.
+
+Proven on the host for revision 10: Fedora's `linux-7.2.8.tar.xz` holds exactly the `v7.2.8` tree (every path, mode
+and blob); `git range-diff` against `sp11/7.2.7` finds every patch unchanged, with the same authors, dates and
+messages; with Fedora's 7.2.8 configuration plus `kernel-local`, every directory the series touches compiles without
+an error or a warning, as do all arm64 device trees; `git am` of the series onto `v7.2.8` reproduces the branch's
+tree (one trailing-whitespace warning, as with 7.2.7). Its packages hold the same 5664 modules as revision 9's, and
+the Denali OLED DTB is byte for byte revision 9's (7.2.8 changes no Qualcomm device tree).
 
 ## Contents
 

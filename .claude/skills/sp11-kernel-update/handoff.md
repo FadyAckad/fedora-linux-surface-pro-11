@@ -42,7 +42,7 @@ Cover, in this order, and keep the commands exactly as below:
 10. Crypto engine: `grep -E '^driver +: .*-qce$' /proc/crypto` and
     `sudo journalctl -k -b --no-pager | grep -E 'alg: |qce'` — `sha256-qce` and `hmac-sha256-qce`, nothing with
     `aes`; no `self-tests ... failed`.
-11. Cameras, as your user with no application using a camera (libcamera's rebuild installed): `cam -l`, then
+11. Cameras, as your user with no application using a camera (`cam` from `libcamera-tools`): `cam -l`, then
     `F=$(cam -l 2>/dev/null | sed -n 's/^\([0-9]*\): .*camera@1a)$/\1/p'); echo "front=$F"`,
     `cam -c "$F" -C300 >/dev/null 2>&1 & sleep 4; cat /sys/class/leds/white:camera-indicator/brightness; wait` and
     `cat /sys/class/leds/white:camera-indicator/brightness` — `Internal front camera`, `Internal back camera` and
@@ -74,6 +74,8 @@ rebuilt; which patches carry the maintainer as author. Steps:
 1. `mkdir -p ~/sp11-<new>-series && tar -xzf <folder>/sp11-<new>-series.tar.gz -C ~/sp11-<new>-series` and
    `ls ~/sp11-<new>-series | wc -l` — `<n>`.
 2. `cd <fork clone> && git status --short && git rev-parse 'v<new>^{commit}'` — no status lines; the tag's commit.
+   When the clone lacks the tag, `git fetch --no-tags <kernel.org stable URL> refs/tags/v<new>:refs/tags/v<new>`
+   before the `rev-parse` — `* [new tag]`.
 3. `git switch -c sp11/<new> v<new>` and `git am ~/sp11-<new>-series/*.patch` — the new branch; `<n>` `Applying:`
    lines and the known whitespace warnings; the signing key asks for its passphrase.
 4. `git rev-parse 'HEAD^{tree}'` and `git log --format=%G? v<new>..HEAD | sort | uniq -c` — `<tree>`; `<n> G`.

@@ -2,7 +2,8 @@
 
 Updating the support RPM, installing a new SP11 kernel next to the current one, and what dnf does with kernels. The
 RPMs come from `build/rpms/` after a build, or from the ISO the system was installed from, which carries every RPM
-it installed (kernel, support, iptsd, the sensors stack and, since 2026-09-28, libcamera) under `/sp11/rpms`.
+it installed (kernel, support, iptsd and the sensors stack; ISOs built from 2026-09-28 to 2026-10-02 also
+libcamera) under `/sp11/rpms`.
 Systems installed from ISOs built before 2026-09-22 need the one-time steps in
 [`docs/guide/troubleshooting.md`](troubleshooting.md).
 
@@ -46,5 +47,6 @@ The four sensors RPMs are updated together, in one transaction: [`docs/guide/sen
 
 ## Cameras
 
-The libcamera RPMs replace Fedora's libcamera; ISOs built since 2026-09-28 install them and carry them under
-`/sp11/rpms`: [`docs/guide/cameras.md`](cameras.md).
+The cameras use Fedora's libcamera, which `dnf upgrade` updates. A system installed from an ISO built from
+2026-09-28 to 2026-10-02 has the project's former libcamera rebuild instead, which `dnf upgrade` keeps; going back
+to Fedora's build: [`docs/guide/cameras.md`](cameras.md).

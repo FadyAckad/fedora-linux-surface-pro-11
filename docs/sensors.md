@@ -296,6 +296,20 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   carry the right time, the root's are two hours behind): systemd's "since … ago", early file times and
   `find -newer` against files written later are off, so the check measures the DSP's writes against
   `/run/sp11-sensors/attaches`, which the same clock stamped.
+- Auto-rotation after a wake (2026-10-03, KDE Plasma installation, kernel revision 10, libssc `54dd13e`): the
+  orientation sometimes stops updating after the system wakes, until iio-sensor-proxy is restarted
+  (`sudo systemctl restart iio-sensor-proxy`; owner). In the boot of that round's diagnostics the proxy used 92 % of
+  a core for its whole running time (2 min 45 s of CPU in about 3 min, around an 8.5-hour sleep; revision 9's
+  boot under GNOME: 178 ms in 6 min) and then died with SIGSEGV in libssc's `report_received`, inside two nested
+  `ssc_sensor_accelerometer_open_sync` calls, each from a D-Bus request, while the diagnostics probed the sensors.
+  libssc's source explains all three: its synchronous calls wait with a non-blocking
+  `g_main_context_iteration()` on the default context (a full core while waiting, and every other event of the
+  program, D-Bus requests included, runs inside the wait); iio-sensor-proxy's SSC drivers call `open_sync` and
+  `close_sync` from `set_polling`, so a release and a new claim during a pending open nest a second open; each
+  open keeps its report handler in the sensor's single `report_id`, and the open that completes first disconnects
+  the handler stored there, which is the nested open's. That open never completes, the proxy spins in its wait,
+  and the first open's handler stays connected to freed data, which a later report dereferences. Left as it is
+  (owner, 2026-10-05); a fix would go into libssc (a handler per request, a blocking wait).
 
 ## Upstream state
 
@@ -337,3 +351,5 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
     0.5.0-7), not on the device.
   - 2026-09-30: hexagonrpc 0.5.0-8 and sp11-sensors 1.10 on the device with the KDE Plasma installation: tablet
     mode, auto-rotation and automatic screen brightness confirmed (`docs/verified.md`).
+  - 2026-10-03: with kernel revision 10 on the KDE Plasma installation, auto-rotation stopping after some wakes and
+    the proxy's busy wait and crash, traced to libssc (Known issues).

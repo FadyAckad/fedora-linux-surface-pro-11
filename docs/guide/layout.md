@@ -7,16 +7,13 @@ What each file and directory of the repository is. The build tree's caches and o
   boot policy and the content pins.
 - `scripts/`: numbered pipeline steps, `lib.sh` (helpers), `build-all.sh`, the pairing export (`70`), and the
   sensors stack: `45`/`46` build and verify its RPMs inside `build-all.sh`, `75` exports this unit's registry from
-  Windows, once, outside the pipeline; the cameras' libcamera: `47`/`48` build and verify it inside
-  `build-all.sh`.
-- `rpm/`: spec templates for `sp11-surface-support`, `sp11-iptsd`, for the sensors stack (`hexagonrpc`, `libssc`,
-  `iio-sensor-proxy`, `sp11-sensors`) and for `libcamera` (Fedora's spec with the IMX681 support and a faster
-  exposure control); the kernel uses Fedora's own `kernel.spec`.
+  Windows, once, outside the pipeline.
+- `rpm/`: spec templates for `sp11-surface-support`, `sp11-iptsd` and for the sensors stack (`hexagonrpc`,
+  `libssc`, `iio-sensor-proxy`, `sp11-sensors`); the kernel uses Fedora's own `kernel.spec`.
 - `payload/`: payload of the support RPM, the kernel's configuration additions (`payload/kernel-local`), the README
   inside the ISO, and `payload/sensors/` (the files and helper scripts of `sp11-sensors`, hexagonrpc's sysusers
   entry and udev rule, and `sp11-sam-posture`, an unpackaged probe of the Surface Aggregator's cover and posture
-  state), and `payload/camera/` (libcamera's patches and `sp11-camera-probe`, an unpackaged measurement of the
-  cameras' raw output).
+  state), and `payload/camera/` (`sp11-camera-probe`, an unpackaged measurement of the cameras' raw output).
 - `images/`: the README's screenshot.
 - `LICENSE`: GPL-3.0-or-later for the repository's content (see [`docs/guide/credits.md`](credits.md)).
 - `CLAUDE.md`: entry point of the working notes (the index of `docs/`, rules for every session, references).

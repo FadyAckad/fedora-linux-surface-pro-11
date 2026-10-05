@@ -17,10 +17,8 @@ Installation:  run "Install to Hard Drive". The installed system boots this kern
 Sensors:       hexagonrpcd, libssc and iio-sensor-proxy with its Qualcomm Sensor Core drivers, plus this unit's
                sensor registry (sp11-sensors), are installed. They stay inactive on the live USB (the DSP is off)
                and serve the accelerometer, light sensor and compass on the installed system.
-Cameras:       libcamera is this project's rebuild of Fedora's package (the front camera's IMX681 sensor, a faster
-               exposure control with digital gain, the exposure tuned on the device), with its "cam" tool. The front
-               and rear cameras work on the installed system (verified in GNOME Snapshot and Firefox on
-               Workstation); the infrared camera is not supported.
+Cameras:       the front and rear cameras through Fedora's libcamera ("cam" comes with libcamera-tools); the
+               infrared camera is not supported.
 
 RPMs used to build this media are under /sp11/rpms.
 
@@ -31,5 +29,4 @@ Credits:       kernel: Fedora's kernel package with the SP11 patches from ooakle
                and the upstream work it carries (GPL-2.0, authors in each patch); audio topology, UCM and
                pen integration from ooaklee/linux-surface-pro-11-oe; iptsd from linux-surface/iptsd;
                sensors from linux-msm/hexagonrpc (this project's fork), DylanVanAssche/libssc and Fedora's
-               iio-sensor-proxy; cameras from turbineBMW/surface-pro-11-linux (kernel and IMX681 support), with
-               Robert Bozik's exposure control in Fedora's libcamera; Fedora @EDITION@ Live.
+               iio-sensor-proxy; cameras from turbineBMW/surface-pro-11-linux (kernel); Fedora @EDITION@ Live.

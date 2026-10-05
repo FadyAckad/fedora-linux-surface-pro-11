@@ -95,7 +95,4 @@ for pkg in $SENSORS_DEPS_PKGS; do
     ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --arch=aarch64 "$pkg" ) || die "dnf download $pkg failed"
   fi
 done
-## Cameras (scripts/47): Fedora's libcamera source RPM (pinned in sp11.conf), rebuilt with payload/camera/.
-fetch "$LIBCAMERA_SRPM_URL" "$CACHE_DIR/$LIBCAMERA_SRPM"
-verify_sha256 "$CACHE_DIR/$LIBCAMERA_SRPM" "$LIBCAMERA_SRPM_SHA256"
 log "all sources present under $CACHE_DIR"

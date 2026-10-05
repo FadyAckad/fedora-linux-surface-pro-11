@@ -19,5 +19,5 @@ service do underneath is in [`docs/fedora-media.md`](../fedora-media.md).
 
 In the live session, audio and battery status are unavailable because the audio DSP stays off while running from
 USB-C; both work once installed. The media carries a note at `/sp11/README.txt` and, under `/sp11/rpms`, every RPM
-it was built with (kernel, support, iptsd, the sensors stack and, since 2026-09-28, libcamera), the source for later
-updates ([`docs/guide/update.md`](update.md)).
+it was built with (kernel, support, iptsd and the sensors stack; ISOs built from 2026-09-28 to 2026-10-02 also
+libcamera), the source for later updates ([`docs/guide/update.md`](update.md)).

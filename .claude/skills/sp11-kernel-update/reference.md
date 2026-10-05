@@ -35,7 +35,15 @@ git ls-remote https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git "
 git -C "$FORK" rev-parse "v$OLD^{commit}" "v$NEW^{commit}"
 ```
 
-Expected: the same two commit ids. A tag the clone lacks is the maintainer's to fetch.
+Expected: the same two commit ids. A tag the clone lacks (`unknown revision`; 7.2.8) stays out of the maintainer's
+clone: make the scratch clone of section 2 now, fetch the tag into it from kernel.org (a few seconds), and use
+`$R/linux` in place of `$FORK` for the tarball check below; the fork steps fetch it first (handoff.md):
+
+```bash
+git -C "$R/linux" fetch --no-tags https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git "refs/tags/v$NEW:refs/tags/v$NEW" && git -C "$R/linux" rev-parse "v$NEW^{commit}"
+```
+
+Expected: `* [new tag] v<new> -> v<new>`, then kernel.org's commit id.
 
 Fedora's source RPM and stock `kernel-core`, and their sha256 for `sp11.conf`:
 

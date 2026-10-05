@@ -14,14 +14,15 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
   revisions 3 and 4 (configuration additions only) on 2026-09-24; revision 5 (`kernel-7.2.7-300.fc45`, the patch set
   rebased onto `v7.2.7`) on 2026-09-25; revision 6 (the cameras, `docs/camera.md`) and revision 7 (the front
   camera's privacy LED) on 2026-09-26; revision 8 (the IMX681's frame length) on 2026-09-27; revision 9 (two camera
-  driver fixes: the OV13858's pixel rate, the IMX681's control lock) on 2026-09-28.
+  driver fixes: the OV13858's pixel rate, the IMX681's control lock) on 2026-09-28; revision 10
+  (`kernel-7.2.8-300.fc45`, the patch set rebased onto `v7.2.8`) on 2026-10-02.
 - Fedora's `linux-<version>.tar.xz` inside the source RPM is the stable tag's tree: for 7.2.5 byte-identical to
-  kernel.org's `linux-7.2.tar.xz` plus `patch-7.2.5.xz`, for 7.2.7 every path, mode and blob of `v7.2.7`. Fedora's
-  own `patch-7.2-redhat.patch` touches 61 files in 7.2.5 and 63 in 7.2.7 (crypto and lockdown policy, secure-boot
-  state in `/chosen`, some x86/s390, a few quirks, an IMX471 camera driver), none of the patch set's up to revision
-  5. Revision 6's camera commits share three with it, the media `Kconfig` and `Makefile` and `MAINTAINERS`, and
-  apply after it (`docs/kernel-patches.md`); test a changed series with `git apply` on Fedora's source after its
-  patch.
+  kernel.org's `linux-7.2.tar.xz` plus `patch-7.2.5.xz`, for 7.2.7 and 7.2.8 every path, mode and blob of the tag.
+  Fedora's own `patch-7.2-redhat.patch` (crypto and lockdown policy, secure-boot state in `/chosen`, some x86/s390,
+  a few quirks, an IMX471 camera driver) touches 61 files in 7.2.5, 63 in 7.2.7 and 62 in 7.2.8 (whose stable update
+  took over its `soc_button_array` fix), none of the patch set's up to revision 5. Revision 6's camera commits share
+  three with it, the media `Kconfig` and `Makefile` and `MAINTAINERS`, and apply after it
+  (`docs/kernel-patches.md`); test a changed series with `git apply` on Fedora's source after its patch.
 
 ## kernel.spec slots and the build
 
@@ -149,7 +150,14 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 
 - Rebase straight from the pinned base to the stable tag of the new Fedora kernel, whatever lies between: a stable
   tag contains every earlier one of its series. From 7.2.5 to 7.2.7, every stable change to a file of the patch set
-  came with 7.2.6; 7.2.7 touches none of them.
+  came with 7.2.6; 7.2.7 touches none of them. From 7.2.7 to 7.2.8 (revision 10) all 74 commits rebased without a
+  conflict and unchanged (`git range-diff`: every pair equal). Five of 7.2.8's 438 commits touch files of the
+  series, none its code: a `hci_qca` fix in the WCN399x power-off path (0009 changes the WCN7850's speed change),
+  two parameter descriptions in msm, and two DP fixes next to 0039's clock-defaults change. One of these the device
+  can show: `msm_dp_bridge_mode_valid()` no longer halves the pixel clock for the link bandwidth check when the wide
+  bus is in use, so a mode an external display's link cannot carry (4K at 60 Hz over two USB-C lanes) is refused;
+  the enable path already chose the internal panel's bits per pixel from the full clock. The other skips the idle
+  pattern at disable when the link never came up.
 - Procedure (step by step, every command with its expected output: the project skill
   `.claude/skills/sp11-kernel-update/`): set `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and the two checksum
   lines (source RPM, stock `kernel-core`) in `sp11.conf`. In a clone of the kernel fork (stable tags from
@@ -211,4 +219,5 @@ device, with a dark picture and without the front camera's light; `docs/camera.m
 front camera's light. 2026-09-27: revision 8, the IMX681's frame length at the register the sensor uses. 2026-09-28:
 revision 8 passed on the device, and revisions 6 to 8 were pushed to `sp11/7.2.7` (head `95a74f27`). The same day
 revision 9, two fixes from a review of the camera commits (`docs/kernel-patches.md`): passed on the device and
-pushed (head `30c57e66`).
+pushed (head `30c57e66`). 2026-10-02: rebased onto Fedora's `kernel-7.2.8-300.fc45` (revision 10, branch
+`sp11/7.2.8`); passed on the device with the KDE Plasma installation (2026-10-03) and pushed (head `c9a90d97`).

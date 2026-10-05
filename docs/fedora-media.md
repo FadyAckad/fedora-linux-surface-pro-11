@@ -35,11 +35,11 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   `kernel`, `kernel-modules{,-core,-extra}` and `kernel-uki-dtbloader` like Workstation, Anaconda 45.22 with
   `anaconda-webui`, and already `spdlog`, `fmt`, `inih`, `inih-cpp` and every sensors dependency, so step 50
   installs no dependency RPM. Of libcamera it has `libcamera` and `libcamera-ipa` (plus PipeWire's libcamera
-  plugin), and it ships Fedora's `iio-sensor-proxy`; step 50 replaces all three with the SP11 builds. KWin reads the
+  plugin), and it ships Fedora's `iio-sensor-proxy`, which step 50 replaces with the SP11 build. KWin reads the
   orientation and the light level from iio-sensor-proxy over D-Bus itself (`net.hadess.SensorProxy`, not through
-  `qt6-qtsensors`), and its package requires `iio-sensor-proxy`, which the SP11 build satisfies. Steps 60, 35, 46
-  and 48 pass on that root. Installed on the device on 2026-09-30 (`docs/verified.md`); the installer needed
-  Firefox (see Anaconda).
+  `qt6-qtsensors`), and its package requires `iio-sensor-proxy`, which the SP11 build satisfies. Steps 60, 35 and 46
+  pass on that root. Installed on the device on 2026-09-30 (`docs/verified.md`); the installer needed Firefox (see
+  Anaconda).
   `sp11-sensors-check` asks mutter for `PanelOrientationManaged`, which a Plasma session answers with a D-Bus
   error; the rest of its output applies.
 

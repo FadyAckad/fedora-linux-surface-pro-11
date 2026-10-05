@@ -32,7 +32,8 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
 
 1. Bodhi lists Fedora's kernel updates for `FEDORA_RELEASE`: take the version and release of the newest `stable`
    one, unless the maintainer named a version.
-2. The stable tags of the pinned and the new version: the fork clone's must equal kernel.org's.
+2. The stable tags of the pinned and the new version: the fork clone's must equal kernel.org's. A new tag the clone
+   lacks goes into the scratch clone (section 2) from kernel.org, and the fork steps fetch it first.
 3. Download Fedora's source RPM and stock `kernel-core` from Koji into `build/cache/` (in a worktree, set up
    `build/` first, section 4), check them against Fedora's signed copies, and record the sha256 of the files the
    pipeline downloads.

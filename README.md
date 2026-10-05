@@ -4,23 +4,23 @@
 
 Builds a Fedora 45 live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition with the
 Samsung OLED panel (Snapdragon X Elite X1E80100). The kernel is Fedora's own kernel package
-(`kernel-7.2.7-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
-Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.7-300.sp11.9.fc45.aarch64`); GRUB loads
+(`kernel-7.2.8-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
+Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.8-300.sp11.10.fc45.aarch64`); GRUB loads
 the Denali OLED device tree. The build runs on the Surface itself, in WSL, and takes the unit's identity, Bluetooth
 address, device firmware and sensor registry from its Windows installation, so every ISO is tailored to the unit
 that built it. Secure Boot has to be off and Windows stays on the device (see Status and scope).
 
 ## What works
 
-Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`) with the kernel above in its current revision 9
-(`7.2.7-300.sp11.9.fc45.aarch64`, installed as an update on 2026-09-28), support RPM 3.4 and the libcamera RPMs
-`0.7.2-3.sp11.6`, on an installation from the ISO built on 2026-09-24.
-[`docs/verified.md`](docs/verified.md) has the details and what was confirmed with earlier kernels, including
-ooaklee's v23 tree the project built until 2026-09-22. The KDE Plasma Desktop image
-(`FEDORA_EDITION=KDE-Desktop`) was installed on the same unit on 2026-09-30 with the same kernel and RPMs; its
-column holds what was confirmed there.
+Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). The KDE Plasma Desktop image
+(`FEDORA_EDITION=KDE-Desktop`), installed on 2026-09-30, runs the kernel above in its current revision 10
+(`7.2.8-300.sp11.10.fc45.aarch64`, installed as an update on 2026-10-02) with support RPM 3.4 and Fedora's
+libcamera; its column holds what was confirmed there. The Workstation column was confirmed with revision 9
+(`7.2.7-300.sp11.9.fc45.aarch64`), support RPM 3.4 and the project's former libcamera rebuild `0.7.2-3.sp11.6`, on
+an installation from the ISO built on 2026-09-24. [`docs/verified.md`](docs/verified.md) has the details and what
+was confirmed with earlier kernels, including ooaklee's v23 tree the project built until 2026-09-22.
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.7-300 (sp11.9) | Fedora 45 Beta KDE Plasma Desktop, same kernel and RPMs |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.7-300 (sp11.9) | Fedora 45 Beta KDE Plasma Desktop, Fedora's 7.2.8-300 (sp11.10) |
 |---|:-:|:-:|
 | Boot from the internal NVMe drive | yes | yes |
 | Display with GPU acceleration | yes | yes |
@@ -45,12 +45,14 @@ column holds what was confirmed there.
 | Tablet mode: keyboard and touchpad off while the keyboard is folded back | yes | yes |
 | Sensors: automatic screen brightness | yes | yes |
 | 5G modem | no | no |
-| Cameras: front and rear, with the libcamera RPMs (on Workstation in GNOME Snapshot and Firefox) | yes | yes |
+| Cameras: front and rear (Workstation: the former libcamera rebuild, in GNOME Snapshot and Firefox; KDE: Fedora's libcamera) | yes | yes |
 | Front camera's light while the camera is in use | yes | yes |
 | IR camera (face login) | no | no |
 | NPU (AI acceleration) | no | no |
 
-*yes*: confirmed on the tested unit. *no*: not covered by this project.
+*yes*: confirmed on the tested unit. *no*: not covered by this project. Under KDE Plasma, auto-rotation sometimes
+stops after the system wakes from sleep; restarting iio-sensor-proxy brings it back
+([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 
 In the live session, audio and battery status are unavailable because the audio DSP stays off while
 running from USB-C; both work once installed.
@@ -93,8 +95,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.9.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.7-300.sp11.9.fc45.aarch64.iso`, with a `.sha256` beside it. Every
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.8-300.sp11.10.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.8-300.sp11.10.fc45.aarch64.iso`, with a `.sha256` beside it. Every
 option and step: [`docs/guide/build.md`](docs/guide/build.md). Writing the media and installing:
 [`docs/guide/install.md`](docs/guide/install.md). Updating an installed system:
 [`docs/guide/update.md`](docs/guide/update.md).
@@ -111,7 +113,7 @@ User guides:
 - [`docs/guide/bluetooth-pairings.md`](docs/guide/bluetooth-pairings.md): sharing the Flex Keyboard and Slim Pen 2
   pairings with Windows.
 - [`docs/guide/sensors.md`](docs/guide/sensors.md): the sensors stack: install, update, check, reset.
-- [`docs/guide/cameras.md`](docs/guide/cameras.md): the cameras: install, update, check, limits.
+- [`docs/guide/cameras.md`](docs/guide/cameras.md): the cameras: check, limits, back to Fedora's libcamera.
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md): diagnostics, known limitations, systems
   installed from earlier ISOs.
 - [`docs/guide/design.md`](docs/guide/design.md): what the scripts decide for you, and why.

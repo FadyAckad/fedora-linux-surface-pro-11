@@ -364,3 +364,25 @@ of the README's feature table there too: the display with GPU acceleration, the 
 speakers and the microphone, battery status, power profiles, USB-C charging and data, suspend and resume, Flatpak,
 the Windows entry in the GRUB menu, the Flex Keyboard and Slim Pen 2 pairings shared with Windows, the sensor
 readings and the front camera's light.
+
+## Kernel revision 10 (7.2.8-300.sp11.10) and Fedora's libcamera, KDE Plasma installation (2026-10-02 to 2026-10-05)
+
+`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.8-300.sp11.10.fc45` (revision 9's 74 patches,
+unchanged, on Fedora's 7.2.8) installed with `dnf install` next to `7.2.7-300.sp11.9`, nothing removed; dracut
+printed only its two Bluetooth notes; the boot entry carries the Denali device tree and the SP11 arguments, and
+`saved_entry` names it. Confirmed on the device: kernel `7.2.8-300.sp11.10`, SELinux enforcing, the speakers'
+feedback accepted at each playback without `feedback incomplete` or `All ports busy`, the touch controller's QSPI
+lines, both DSPs answering the ping, the crypto engine's two hashes without a failed self-test. A second boot
+(2026-10-03) slept 8.5 hours (`PM: suspend entry (deep)`) and resumed; its diagnostics: no provider waiting for
+sync_state, the same 439 bound devices and the same LEDs as revision 9, light and accelerometer readings, the
+CDSP's known `sleep_stats` assert once, during the diagnostics' sensor checks, recovered by remoteproc. libcamera
+then went back to Fedora's `0.7.2-3.fc45` (`dnf distro-sync 'libcamera*'`): `cam -l` lists the three cameras, each
+falling back to `uncalibrated.yaml`, and the front camera streams 300 frames with its light on. Confirmed by the
+owner (2026-10-05): the speakers, the microphone, touch and pen, the display's refresh rate, Wi-Fi, the Bluetooth
+keyboard and pen, brightness, the volume keys, the power profiles, rotation, both cameras, and the rest of the
+README's feature table (GPU acceleration, multi-touch, the touchpad, battery status, USB-C charging and data,
+automatic brightness, the keyboard lock-out in tablet mode, Flatpak, the Windows entry in GRUB, the pairings shared
+with Windows). Found: auto-rotation sometimes stops after a wake until iio-sensor-proxy is restarted (owner); in the
+diagnostics' boot the proxy used 92 % of a core for its whole running time and then crashed in libssc
+(`docs/sensors.md`, Known issues). The journal's other errors are the ADSP's
+`Handover signaled, but it already happened`.

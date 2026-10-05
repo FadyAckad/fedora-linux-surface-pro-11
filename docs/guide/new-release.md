@@ -19,19 +19,16 @@ which stops the build rather than guessing:
   clone before the branch is pushed, and what the rebase to 7.2.7 ran into, is in
   [`docs/kernel.md`](../kernel.md)), and a new symbol has to be set in `payload/kernel-local` (Fedora's
   configuration checks refuse an unset one);
-- a new Fedora: the iio-sensor-proxy and libcamera source RPMs of that release (`IIO_SENSOR_PROXY_SRPM` and
-  `LIBCAMERA_SRPM`, each with its Koji URL and checksum; Koji's copies are unsigned, so check each against Fedora's
-  signed copy first, as the camera skill's [`reference.md`](../../.claude/skills/sp11-camera-update/reference.md)
-  shows), `rpm/iio-sensor-proxy.spec.in`, a copy of Fedora's spec whose source is pinned by
-  `IIO_SENSOR_PROXY_BASE_SPEC_SHA256` (refresh the template, then the pin), `rpm/libcamera.spec.in` with
-  `LIBCAMERA_BASE_SPEC_SHA256` in the same way (a new libcamera version also needs the patches of `payload/camera/`
-  rebased, or ported once upstream's move of the simple IPA to `src/ipa/softisp` reaches a release:
-  `docs/camera.md`), the package names in `LIVE_EXTRA_PKGS` and `SENSORS_DEPS_PKGS`, the dracut module names in
-  `LIVE_DRACUT_OMIT` (`scripts/50-build-iso.sh`, Fedora 45's), the version floors in `rpm/sp11-sensors.spec.in`, and
-  the UCM matcher patch in `scripts/30-build-support-rpm.sh`, which expects ooaklee's v19c `x1e80100.conf` matcher
-  line.
+- a new Fedora: the iio-sensor-proxy source RPM of that release (`IIO_SENSOR_PROXY_SRPM` with its Koji URL and
+  checksum; Koji's copies are unsigned, so check it against Fedora's signed copy first, as the kernel skill's
+  [`reference.md`](../../.claude/skills/sp11-kernel-update/reference.md) does for the kernel's),
+  `rpm/iio-sensor-proxy.spec.in`, a copy of Fedora's spec whose source is pinned by
+  `IIO_SENSOR_PROXY_BASE_SPEC_SHA256` (refresh the template, then the pin), the package names in `LIVE_EXTRA_PKGS`
+  and `SENSORS_DEPS_PKGS`, the dracut module names in `LIVE_DRACUT_OMIT` (`scripts/50-build-iso.sh`, Fedora 45's),
+  the version floors in `rpm/sp11-sensors.spec.in`, and the UCM matcher patch in `scripts/30-build-support-rpm.sh`,
+  which expects ooaklee's v19c `x1e80100.conf` matcher line.
 
-`KERNEL_SP11_REV` (default 9) is everything the project changes in Fedora's kernel: the patch set's pinned commit
+`KERNEL_SP11_REV` (default 10) is everything the project changes in Fedora's kernel: the patch set's pinned commit
 and `payload/kernel-local`. It becomes the buildid `.sp11.<revision>`, so the result is, for example,
 `kernel-7.2.5-300.sp11.1.fc45` with the kernel version `7.2.5-300.sp11.1.fc45.aarch64`. The kernel packages are
 install-only, and a rebuild with the same version would own the same `/boot` and module paths as the installed one,

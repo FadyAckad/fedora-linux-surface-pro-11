@@ -6,9 +6,8 @@ The repository's files, the pipeline steps and their verification steps, the WSL
 - `sp11.conf`: every version (but the support RPM's, `VERSION=` in step 30), URL, regex, boot-policy string and
   content pin; scripts source it via `scripts/lib.sh`.
 - `scripts/NN-*.sh`: pipeline steps, idempotent, `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30, 40,
-  45, 47 and 50 and then `35-verify-support-rpm.sh`, `46-verify-sensors-rpms.sh` and `48-verify-camera-rpms.sh`,
-  which need the live root 50 extracts (steps 30, 45 and 47 also run them themselves whenever one is already there;
-  30 warns when it is not);
+  45 and 50 and then `35-verify-support-rpm.sh` and `46-verify-sensors-rpms.sh`, which need the live root 50
+  extracts (steps 30 and 45 also run them themselves whenever one is already there; 30 warns when it is not);
   `60-verify-rootfs.sh` (optional, not in `build-all.sh`) checks the remastered root; `70-export-bt-pairings.sh`
   and `75-export-sensor-registry.sh` are separate tools. `sync-state-drivers.py` is step 20's check that every user
   of the rails and the interconnect in the Denali device tree has a driver (`docs/kernel.md`).
@@ -22,18 +21,14 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   support RPM). The SP11 patch set lives in the project's kernel fork (`KERNEL_PATCH_*` in `sp11.conf`; manifest in
   `docs/kernel-patches.md`). `payload/sensors/`: payload of `sp11-sensors` (udev, systemd, tmpfiles, SELinux and dnf
   files, the helper scripts), hexagonrpc's sysusers entry and udev rule (packaged by `hexagonrpc.spec.in`), and the
-  unpackaged `sp11-sam-posture` probe. `payload/camera/`: libcamera's patches, a build input of step 47 (the IMX681
-  support from turbineBMW/surface-pro-11-linux, rebased onto Fedora's version; Robert Bozik's exposure control,
-  backported; the project's analogue-gain bound, exposure target, tuning and GPU downscaling fix; libcamera's
-  LGPL-2.1-or-later, the tuning files CC0-1.0; third-party authorship in each patch, the project's own patches carry
-  no author line), and the unpackaged `sp11-camera-probe`, which measures the raw sensor output without libcamera
-  (`docs/camera.md`).
-- `build/` (git-ignored): `cache/` (downloads, the kernel, iio-sensor-proxy and libcamera source RPMs, pinned
+  unpackaged `sp11-sam-posture` probe. `payload/camera/`: the unpackaged `sp11-camera-probe`, which measures the raw
+  sensor output without libcamera (`docs/camera.md`).
+- `build/` (git-ignored): `cache/` (downloads, the kernel and iio-sensor-proxy source RPMs, pinned
   checkouts, `rpm-deps/`, the kernel fork's partial clone `kernel-patches.git` and the series written from it,
   `kernel-patches/<commit>/`), `kernel/` (the unpacked source RPM with the SP11 additions, the SP11 source RPM, step
   20's logs; the build itself runs in `/var/lib/mock/<MOCK_CONFIG>-sp11-kernel`), `work/iso/` (extracted live root,
   root-owned), `rpms/`, `out/` (ISO, `.sha256`, pairing tarball), `bt-pairings/` (exported hive; secret), `sensors/`
-  (this unit's sensor registry export; private), `camera/` (step 47's unpacked libcamera sources), `hardware.env`.
+  (this unit's sensor registry export; private), `hardware.env`.
 
 ## Verification steps
 
@@ -91,24 +86,10 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   way a crash loop was stopped.
   `75-export-sensor-registry.sh` is the UAC tool that copies this unit's registry and calibration overrides out of
   `DriverData\Qualcomm\fastRPC` (robocopy in an elevated PowerShell) into `build/sensors/`.
-- Cameras (see `docs/camera.md`; step 50 installs the rebuild in place of Fedora's since 2026-09-28):
-  `47-build-camera-rpms.sh` checks Fedora's libcamera source RPM (downloaded by step 10) against its pinned checksum
-  and its spec against `LIBCAMERA_BASE_SPEC_SHA256`, rebuilds it from
-  `rpm/libcamera.spec.in` with `payload/camera/` in a mock root of its own (`mock_rebuild_family`, `libcamera`), and
-  checks the packages: the IMX681 in `libcamera.so` and in the simple IPA, the exposure control's tuning keys in the
-  simple IPA, the whole-quad downscaling in the packed Bayer shader, every tuning file byte for byte as the patches
-  leave it (their hunks applied with `git apply --include`), and every IPA module's signature against the key built
-  into `libcamera.so` (`ipa_signatures_ok` in `lib.sh`; Fedora's own 0.7.2-3 fails it). `48-verify-camera-rpms.sh`
-  installs `libcamera`, `libcamera-ipa` and `libcamera-tools` over the build the live root carries in an overlay
-  (Fedora's before step 50 ran with the rebuild, the rebuild itself after it: a reinstall) (no extra dependency RPMs
-  are needed: the Workstation and KDE Desktop roots have every library `cam` links), checks the linkage of the
-  library, the IPA, `cam` and PipeWire's libcamera plugin, repeats the package checks on the installed files and
-  parses both cameras' tuning files with the root's Python. Step 50 takes the three RPMs, plus the rebuild of every
-  other libcamera subpackage the live root carries (each requires the same release; the Workstation and KDE Desktop
-  45 Beta roots have only `libcamera` and `libcamera-ipa`), refuses RPMs whose release lacks
-  `LIBCAMERA_RPM_SUFFIX`, installs them with the other SP11 RPMs (they have no scriptlets), stops when a package of
-  Fedora's build is left, and copies the three to `/sp11/rpms`; step 60 checks them with `rpm -V` and the IPA
-  signatures in the remastered root.
+- Cameras (see `docs/camera.md`): the ISO keeps the live root's libcamera, Fedora's build; step 20 checks the kernel
+  side (the sensors and the front camera's privacy LED in the device tree, the camera modules). Steps 47 and 48
+  rebuilt and checked libcamera with the project's patches from 2026-09-26 until the rebuild was dropped on
+  2026-10-02.
 
 ## Versions and content pins
 
@@ -118,23 +99,22 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   grub2-mkconfig, which rebuilt the menu from the *previous* `/etc/default/grub`, so a changed policy value
   installed but never reached the machine (nothing else applies it on an installed system — the kernel-install
   plugin runs only on a kernel install, `sp11-first-boot` only once). `35-verify-support-rpm.sh` guards this. Steps
-  20/30/40/45/47 skip when the cached RPM matches (the `kernel-core` RPM's version-release-arch against the
-  configured uname, which carries the Fedora release; support `%{VERSION}` and the `.fc<release>` dist tag;
-  iptsd version-release and commit; the sensors chain's version-release; libcamera's release with
-  `LIBCAMERA_RPM_SUFFIX`), so a bump or a release switch triggers the rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf`
-  versions the iptsd spec. The bump rules are enforced since 2026-09-22: steps 30, 45 and (since 2026-09-26) 47
-  record a hash of the payload inputs in the RPM description (`Inputs:`, `inputs_sha256` in `lib.sh`: the payload
-  files, the spec template, the sp11.conf values rendered, for 45 also the registry export and the DriverStore
-  package, for 47 the source RPM's name) and die when the cached RPM of the same version was built from other
-  inputs, `FORCE=1` or not; an RPM built before that is accepted with a warning. Step 20 pins each kernel
+  20/30/40/45 skip when the cached RPM matches (the `kernel-core` RPM's version-release-arch against the configured
+  uname, which carries the Fedora release; support `%{VERSION}` and the `.fc<release>` dist tag; iptsd
+  version-release and commit; the sensors chain's version-release), so a bump or a release switch triggers the
+  rebuild; `IPTSD_RPM_RELEASE` in `sp11.conf` versions the iptsd spec. The bump rules are enforced since 2026-09-22:
+  steps 30 and 45 record a hash of the payload inputs in the RPM description (`Inputs:`, `inputs_sha256` in
+  `lib.sh`: the payload files, the spec template, the sp11.conf values rendered, for 45 also the registry export and
+  the DriverStore package) and die when the cached RPM of the same version was built from other inputs, `FORCE=1` or
+  not; an RPM built before that is accepted with a warning. Step 20 pins each kernel
   revision's content in `sp11.conf` (`KERNEL_SP11_REV_SHA256`, `kernel_rev_sha256`: the revision number, the
   effective `kernel-local` lines and the two pinned commits of the patch set) and dies before its cache check when
   they or the number differ, printing the value to set after a bump; a revision number therefore always means one
   content.
-  The iio-sensor-proxy and libcamera source RPMs are pinned by name and checksum like the kernel's since 2026-09-28
-  (`IIO_SENSOR_PROXY_SRPM`, `LIBCAMERA_SRPM`, each with its URL and checksum; steps 45 and 47 verify the checksum
-  again). Step 10 used to download the newest build with dnf, so a Fedora update would have stopped steps 45 and 47
-  at their spec pins on a fresh cache. The pinned files are Koji's copies, which are unsigned; their payload equals
+  The iio-sensor-proxy source RPM is pinned by name and checksum like the kernel's since 2026-09-28
+  (`IIO_SENSOR_PROXY_SRPM`, with its URL and checksum; step 45 verifies the checksum again). Step 10 used to
+  download the newest build with dnf, so a Fedora update would have stopped step 45 at its spec pin on a fresh
+  cache. The pinned files are Koji's copies, which are unsigned; their payload equals
   that of the Fedora-signed copies (compared when pinned; Koji drops the signed copies of superseded builds). A
   newer build is taken over by changing the pin, then the template and its spec pin.
   `build_rpm`, `mock_rebuild` and `mock_rebuild_family` delete every older RPM of the same name, so `build/rpms/`
