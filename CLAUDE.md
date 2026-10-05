@@ -10,7 +10,7 @@ a guide says only what concretely works.
 ## Documents
 
 - `docs/pipeline.md`: what each file of the repository is, the pipeline steps and their caches, the verification
-  steps 35, 36, 46, 48 and 60, the version and content-pin rules, the WSL host, shell pitfalls. Read before touching
+  steps 35, 36, 46 and 60, the version and content-pin rules, the WSL host, shell pitfalls. Read before touching
   `sp11.conf`, `scripts/`, `rpm/` or `payload/`.
 - `docs/hardware.md`: the tested unit's identity, the Denali DTB and the SKU regexes, firmware, audio, Wi-Fi, the
   Bluetooth address, the pen, the live-only DSP blacklist, the Windows GRUB entry, the Bluetooth pairings shared

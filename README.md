@@ -105,7 +105,8 @@ option and step: [`docs/guide/build.md`](docs/guide/build.md). Writing the media
 
 User guides:
 
-- [`docs/guide/build.md`](docs/guide/build.md): requirements, the pipeline, its options, steps and checks.
+- [`docs/guide/build.md`](docs/guide/build.md): requirements, the pipeline, its options, steps and checks, building
+  one set of RPMs alone.
 - [`docs/guide/install.md`](docs/guide/install.md): writing the USB, the firmware settings, the installer, the
   first boot.
 - [`docs/guide/update.md`](docs/guide/update.md): updating the support RPM and installing a new SP11 kernel.
