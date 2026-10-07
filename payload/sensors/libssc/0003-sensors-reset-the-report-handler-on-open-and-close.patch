@@ -1,0 +1,244 @@
+sensors: reset the report handler on open and close
+
+Each sensor subclass connects its measurement handler to the client's
+"report" signal in open and disconnects it in close, through one id in
+its private data. An open while a handler is still connected (a second
+open while the first waits, or an open after an open that failed)
+overwrote the id and left the first handler connected, so every report
+was then delivered twice, and the id was never cleared, so a second
+close disconnected a handler that no longer existed.
+
+Disconnect a leftover handler before connecting the new one, clear the
+id on close, and drop the reference g_object_get() took on the client,
+which both paths leaked.
+---
+ src/libssc-sensor-accelerometer.c | 8 +++++---
+ src/libssc-sensor-compass.c       | 8 +++++---
+ src/libssc-sensor-gyroscope.c     | 8 +++++---
+ src/libssc-sensor-light.c         | 8 +++++---
+ src/libssc-sensor-magnetometer.c  | 8 +++++---
+ src/libssc-sensor-proximity.c     | 8 +++++---
+ 6 files changed, 30 insertions(+), 18 deletions(-)
+
+diff --git a/src/libssc-sensor-accelerometer.c b/src/libssc-sensor-accelerometer.c
+index 8579af0..2e8f193 100644
+--- a/src/libssc-sensor-accelerometer.c
++++ b/src/libssc-sensor-accelerometer.c
+@@ -29,7 +29,7 @@ enum {
+ static guint signals[N_SIGNALS];
+ 
+ typedef struct _SSCSensorAccelerometerPrivate {
+-	guint report_id;
++	gulong report_id;
+ } SSCSensorAccelerometerPrivate;
+ 
+ G_DEFINE_TYPE_WITH_CODE (SSCSensorAccelerometer, ssc_sensor_accelerometer, SSC_TYPE_SENSOR,
+@@ -147,8 +147,8 @@ ssc_sensor_accelerometer_close (SSCSensorAccelerometer *self, GCancellable *canc
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
+ 
+-	if (priv->report_id)
+-		g_signal_handler_disconnect (client, priv->report_id);
++	g_clear_signal_handler (&priv->report_id, client);
++	g_object_unref (client);
+ 
+ 	/* Close sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_accelerometer_parent_class)->close (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)accelerometer_close_ready, task);
+@@ -209,10 +209,12 @@ ssc_sensor_accelerometer_open (SSCSensorAccelerometer *self, GCancellable *cance
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
++	g_clear_signal_handler (&priv->report_id, client);
+ 	priv->report_id = g_signal_connect (client,
+ 					    "report",
+ 					    G_CALLBACK (report_received),
+ 					    self);
++	g_object_unref (client);
+ 
+ 	/* Open sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_accelerometer_parent_class)->open (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)accelerometer_open_ready, task);
+diff --git a/src/libssc-sensor-compass.c b/src/libssc-sensor-compass.c
+index 9352fd0..e94bd8c 100644
+--- a/src/libssc-sensor-compass.c
++++ b/src/libssc-sensor-compass.c
+@@ -29,7 +29,7 @@ enum {
+ static guint signals[N_SIGNALS];
+ 
+ typedef struct _SSCSensorCompassPrivate {
+-	guint report_id;
++	gulong report_id;
+ } SSCSensorCompassPrivate;
+ 
+ G_DEFINE_TYPE_WITH_CODE (SSCSensorCompass, ssc_sensor_compass, SSC_TYPE_SENSOR,
+@@ -174,8 +174,8 @@ ssc_sensor_compass_close (SSCSensorCompass *self, GCancellable *cancellable, GAs
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
+ 
+-	if (priv->report_id)
+-		g_signal_handler_disconnect (client, priv->report_id);
++	g_clear_signal_handler (&priv->report_id, client);
++	g_object_unref (client);
+ 
+ 	/* Close sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_compass_parent_class)->close (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)compass_close_ready, task);
+@@ -236,10 +236,12 @@ ssc_sensor_compass_open (SSCSensorCompass *self, GCancellable *cancellable, GAsy
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
++	g_clear_signal_handler (&priv->report_id, client);
+ 	priv->report_id = g_signal_connect (client,
+ 			"report",
+ 			G_CALLBACK (report_received),
+ 			self);
++	g_object_unref (client);
+ 
+ 	/* Open sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_compass_parent_class)->open (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)compass_open_ready, task);
+diff --git a/src/libssc-sensor-gyroscope.c b/src/libssc-sensor-gyroscope.c
+index ac1ca92..6daf539 100644
+--- a/src/libssc-sensor-gyroscope.c
++++ b/src/libssc-sensor-gyroscope.c
+@@ -29,7 +29,7 @@ enum {
+ static guint signals[N_SIGNALS];
+ 
+ typedef struct _SSCSensorGyroscopePrivate {
+-	guint report_id;
++	gulong report_id;
+ } SSCSensorGyroscopePrivate;
+ 
+ G_DEFINE_TYPE_WITH_CODE (SSCSensorGyroscope, ssc_sensor_gyroscope, SSC_TYPE_SENSOR,
+@@ -142,8 +142,8 @@ ssc_sensor_gyroscope_close (SSCSensorGyroscope *self, GCancellable *cancellable,
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
+ 
+-	if (priv->report_id)
+-		g_signal_handler_disconnect (client, priv->report_id);
++	g_clear_signal_handler (&priv->report_id, client);
++	g_object_unref (client);
+ 
+ 	/* Close sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_gyroscope_parent_class)->close (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)gyroscope_close_ready, task);
+@@ -204,10 +204,12 @@ ssc_sensor_gyroscope_open (SSCSensorGyroscope *self, GCancellable *cancellable,
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
++	g_clear_signal_handler (&priv->report_id, client);
+ 	priv->report_id = g_signal_connect (client,
+ 					    "report",
+ 					    G_CALLBACK (report_received),
+ 					    self);
++	g_object_unref (client);
+ 
+ 	/* Open sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_gyroscope_parent_class)->open (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)gyroscope_open_ready, task);
+diff --git a/src/libssc-sensor-light.c b/src/libssc-sensor-light.c
+index d6426da..b47bb07 100644
+--- a/src/libssc-sensor-light.c
++++ b/src/libssc-sensor-light.c
+@@ -29,7 +29,7 @@ enum {
+ static guint signals[N_SIGNALS];
+ 
+ typedef struct _SSCSensorLightPrivate {
+-	guint report_id;
++	gulong report_id;
+ } SSCSensorLightPrivate;
+ 
+ G_DEFINE_TYPE_WITH_CODE (SSCSensorLight, ssc_sensor_light, SSC_TYPE_SENSOR,
+@@ -137,8 +137,8 @@ ssc_sensor_light_close (SSCSensorLight *self, GCancellable *cancellable, GAsyncR
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
+ 
+-	if (priv->report_id)
+-		g_signal_handler_disconnect (client, priv->report_id);
++	g_clear_signal_handler (&priv->report_id, client);
++	g_object_unref (client);
+ 
+ 	/* Close sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_light_parent_class)->close (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)light_close_ready, task);
+@@ -201,10 +201,12 @@ ssc_sensor_light_open (SSCSensorLight *self, GCancellable *cancellable, GAsyncRe
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
++	g_clear_signal_handler (&priv->report_id, client);
+ 	priv->report_id = g_signal_connect (client,
+ 					    "report",
+ 					    G_CALLBACK (report_received),
+ 					    self);
++	g_object_unref (client);
+ 
+ 	/* Open sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_light_parent_class)->open (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)light_open_ready, task);
+diff --git a/src/libssc-sensor-magnetometer.c b/src/libssc-sensor-magnetometer.c
+index 62e3607..522c4f2 100644
+--- a/src/libssc-sensor-magnetometer.c
++++ b/src/libssc-sensor-magnetometer.c
+@@ -29,7 +29,7 @@ enum {
+ static guint signals[N_SIGNALS];
+ 
+ typedef struct _SSCSensorMagnetometerPrivate {
+-	guint report_id;
++	gulong report_id;
+ } SSCSensorMagnetometerPrivate;
+ 
+ G_DEFINE_TYPE_WITH_CODE (SSCSensorMagnetometer, ssc_sensor_magnetometer, SSC_TYPE_SENSOR,
+@@ -142,8 +142,8 @@ ssc_sensor_magnetometer_close (SSCSensorMagnetometer *self, GCancellable *cancel
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
+ 
+-	if (priv->report_id)
+-		g_signal_handler_disconnect (client, priv->report_id);
++	g_clear_signal_handler (&priv->report_id, client);
++	g_object_unref (client);
+ 
+ 	/* Close sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_magnetometer_parent_class)->close (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)magnetometer_close_ready, task);
+@@ -204,10 +204,12 @@ ssc_sensor_magnetometer_open (SSCSensorMagnetometer *self, GCancellable *cancell
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
++	g_clear_signal_handler (&priv->report_id, client);
+ 	priv->report_id = g_signal_connect (client,
+ 			"report",
+ 			G_CALLBACK (report_received),
+ 			self);
++	g_object_unref (client);
+ 
+ 	/* Open sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_magnetometer_parent_class)->open (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)magnetometer_open_ready, task);
+diff --git a/src/libssc-sensor-proximity.c b/src/libssc-sensor-proximity.c
+index 3c9015b..235d7e2 100644
+--- a/src/libssc-sensor-proximity.c
++++ b/src/libssc-sensor-proximity.c
+@@ -33,7 +33,7 @@ enum {
+ static guint signals[N_SIGNALS];
+ 
+ typedef struct _SSCSensorProximityPrivate {
+-	guint report_id;
++	gulong report_id;
+ 	gboolean near;
+ 	gboolean reported_once;
+ } SSCSensorProximityPrivate;
+@@ -187,8 +187,8 @@ ssc_sensor_proximity_close (SSCSensorProximity *self, GCancellable *cancellable,
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
+-	if (priv->report_id)
+-		g_signal_handler_disconnect (client, priv->report_id);
++	g_clear_signal_handler (&priv->report_id, client);
++	g_object_unref (client);
+ 
+ 	/* Close sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_proximity_parent_class)->close (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)proximity_close_ready, task);
+@@ -250,10 +250,12 @@ ssc_sensor_proximity_open (SSCSensorProximity *self, GCancellable *cancellable,
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
++	g_clear_signal_handler (&priv->report_id, client);
+ 	priv->report_id = g_signal_connect (client,
+ 					    "report",
+ 					    G_CALLBACK (report_received),
+ 					    self);
++	g_object_unref (client);
+ 
+ 	/* Open sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_proximity_parent_class)->open (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)proximity_open_ready, task);

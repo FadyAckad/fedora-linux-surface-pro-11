@@ -43,9 +43,9 @@ a guide says only what concretely works.
   `scripts/NN-*.sh` (the pipeline steps; "step 50" in the notes means `scripts/50-build-iso.sh`), `rpm/*.spec.in`
   (spec templates).
 - `payload/`: payload of the support RPM (`payload/15-sp11-surface.install` is the kernel-install plugin), the
-  kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files and the unpackaged
-  posture probe) and `payload/camera/` (the unpackaged raw-capture probe). The kernel patches are commits of the
-  project's kernel fork (GPL-2.0, authors in each commit), pinned in `sp11.conf`.
+  kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files, the libssc patches and
+  the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture probe). The kernel patches are
+  commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in `sp11.conf`.
 - `docs/`: the working notes; `docs/guide/`: the user guides. `build/` (git-ignored): caches, work trees, RPMs and
   output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
@@ -75,10 +75,10 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) under a new revision (`docs/kernel.md`). A pushed fork branch
   is never rewritten.
 - In `sp11.conf`: `IPTSD_RPM_RELEASE` (the iptsd spec), `HEXAGONRPC_RPM_RELEASE` (the number, for the spec, its
-  payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec), `IIO_SENSOR_PROXY_RPM_SUFFIX` (its
-  template; for a new SRPM its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum, and
-  `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`), `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the registry
-  export).
+  payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec or its patches in `payload/sensors/libssc/`),
+  `IIO_SENSOR_PROXY_RPM_SUFFIX` (its template; for a new SRPM its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum,
+  and `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`), `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the
+  registry export).
 
 ## Conventions
 

@@ -72,8 +72,9 @@ The repository's files, the pipeline steps and their verification steps, the WSL
   dracut's `selinux` module is in none of these images (its `check()` returns 255: included only as a dependency or
   when added; Fedora's stock 45 Beta live initrd lacks it too) — systemd loads the policy in the real root.
 - Sensors stack (see `docs/sensors.md`; `build-all.sh` runs 45 before 50 and 46 after 35 since 2026-09-22, and
-  step 50 installs the four RPMs into the live root): `45-build-sensors-rpms.sh` builds `hexagonrpc`, `libssc` and
-  `iio-sensor-proxy` with `mock --chain` (`mock_chain` in `lib.sh`; always mock, so the host never gets
+  step 50 installs the four RPMs into the live root): `45-build-sensors-rpms.sh` builds `hexagonrpc`, `libssc` (with
+  the patches of `payload/sensors/libssc/`, applied by its spec; a change there needs `LIBSSC_RPM_RELEASE` bumped)
+  and `iio-sensor-proxy` with `mock --chain` (`mock_chain` in `lib.sh`; always mock, so the host never gets
   unpackaged libraries and iio-sensor-proxy resolves `libssc-devel` from the chain's local repo) and `sp11-sensors`
   (files only, `build_rpm`); the chain is skipped while its RPMs are current, `FORCE=1` rebuilds. When step 50's
   live root exists it then runs `46-verify-sensors-rpms.sh`: an overlay install of the four into the live root with

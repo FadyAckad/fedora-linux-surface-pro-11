@@ -130,11 +130,15 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   every change, rpm compares `git<hash>` as a string. `libssc` 0.4.4+ (`libssc.so.2`; meson declares the QMI mock
   server unconditionally: `python3-devel`, `protobuf-compiler` for `protoc`, `protobuf-c-compiler` for
   `protoc-gen-c`; the spec deletes the installed mock server; Codeberg serves `git fetch --depth 1 origin <sha>`
-  only with the full hash). `iio-sensor-proxy` = Fedora's SRPM of the target release with `-Dssc-support=enabled`,
-  release `<fedora>.sp11.1` (step 45 refuses an SRPM with patches, and since 2026-09-22 one whose spec differs from
-  the copy the template was made from, `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`: refresh the template, then the pin). The
-  SRPM itself is pinned since 2026-09-28 (`IIO_SENSOR_PROXY_SRPM`, Koji's unsigned copy with its checksum;
-  `docs/pipeline.md`); before, step 10 took the newest build.
+  only with the full hash), since release 3 (2026-10-07) with the three patches of `payload/sensors/libssc/`, which
+  step 45 copies into the source RPM and the spec applies with `%autosetup -p1`: the synchronous wait blocks on the
+  main context, each request keeps its own report handler, the sensor subclasses reset theirs on open and close
+  (Known issues; upstream main was still at the pinned commit on 2026-10-07). `iio-sensor-proxy` = Fedora's SRPM
+  of the target release with `-Dssc-support=enabled`, release `<fedora>.sp11.1` (step 45 refuses an SRPM with
+  patches, and since 2026-09-22 one whose spec differs from the copy the template was made from,
+  `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`: refresh the template, then the pin). The SRPM itself is pinned since
+  2026-09-28 (`IIO_SENSOR_PROXY_SRPM`, Koji's unsigned copy with its checksum; `docs/pipeline.md`); before, step 10
+  took the newest build.
   `sp11-sensors`: payload under `/usr/share/qcom/x1e80100/Microsoft/denali-oled` (the DriverStore package's 65 JSONs
   and `golden_color_calibration.bin`, its `json.lst`, `sns_reg_config` and platform files converted to LF, plus this
   unit's registry of 343 entries, its two parent-directory files and 6 calibration overrides from
@@ -308,8 +312,20 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   `close_sync` from `set_polling`, so a release and a new claim during a pending open nest a second open; each
   open keeps its report handler in the sensor's single `report_id`, and the open that completes first disconnects
   the handler stored there, which is the nested open's. That open never completes, the proxy spins in its wait,
-  and the first open's handler stays connected to freed data, which a later report dereferences. Left as it is
-  (owner, 2026-10-05); a fix would go into libssc (a handler per request, a blocking wait).
+  and the first open's handler stays connected to freed data, which a later report dereferences. In that boot the
+  spin began within the first minute, before the sleep: the trigger is the claim churn, not the wake. The nesting
+  needs one client to release a sensor and one to claim it while the first claim's open still waits for the DSP
+  (the proxy's `set_polling` runs `open_sync` on the first claim and `close_sync` on the last release); KWin's
+  orientation sensor and PowerDevil's light sensor toggle their claims around screen-off and wake, GNOME's daemons
+  claim once, hence seen under Plasma and not in six minutes under GNOME. Left as it was on 2026-10-05 (owner);
+  fixed in libssc release 3 (2026-10-07, the three patches of `payload/sensors/libssc/`; confirmed on the device
+  the same day, `docs/verified.md`): the wait iterates the main context blocking, so a pending open costs no CPU;
+  the base class keeps each request's report handler in the request's own context, so a completing request
+  disconnects only its own handler and frees no context a handler still points to, and both opens of a nesting
+  complete on the sensor's next report; the subclasses disconnect a leftover measurement handler before
+  connecting a new one, clear it on close and drop the client reference `g_object_get` gave them (leaked once per
+  open and per close). Not changed: the proxy keeps a sensor marked as polling after a failed `open_sync` and
+  never retries until a restart; not seen on the device.
 
 ## Upstream state
 
@@ -353,3 +369,6 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
     mode, auto-rotation and automatic screen brightness confirmed (`docs/verified.md`).
   - 2026-10-03: with kernel revision 10 on the KDE Plasma installation, auto-rotation stopping after some wakes and
     the proxy's busy wait and crash, traced to libssc (Known issues).
+  - 2026-10-07: libssc release 3 (the three patches: blocking wait, one report handler per request, the subclasses'
+    handler reset) built and checked on the host, then on the device: the install over release 2, twenty
+    claim-and-release cycles, a reboot and a sleep without the spin or the crash; the multi-day watch continues.

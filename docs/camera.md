@@ -125,6 +125,22 @@ the device can show.
   systemd 262 (on the device by 2026-09-26; the ISO's root has 261) udev also creates a `/dev/media` directory of
   by-path links next to `/dev/media0`, so scripts take the media devices as `/dev/media[0-9]*`
   (`sp11-camera-probe`, `sp11-diag` since support 3.4).
+- How PipeWire holds a camera (read in the sources on 2026-10-07; libcamera 0.7.2, pipewire-plugin-libcamera
+  1.6.9, the fork's CAMSS): libcamera's simple pipeline opens the camera's video node and subdevices when the
+  camera manager starts and keeps them open for the manager's life, PipeWire's. The plugin
+  (`spa/plugins/libcamera/libcamera-source.cpp`) acquires a camera when a stream's format is set, then configures
+  it and allocates its buffers; it starts the camera on the node's Start command and stops it on Pause or Suspend,
+  but releases it only when the format is cleared, that is when the application's stream goes away.
+  `Camera::start()` fails with `EACCES` unless the camera is in its configured state, and the plugin reports that
+  as `EBUSY`: PipeWire's `running -> error (error changing node state: Device or resource busy)` means a start the
+  camera's state did not allow, not a device another process holds. A failed `camera->stop()` is only logged
+  (`failed to stop camera`). In the kernel, CAMSS's video nodes call `v4l2_pipeline_pm_get()` on open and the
+  driver registers `v4l2_pipeline_link_notify()`: with the node open, the CSIPHY, CSID and VFE subdevices get
+  `s_power(1)`, where they take their runtime-PM reference and the CSID resets its hardware, as soon as the links
+  to them are enabled at the first stream configuration, and keep it between streams for as long as PipeWire runs.
+  CAMSS's system-sleep operations are `pm_runtime_force_suspend` and `pm_runtime_force_resume`, whose runtime
+  callbacks only drop and restore the interconnect bandwidth votes. Whether a camera that was held this way across
+  a sleep comes back is what the capture of the next failure has to show (On the device).
 - The IR camera: the software ISP has no monochrome path in 0.7.2, so libcamera can offer the VD55G0 only as a raw
   stream, which ordinary applications cannot use. Face login would need Howdy and a bridge of its own (turbineBMW
   tested one), none of which Fedora packages.
@@ -188,6 +204,15 @@ the device can show.
   replaced the rebuild): `cam -l` lists the three cameras, each IPA falling back to `uncalibrated.yaml`, with
   `Failed to create camera sensor helper` for the IMX681 and the VD55G0, and the front camera streams 300 frames
   with its light on; both cameras work in applications (owner, 2026-10-05).
+- Cameras stopping until PipeWire and WirePlumber are restarted (owner, 2026-10-07, KDE Plasma installation; the
+  pattern "after a while" fits a sleep in between): not captured yet. The only related record is PipeWire's
+  front-camera node going `running -> error (error changing node state: Device or resource busy)` in the GNOME
+  diagnostics of 2026-09-26, right after a resume with GNOME Snapshot open, recovered 30 s later by itself, with no
+  camera message in that boot's kernel log. The hand-off of 2026-10-07 (`build/handoff/sp11-libssc-3-2026-10-07`,
+  Part B) collects, before the restart, the kernel's camera lines, PipeWire's and WirePlumber's log, the camera
+  nodes, the camera blocks' runtime-PM state, and `cam -C 5` on both cameras from a second process: a frame
+  capture there puts the fault in PipeWire's node, an acquire failure means PipeWire still holds the camera, any
+  other error points at the kernel's camera path after the sleep.
 
 ## History
 

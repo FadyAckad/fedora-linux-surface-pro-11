@@ -386,3 +386,12 @@ with Windows). Found: auto-rotation sometimes stops after a wake until iio-senso
 diagnostics' boot the proxy used 92 % of a core for its whole running time and then crashed in libssc
 (`docs/sensors.md`, Known issues). The journal's other errors are the ADSP's
 `Handover signaled, but it already happened`.
+
+## libssc 0.4.4-3: the sensor stall (2026-10-07)
+
+`libssc-0.4.4-3.git54dd13e.sp11` (release 2 plus the three patches of `payload/sensors/libssc/`, `docs/sensors.md`
+Known issues) installed over release 2 on the KDE Plasma installation (kernel revision 10, iio-sensor-proxy
+3.9-3.sp11.1). Confirmed: the proxy links release 3's `libssc.so.2`; twenty claim-and-release cycles
+(`monitor-sensor` for 0.3 s each) leave it active without CPU time, with orientation, tilt and compass readings
+afterwards; after a reboot and a sleep, 52 minutes of uptime with 1 s of CPU time, no restart, no SEGV or core
+dump in its journal (owner). The multi-day watch continues.

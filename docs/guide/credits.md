@@ -27,8 +27,9 @@ version 3 or later (`LICENSE`). Everything third-party is downloaded and package
   commits (the sensor framework's registry writes, requests longer than 256 bytes, the registry's parent
   directory, and the fixes those write paths needed; meant for upstream, see hexagonrpc's issue #19 and
   pull request #21),
-  [DylanVanAssche/libssc](https://codeberg.org/DylanVanAssche/libssc) (GPL-3.0-or-later) and Fedora's
-  `iio-sensor-proxy` source RPM (GPL-3.0-or-later), the latter two unmodified; the approach follows
+  [DylanVanAssche/libssc](https://codeberg.org/DylanVanAssche/libssc) (GPL-3.0-or-later) with three of this
+  project's patches to its synchronous API (`payload/sensors/libssc/`), and Fedora's `iio-sensor-proxy` source RPM
+  (GPL-3.0-or-later), unmodified; the approach follows
   [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The sensor configuration
   and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files copied from your own
   Windows installation at build time, like the firmware below.

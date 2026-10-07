@@ -50,9 +50,9 @@ was confirmed with earlier kernels, including ooaklee's v23 tree the project bui
 | IR camera (face login) | no | no |
 | NPU (AI acceleration) | no | no |
 
-*yes*: confirmed on the tested unit. *no*: not covered by this project. Under KDE Plasma, auto-rotation sometimes
-stops after the system wakes from sleep; restarting iio-sensor-proxy brings it back
-([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
+*yes*: confirmed on the tested unit. *no*: not covered by this project. Under KDE Plasma, auto-rotation used to
+stop until iio-sensor-proxy was restarted; fixed in the sensors RPMs since 2026-10-07 (libssc 0.4.4-3,
+[`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 
 In the live session, audio and battery status are unavailable because the audio DSP stays off while
 running from USB-C; both work once installed.

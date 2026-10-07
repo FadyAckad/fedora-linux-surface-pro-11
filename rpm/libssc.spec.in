@@ -9,6 +9,11 @@ Summary:        Library and CLI for the sensors of the Qualcomm Snapdragon Senso
 License:        GPL-3.0-or-later
 URL:            https://codeberg.org/DylanVanAssche/libssc
 Source0:        libssc-%{commit}.tar.gz
+# The project's fixes to the synchronous API (payload/sensors/libssc/; docs/sensors.md, Known issues): the wait
+# blocks instead of spinning, each request owns its report handler, the subclasses reset theirs on open and close.
+Patch0:         0001-common-block-in-the-synchronous-wait-instead-of-spinning.patch
+Patch1:         0002-sensor-keep-each-request-s-report-handler-in-its-own-context.patch
+Patch2:         0003-sensors-reset-the-report-handler-on-open-and-close.patch
 ExclusiveArch:  aarch64
 
 BuildRequires:  gcc
@@ -30,8 +35,9 @@ libssc exposes the sensors managed by the Qualcomm Snapdragon Sensor Core, the
 sensor framework running on the ADSP or SLPI of Qualcomm SoCs since 2018, as a
 GLib library: QMI over QRTR to the DSP, protobuf-encoded requests. ssccli reads
 one sensor from the command line (--sensor accelerometer|gyroscope|magnetometer|
-light|compass|proximity). Upstream commit %{commit}. iio-sensor-proxy 3.9 builds
-its SSC drivers against this library.
+light|compass|proximity). Upstream commit %{commit} plus the project's three
+patches to the synchronous API. iio-sensor-proxy 3.9 builds its SSC drivers
+against this library.
 
 %package devel
 Summary:        Development files for libssc
@@ -43,7 +49,7 @@ Requires:       pkgconfig(gio-2.0)
 Headers and pkg-config file for building against libssc.
 
 %prep
-%setup -q -n libssc-%{commit}
+%autosetup -p1 -n libssc-%{commit}
 
 %build
 %meson
@@ -67,5 +73,12 @@ rm -rf %{buildroot}%{python3_sitelib}/ssc_server %{buildroot}%{_libexecdir}/inst
 %{_libdir}/pkgconfig/libssc.pc
 
 %changelog
-* Sat Sep 19 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+* Wed Oct 07 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+- Synchronous API: the wait blocks on the main context instead of spinning (iio-sensor-proxy at 92 %% of a core);
+  each request keeps its own report handler, so two requests in flight on one sensor no longer disconnect each
+  other's handler and leave a freed context connected (the proxy's hang in open_sync and its SIGSEGV in
+  report_received); the sensor subclasses reset their handler on open and close and drop the client reference
+  they leaked
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 0.4.4-2.git54dd13e.sp11
 - Package upstream libssc for the Surface Pro 11 sensors stack (Fedora has no package)

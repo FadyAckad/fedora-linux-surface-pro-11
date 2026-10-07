@@ -1,0 +1,29 @@
+common: block in the synchronous wait instead of spinning
+
+ssc_common_wait_sync_context() iterated the default main context with
+may_block FALSE, so every synchronous call (ssc_sensor_*_new_sync,
+_open_sync, _close_sync) burned a full core until its callback ran.
+iio-sensor-proxy, which calls open_sync and close_sync on every first
+claim and last release of a sensor, used 92 % of a core for minutes
+when an open did not complete.
+
+Iterate with may_block TRUE. The completion callback is dispatched on
+the same context, so the loop still wakes for it, and the thread sleeps
+between events.
+---
+ src/libssc-common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/libssc-common.c b/src/libssc-common.c
+index 3648f47..0569336 100644
+--- a/src/libssc-common.c
++++ b/src/libssc-common.c
+@@ -53,7 +53,7 @@ ssc_common_wait_sync_context (SyncContext *ctx) {
+ 	g_mutex_lock (&ctx->mutex);
+ 	while (!ctx->finished) {
+ 		g_mutex_unlock (&ctx->mutex);
+-		g_main_context_iteration (g_main_context_default (), FALSE);
++		g_main_context_iteration (g_main_context_default (), TRUE);
+ 		g_mutex_lock (&ctx->mutex);
+ 	}
+ 	g_mutex_unlock (&ctx->mutex);

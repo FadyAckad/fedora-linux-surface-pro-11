@@ -27,9 +27,10 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)).
   from USB-C (an ADSP restart resets the port); both work once installed.
 - Once in a boot, a few minutes after it, the compute DSP's firmware can report a `sleep_stats` fatal error;
   remoteproc restarts that DSP by itself, and nothing on Linux uses it.
-- Auto-rotation sometimes stops after the system wakes from sleep (seen under KDE Plasma);
-  `sudo systemctl restart iio-sensor-proxy` brings it back. The cause is in libssc, the library that reads the
-  sensors ([`docs/sensors.md`](../sensors.md), Known issues).
+- Auto-rotation and the light sensor stopping until iio-sensor-proxy is restarted (seen under KDE Plasma, whose
+  clients claim and release the sensors around screen-off and wake): fixed in `libssc` 0.4.4-3 (2026-10-07), part
+  of the sensors RPMs since then; on an earlier release `sudo systemctl restart iio-sensor-proxy` brings them back
+  ([`docs/sensors.md`](../sensors.md), Known issues).
 - Boot messages seen on the tested unit that mean nothing: `qcom_pmic_glink … Failed to create device link` for the
   PD and USB nodes (probe deferral, retried), `surface_hid … unexpected descriptor length` for one Surface
   Aggregator endpoint nothing depends on, `unknown device posture for type-cover: 0` once each time the keyboard
