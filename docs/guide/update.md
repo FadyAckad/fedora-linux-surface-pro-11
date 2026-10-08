@@ -1,9 +1,9 @@
 # Update an installed system
 
 Updating the support RPM, installing a new SP11 kernel next to the current one, and what dnf does with kernels. The
-RPMs come from `build/rpms/` after a build (each set can be built alone: [`docs/guide/build.md`](build.md)), or
-from the ISO the system was installed from, which carries every RPM it installed (kernel, support, iptsd and the
-sensors stack; ISOs built from 2026-09-28 to 2026-10-02 also libcamera) under `/sp11/rpms`.
+RPMs come from `build/rpms/` after a build; each set can be built alone ([`docs/guide/build.md`](build.md)). They
+also come from the ISO the system was installed from, which carries every RPM it installed under `/sp11/rpms`:
+kernel, support, iptsd and the sensors stack.
 Systems installed from ISOs built before 2026-09-22 need the one-time steps in
 [`docs/guide/troubleshooting.md`](troubleshooting.md).
 
@@ -15,31 +15,31 @@ New support-RPM versions install over the old one. Copy the RPM to Fedora and ru
 sudo dnf upgrade ./sp11-surface-support-<version>-1.fc<release>.aarch64.rpm
 ```
 
-The package regenerates the GRUB menu itself; upgrading `sp11-iptsd` restarts the pen daemon. Rebuild
-the ISO afterwards so new installations get the same version. What each version changed:
+The package regenerates the GRUB menu itself. Upgrading `sp11-iptsd` restarts the pen daemon. Rebuild the ISO
+afterwards so new installations get the same version. What each version changed:
 [`docs/guide/support-rpm-history.md`](support-rpm-history.md).
 
 ## Kernel
 
-A new SP11 kernel installs next to the current one, like Fedora's own kernels, from the directory holding its
-packages (support RPM 3.0 or later; with an earlier support RPM, whose dnf exclusion also hides local kernel RPMs,
-add `--setopt=disable_excludes='*'`):
+A new SP11 kernel installs next to the current one, like Fedora's own kernels. Run this from the directory holding
+its packages. The command below applies to support RPM 3.0 or later. An earlier support RPM has a dnf exclusion
+that also hides local kernel RPMs; with one, add `--setopt=disable_excludes='*'`:
 
 ```bash
 sudo dnf install ./kernel{,-core,-modules-core,-modules,-modules-extra}-<version>-<release>.sp11.<revision>.fc45.aarch64.rpm
 ```
 
-It gets its own boot entry with the Denali DTB and the kernel arguments and becomes the default; the
-previous kernel stays in the GRUB menu. dnf keeps at most three kernels per package name
-(`installonly_limit`) and removes the oldest one in the transaction that installs a fourth (never the running one).
-Check `df -h /boot` before installing another kernel (each SP11 kernel takes about 195 MB there), because a dracut
-failure inside the install leaves the new kernel without a boot entry and only the transaction's output says so.
+The new kernel gets its own boot entry with the Denali DTB and the kernel arguments, and becomes the default; the
+previous kernel stays in the GRUB menu. dnf keeps at most three kernels per package name (`installonly_limit`) and
+removes the oldest one, never the running one, in the transaction that installs a fourth. Check `df -h /boot`
+before installing another kernel; each SP11 kernel takes about 195 MB there. A dracut failure inside the install
+leaves the new kernel without a boot entry, and only the transaction's output says so.
 
-Stock Fedora kernels are hidden from every configured repository (support RPM 3.0), since they lack the SP11 patch
-set; `dnf upgrade` leaves the kernel alone until an SP11 build of a newer Fedora kernel is installed from local
-RPMs. The override is `/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo`, and
-`dnf --setopt=disable_excludes='*' ...` lifts it for one command. Kernels of the earlier `kernel-sp11` package stay
-installed next to the new ones until removed; see [`docs/guide/troubleshooting.md`](troubleshooting.md).
+Stock Fedora kernels, which lack the SP11 patch set, are hidden from every configured repository (support RPM 3.0),
+so `dnf upgrade` leaves the kernel alone until an SP11 build of a newer Fedora kernel is installed from local RPMs.
+The override is `/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo`, and `dnf --setopt=disable_excludes='*' ...`
+lifts it for one command. Kernels of the earlier `kernel-sp11` package stay installed next to the new ones until
+removed; see [`docs/guide/troubleshooting.md`](troubleshooting.md).
 
 ## Sensors stack
 
@@ -47,6 +47,5 @@ The four sensors RPMs are updated together, in one transaction: [`docs/guide/sen
 
 ## Cameras
 
-The cameras use Fedora's libcamera, which `dnf upgrade` updates. A system installed from an ISO built from
-2026-09-28 to 2026-10-02 has the project's former libcamera rebuild instead, which `dnf upgrade` keeps; going back
-to Fedora's build: [`docs/guide/cameras.md`](cameras.md).
+The cameras use Fedora's libcamera, which `dnf upgrade` updates. What they can and cannot do:
+[`docs/camera.md`](../camera.md).

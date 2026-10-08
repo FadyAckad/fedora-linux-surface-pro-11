@@ -1,397 +1,201 @@
 # Hardware-verified status
-What has been confirmed on the tested unit, by date and package version.
+What has been confirmed on the tested unit, by date and package version. "The kernel RPMs" are the package family
+`docs/kernel.md` describes; "the feature table" is `README.md`'s.
 
 ## Fedora 44 GA Workstation (2026-09-13/14, support RPM 1.7)
 
-Working: boot, install, display/GPU, Wi-Fi, Bluetooth with the correct address, touch, pen inking, audio, battery,
-Flatpak, Windows entry in GRUB before UEFI Firmware Settings, shared Windows pairings for keyboard and pen,
-`sp11-bt-import-pairings` and `sp11-diag` under `/usr/libexec/sp11`. Suspend and resume confirmed on 2026-09-17.
-
-Support RPM 1.7 (`sp11-diag` enumerates paired devices instead of fixed addresses; otherwise identical to 1.6, which
-added `sp11-grub-defaults` and the dnf kernel exclusion) was confirmed working on the installed system on
-2026-09-14. `sp11-iptsd` 3.1.0-2.sp11 restarts the running pen daemon on upgrade. The Fedora 44 ISO built on
-2026-09-14 (sha256 `eb62a087…7fee`) contains both.
+- Installed: Fedora 44 GA Workstation, support RPM 1.7 and `sp11-iptsd` 3.1.0-2.sp11.
+- Confirmed: boot, install, display with GPU acceleration, Wi-Fi, Bluetooth with the unit's address, touch, pen
+  inking, audio, battery, Flatpak, the Windows entry in GRUB, the keyboard and pen pairings shared with Windows,
+  `sp11-diag` and the pairing import; iptsd's upgrade restarts the pen daemon; suspend and resume (2026-09-17).
 
 ## Fedora 45 Beta 1.3 Workstation (2026-09-16)
 
-Built with `FEDORA_TARGET=beta` and installed on the tested unit, onto a LUKS-encrypted root. Confirmed: the media
-boots and installs, the installed system runs (dnf, desktop applications), and the SP11 kernel is the booted one.
-`qcom_q6v5_pas` loads on the installed system, so the live-only blacklist is being dropped as intended.
-
-`dnf upgrade --refresh` on the fresh install added a stock `kernel-uki-dtbloader-7.2.5-300.fc45` boot entry, because
-the exclusion list predated that package (support RPM 1.8 adds `kernel-uki-*`); removing it needed
-`dnf --setopt=disable_excludes='*' remove`.
-
-Benign boot-time messages on this unit: `qcom_pmic_glink … Failed to create device link (0x180) with supplier …` for
-the PD and USB nodes (probe deferral, retried); `surface_hid … unexpected descriptor length: got 0, expected 9` then
-`error -71` for one Surface Aggregator HID endpoint that nothing depends on; with kernel revision 2,
-`unknown device posture for type-cover: 0` once each time the keyboard is attached.
-
-Confirmed working on the installed system by the owner on 2026-09-16: the 44 GA list above, the Bluetooth pairing
-import, no early-boot Adreno error with support RPM 2.0, a clean `dnf upgrade --refresh` after the `kernel-uki-*`
-exclusion, and support RPM 2.1 as an upgrade (stock kernel removed, `dracut --regenerate-all -f` clean). Suspend and
-resume confirmed on 2026-09-17.
+- Installed: fresh install from the 45 Beta ISO (`FEDORA_TARGET=beta`) onto a LUKS-encrypted root; support RPMs 2.0
+  and 2.1 as upgrades.
+- Confirmed: the media boots and installs; the installed system runs on the SP11 kernel with the live-only DSP
+  blacklist dropped (`qcom_q6v5_pas` loads), the 44 GA list, no early-boot Adreno error with 2.0, a clean
+  `dnf upgrade --refresh` after the `kernel-uki-*` exclusion and 2.1's stock-kernel removal; suspend and resume.
+- Found: `dnf upgrade --refresh` had added a stock `kernel-uki-dtbloader` boot entry (the exclusion list predated
+  the package; 1.8 adds `kernel-uki-*`), removed with `dnf --setopt=disable_excludes='*' remove`. The journal's
+  errors are the known benign messages (`docs/guide/troubleshooting.md`).
 
 ## Kernel 7.2.5 on Fedora 45 Beta Workstation (2026-09-17)
 
-`kernel-sp11-7.2.5-sp11v23` (`KERNEL_STABLE_VERSION=7.2.5`, built with `FEDORA_TARGET=beta`) installed next to 7.2.0
-on the 45 Beta install. Confirmed working by the owner: Bluetooth, touchscreen, Wi-Fi, pen, suspend and resume,
-speakers, microphone, GPU acceleration, keyboard/touchpad, battery, Flatpak, the Windows GRUB entry, the keyboard
-and pen pairings shared with Windows, backlight control (brightness slider) and multi-touch
-(rjindael/fedora-surface-pro-11's HID-over-SPI patches give single touch only). 7.2.5 is the build default since
-then; a 45 Beta ISO with this kernel was built on 2026-09-18 (never booted) and one with revision 2 on 2026-09-22,
-installed on the tested unit (see below).
+- Installed: `kernel-sp11-7.2.5-sp11v23` next to 7.2.0 on the 45 Beta installation.
+- Confirmed (owner): the 44 GA list plus speakers, microphone, keyboard and touchpad, the brightness slider and
+  multi-touch (rjindael's HID-over-SPI patches gave single touch only).
 
 ## Kernel config policy rev 1 (v23.1), SELinux (2026-09-18)
 
-`kernel-sp11-7.2.5-sp11v23.1` and support RPM 2.5 (`FEDORA_TARGET=beta`), installed as an update on the 45 Beta
-Workstation system next to the AppArmor kernels: nothing regressed. The installation still carried the installer's
-`selinux=0` and `SELINUX=disabled` (the LSM list read `lockdown,capability,yama,bpf,landlock,ipe,ima,evm`; see the
-SELinux section of `docs/kernel.md`); since the restore on 2026-09-19 it runs SELinux **enforcing** with no
-kernel AVC. Off-hardware, before that round: the shipped config differs from the AppArmor build only by the policy
-and what it pulls in (`SECURITY_APPARMOR*` off, `IGH_ECAT*` off, `SECURITY_IPE` on with its verity properties,
-`DEFAULT_SECURITY_SELINUX`, `CONFIG_LSM`, `ZSTD_COMPRESS` y→m because AppArmor's `EXPORT_BINARY` had selected it
-built-in, plus `LOCALVERSION`/`VERSION_SIGNATURE`); 7816 modules (`ec_master` gone, `zstd_compress` new); both
-Denali DTBs byte-identical to the AppArmor build; steps 36 and 35 pass. The ISO was rebuilt on 2026-09-22 with
-revision 2 (next section).
+- Installed: `kernel-sp11-7.2.5-sp11v23.1` (Fedora's LSM stack in the configuration) and support RPM 2.5 as an
+  update, next to the AppArmor kernels.
+- Confirmed: nothing regressed; SELinux enforcing without a kernel AVC since the restore on 2026-09-19.
+- Found: the installer's `selinux=0` and `SELINUX=disabled` were still in place (`docs/kernel.md`, SELinux).
 
 ## Sensors stack (2026-09-19 to 2026-09-21)
 
-On the 45 Beta install: `hexagonrpc-0.5.0-6.git79d1bed.sp11`, `libssc-0.4.4-2.git54dd13e.sp11`,
-`iio-sensor-proxy-3.9-3.sp11.1` and `sp11-sensors-1.9-1` (fc45); support RPM 2.6 adds `sp11-sensors-check` to
-`sp11-diag`. `sp11-sensors-1.10-1` (2026-09-22: the initramfs is regenerated by a trigger only when a 1.1/1.2
-package is upgraded away, `sp11-sensors-reset` says the copy is read at the next boot, comments) is verified in the
-chroot (step 46: 131 checks, the upgrade from 1.9 included) and on the device since the 2026-09-22 installation
-from the ISO. Working:
-readings from the light sensor, accelerometer, gyroscope, magnetometer and compass (`ssccli`),
-`monitor-sensor` with orientation, tilt, light and compass, GNOME's auto-rotation, suspend and resume, SELinux
-enforcing without an AVC for the stack's domains, no ADSP crash since the write support. Not reported: automatic
-screen brightness. Step 46 passed for this set (129 checks, the upgrade from 1.8 included). The history is at the
-end of `docs/sensors.md`.
+- Installed: hexagonrpc 0.5.0-6.git79d1bed, libssc 0.4.4-2.git54dd13e, iio-sensor-proxy 3.9-3.sp11.1 and
+  sp11-sensors 1.9-1 on the 45 Beta installation, support RPM 2.6; sp11-sensors 1.10 since the ISO of 2026-09-22.
+- Confirmed: light, accelerometer, gyroscope, magnetometer and compass readings (`ssccli`), `monitor-sensor` with
+  orientation, tilt, light and compass, GNOME's auto-rotation, suspend and resume, SELinux enforcing without an AVC
+  for the stack's domains, no ADSP crash since the write support. Not reported: automatic screen brightness.
 
 ## Kernel SP11 revision 2 (v23.2), tablet mode (2026-09-21)
 
-`kernel-sp11-7.2.5-sp11v23.2`, installed as an update on the same system. Rebuilt on the revision-1 tree in 7.6 min;
-against revision 1: the same 7816 module names, identical DTBs, a config that differs only in
-`LOCALVERSION`/`VERSION_SIGNATURE`, and at section level only `surface_aggregator_registry.ko` changed (its
-`.rela.data`: the SP11 group's switch entry now points at the POS node) besides version strings and `kheaders.ko`.
-On the device the POS tablet-mode switch follows the keyboard, and with the sensors stack GNOME's auto-rotation
-works (see `docs/sensors.md`). A 45 Beta 1.3 ISO with this kernel, support 2.6, the `--mkfs-time` fix and the
-sensors stack inside was built on 2026-09-22 (sha256 `121e542a…be65`, after a first build of the day without the
-stack; `build-all.sh` took 11 min with everything cached, 35 passed on its reinstall branch, 46 reinstalling over
-the root, 60 its 87 checks) and installed fresh on the tested unit the same day (next section).
+- Installed: `kernel-sp11-7.2.5-sp11v23.2` (the POS tablet-mode switch) as an update on the same system.
+- Confirmed: the POS switch follows the keyboard, and with the sensors stack GNOME's auto-rotation works
+  (`docs/sensors.md`).
 
 ## Fedora 45 Beta Workstation from the revision-2 ISO (2026-09-22)
 
-Fresh installation from the ISO built on 2026-09-22 (sha256 `121e542a…be65`: kernel v23.2, support RPM 2.6, iptsd
-3.1.0-3, the sensors stack, `--mkfs-time`). The owner reports every check of that round's list passing: the live
-session and the installed system run SELinux enforcing without `selinux=0` or a relabel boot (the first media built
-with the SELinux kernel), package file times instead of the ISO's build date, the seven packages installed, the
-sensors stack active from the first boot without a separate install (`sp11-sensors-check`, auto-rotation), the
-pairing import, the Windows entry, `dnf upgrade --refresh` without a stock kernel, and the README's feature table.
+- Installed: fresh install from the ISO of 2026-09-22: kernel v23.2, support 2.6, iptsd 3.1.0-3, the sensors stack.
+- Confirmed (owner): the live session and the installed system run SELinux enforcing without `selinux=0` or a
+  relabel boot, package file times instead of the ISO's build date, the sensors stack active from the first boot,
+  the pairing import, `dnf upgrade --refresh` without a stock kernel, the feature table of the time.
 
 ## Fedora's kernel 7.2.5-300.sp11.1 and support RPM 3.0 (2026-09-23)
 
-On the installation above: support RPM 3.0 as an upgrade, then `kernel`, `kernel-core` and
-`kernel-modules{,-core,-extra}` `7.2.5-300.sp11.1.fc45` with `dnf install` next to `kernel-sp11` v23.2, and one
-`sp11-diag` on each kernel. Confirmed from the owner's transcript and the two diag files: the new kernel boots as
-the saved default with the same arguments and the Denali OLED device tree
-(`microsoft,denali-oled microsoft,denali qcom,x1e80100`), SELinux enforcing without an AVC; the ADSP boots Linux's
-firmware without a crash (mainline shuts the UEFI-started "lite" firmware down) and every stage of the
-speaker-protection graph is accepted; the microphone records speech at about −22 dBFS RMS on both channels with
-3.0's gain; the sensors stack reads light, accelerometer, gyroscope, magnetometer and compass, and
-iio-sensor-proxy has the accelerometer, light sensor and compass; the touchscreen, pen, iptsd's virtual stylus, POS
-tablet-mode switch, volume keys, Surface Aggregator keyboard and touchpad and the Flex Keyboard over Bluetooth are
-present, and the Bluetooth controller has the unit's address as on v23.2; one battery (`qcom_battmgr`), the fan's
-hwmon (`surface_fan`), `Surface Platform Profile` with four profiles, `scmi` cpufreq on all three policies; the GPU,
-display, ath12k, NVMe and USB drivers bound; one suspend and resume (deep) with the iptsd sleep hooks. systemd's
-`bpf-restrict-fs` now loads (v23.2 had no BTF: "Failed to load BPF object").
-
-Confirmed by the owner the same day: Wi-Fi and Bluetooth connect and work, touch gestures, the pen, the speakers,
-keyboard folding with tablet mode, the volume buttons, suspend and resume, Flatpak apps and the Windows entry in
-GRUB.
-
-Differences from v23.2: the camera stack is gone as intended (v23.2 exposed 16 CAMSS video nodes and `imx681` to
-libcamera, but its picture was always far too dark; left out until a camera fix). Fedora's configuration also binds
-the CoreSight tracing drivers, `qcomtee` and `surface_temp`. The CDSP link is down: the CDSP boots and opens its
-QRTR channel, then neither answers the FastRPC channel's open (`failed to create endpoint`, error -12, no
-`/dev/fastrpc-cdsp`) nor publishes its QRTR services (node 10). On v23.2 it worked from boot, then crashed once in
-the same boot (`fatal error received: sleep_stats…`, a CDSP firmware fault Qualcomm's tracker also shows on other
-boards) and remoteproc recovered it. Nothing in the feature table uses the CDSP.
-`sp11-diag`'s audio section found none of its controls on either kernel (`amixer -c` opens the UCM's remapped
-`sysdefault` interface; 3.1 reads `hw:N`). Not reported: GPU acceleration and the brightness slider, auto-rotation,
-switching power profiles, USB-C.
+- Installed: support RPM 3.0 as an upgrade on the installation above, then the kernel RPMs `7.2.5-300.sp11.1.fc45`
+  with `dnf install` next to `kernel-sp11` v23.2.
+- Confirmed: the kernel boots as the saved default, SELinux enforcing; the ADSP runs Linux's firmware without a
+  crash and accepts the speaker-protection graph; the microphone records speech at about −22 dBFS RMS with 3.0's
+  gain; sensors, touch, pen, the POS switch, keyboard, Bluetooth, battery, fan, platform profile, `scmi` cpufreq,
+  GPU, Wi-Fi, NVMe and USB bound; a deep suspend and resume; by hand (owner) Wi-Fi, Bluetooth, touch, the pen,
+  the speakers, tablet mode, the volume keys, suspend and resume, Flatpak and the Windows entry.
+- Found: the CDSP never wakes from its first sleep (cause and fix: `docs/kernel.md`, Sync state); `sp11-diag`'s
+  audio section found no controls through `amixer -c` (3.1 reads `hw:N`).
 
 ## Kernel revision 2 (7.2.5-300.sp11.2, CDSP boot order) and support RPM 3.1 (2026-09-23)
 
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.5-300.sp11.2.fc45` with `dnf install` next to
-revision 1 (the first confirmation on the device that support 3.0's repository override leaves local kernel RPMs
-installable), then support 3.1 as an upgrade from 3.0; boot entry with the Denali DTB and the SP11 arguments, saved
-default on the new entry. On two boots the CDSP waited for the ADSP as designed (`booting after adsp` 0.01 s after
-`remote processor adsp is now up`) and still stopped answering: FastRPC's channel open timed out, and later it
-answered neither sysmon's shutdown request nor the SMP2P stop. `sp11-cdsp-check` restarted it about 30 s after boot
-both times (`CDSP answers after the restart`, 12 s for the restart): `/dev/fastrpc-cdsp` and the five CDSP QRTR
-services were there, and no CDSP crash followed in the next minutes. So the boot order is not the cause; the
-restarted CDSP, too, stopped answering at its next sleep (next section). Unchanged against revision 1: speakers,
-microphone, sensors, one battery, no new kernel warning besides the two from the CDSP stop. 3.1's audio section
-records the UCM's values (`TX_DEC0/1 Volume` 100, `WSA_RX0/1 Digital Volume` 81, `SpkrLeft/SpkrRight PA Volume` 24,
-the TX MUX items).
+- Installed: the kernel RPMs `7.2.5-300.sp11.2.fc45` with `dnf install` next to revision 1; support 3.1 over 3.0.
+- Confirmed: boots as the saved default; the CDSP starts after the ADSP as designed; speakers, microphone, sensors
+  and battery as before. 3.1's audio section reads the UCM's values (`TX_DEC0/1 Volume` 100,
+  `WSA_RX0/1 Digital Volume` 81, `SpkrLeft/SpkrRight PA Volume` 24).
+- Found: the CDSP still stopped answering on both boots; `sp11-cdsp-check` restarted it about 30 s after boot and
+  it stopped again at its next sleep, so the boot order is not the cause.
 
 ## Sync state and kernel revision 3 (2026-09-24)
 
-The QDSS clock held on did not change the CDSP, and on v23.2 the CDSP answered a QMI ping after 3 and 8 minutes
-idle, with 12 completed sleeps. On revision 2 with support 3.1, `state_synced` read 0 for `rpmhpd` and for two of
-the 19 interconnect providers (`aggre2_noc`, `mc_virt`) and 1 for the rest; the only links they still waited on went
-to the video clock controller (`aaf0000.clock-controller`) and the crypto engine (`1dfa000.crypto`). Forcing
-`rpmhpd`'s sync through sysfs made the CDSP, stuck since boot, answer the ping at once (its sleep counter went from
-0 to 4); restarted, it answered again after 3 minutes idle, and its stop no longer timed out. Forcing the
-interconnect's sync as well changed nothing further for the CDSP.
-
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.5-300.sp11.3.fc45` installed with `dnf install`
-next to revision 2 and v23.2, after revision 1 was removed; entry with the Denali DTB and the SP11 arguments (plus
-the `$tuned_params` placeholder of tuned's kernel-install plugin), saved default. First boot: all 20 providers
-synced, `videocc_sm8550` and `qcrypto` loaded, no FastRPC error, the CDSP (sleep counter 7) and the ADSP answered
-the ping after 3 minutes idle, and the CDSP again after a suspend and resume. On all three boots `sp11-cdsp-check`
-logged `CDSP answers` without a restart and the CDSP answered after 3 minutes idle. New at boot: the crypto engine's
-AES XTS and CTR fail the kernel's self-tests (`xts-aes-qce setkey failed ... actual_error=-126`,
-`ctr-aes-qce encryption test failed (wrong output IV)`), which revision 4 leaves out. Across a 1-minute suspend the
-chip's `aosd`, `cxsd` and `ddr` counters stayed at 0 on revision 2 and on revision 3 alike, so the deepest sleep is
-not reached in suspend either way; the ADSP's sleep counter advances about 100 times a second, also while suspended.
-
-Revision 4 (`7.2.5-300.sp11.4`: the crypto engine with its hashes only) and support RPM 3.2 were built the same
-evening (steps 20, 35 and 36 passed), and with them a 45 Beta 1.3 ISO (sha256 `c60c2f6f…0dc0`; `build-all.sh` 10 min
-with everything else cached, 35 and 46 passed, 60 its 90 checks, the implanted media checksum verifies); next
-section.
+- Installed: the kernel RPMs `7.2.5-300.sp11.3.fc45` (the video clock controller and the crypto engine) with
+  `dnf install` next to revision 2 and v23.2.
+- Confirmed: boots as the saved default; all 20 providers synced, no FastRPC error; on three boots the CDSP answered
+  the ping without a restart, after 3 minutes idle and after a suspend and resume, as did the ADSP.
+- Found: on revision 2 `rpmhpd`, `aggre2_noc` and `mc_virt` held their boot votes for the two drivers Fedora lacks,
+  and forcing `rpmhpd`'s sync woke the stuck CDSP at once: the cause (`docs/kernel.md`); a held QDSS clock changed
+  nothing. Revision 3's crypto engine fails the AES XTS and CTR self-tests, so revision 4 keeps its hashes only.
+  Across a 1-minute suspend the SoC's `aosd`, `cxsd` and `ddr` counters stayed at 0: no deepest sleep in suspend.
 
 ## Fresh installation from the revision-4 ISO (2026-09-24)
 
-The earlier installation had been deleted; the unit was installed fresh from that ISO (the live session's checks
-were not recorded). Confirmed on the installed system: kernel `7.2.5-300.sp11.4` with the SP11 arguments and neither
-the live-only blacklist nor `selinux=0`, SELinux enforcing without an AVC; support 3.2, `sp11-iptsd` 3.1.0-3 and the
-sensors stack (hexagonrpc 0.5.0-6, libssc 0.4.4-2, iio-sensor-proxy 3.9-3.sp11.1, sp11-sensors 1.10) installed, no
-`sp11-cdsp-check` unit; `/dev/fastrpc-adsp`, `/dev/fastrpc-cdsp` and `/dev/fastrpc-cdsp-secure`, both DSPs answering
-the QMI ping; the crypto engine registers only `sha256-qce` and `hmac-sha256-qce` and no self-test fails;
-`sp11-diag` reports no provider waiting for sync_state; light, accelerometer, gyroscope, magnetometer and compass
-readings, iio-sensor-proxy running, the POS tablet-mode switch; the sound card with the UCM's values
-(`TX_DEC0/1 Volume` 100, `WSA_RX0/1 Digital Volume` 81, `SpkrLeft/SpkrRight PA Volume` 24) and PipeWire's speaker
-and microphone array as the defaults; one battery, the fan's hwmon, the platform profile, `scmi` cpufreq; the Flex
-Keyboard and Slim Pen 2 pairings imported (keyboard connected); `dnf upgrade --refresh` without a stock kernel
-(Fedora's `kernel-tools` 7.2.7, userspace only, did update). In the diag's boot the CDSP firmware reported its
-`sleep_stats` fatal error once, a few minutes after boot, and remoteproc recovered it, as on v23.2 (revisions 1 and
-2 never woke it far enough). The ADSP's `Handover signaled, but it already happened` errors (274 in that boot)
-appear on every kernel since the sensors stack, v23.2 included (137 to 350 per diag run). Confirmed by the owner
-afterwards: GPU acceleration (an Adreno GPU in Settings), the brightness slider, auto-rotation, automatic screen
-brightness (the first confirmation on any kernel), Wi-Fi, touchscreen, multi-touch and pen, speakers and microphone,
-battery status, Flatpak, the Windows entry in GRUB, the Slim Pen 2 connecting without pairing, tablet mode, suspend
-and resume. GNOME's Power Mode reaches the Surface: Power Saver, Balanced and Performance switch tuned (`tuned-ppd`)
-to `powersave`, `balanced` and `throughput-performance` and the platform profile to `low-power`, `balanced` and
-`performance`. On a second boot `/dev/fastrpc-cdsp` was present and both DSPs answered the ping. USB-C charging and
-data confirmed as well (an external display over USB-C not checked).
+- Installed: fresh install from the 45 Beta 1.3 ISO of 2026-09-24: kernel `7.2.5-300.sp11.4`, support RPM 3.2,
+  iptsd 3.1.0-3, hexagonrpc 0.5.0-6, libssc 0.4.4-2, iio-sensor-proxy 3.9-3.sp11.1, sp11-sensors 1.10.
+- Confirmed: the kernel without the live-only blacklist or `selinux=0`, SELinux enforcing; both DSPs answer the ping
+  on two boots, the crypto engine registers `sha256-qce` and `hmac-sha256-qce` only, no provider waiting for
+  sync_state; sensors, the POS switch, the sound card with 3.1's UCM values, the pairings imported,
+  `dnf upgrade --refresh` without a stock kernel; by hand (owner) every row of the feature table of the time, with
+  automatic screen brightness, tablet mode, the power modes and USB-C charging and data for the first time.
+- Found: the CDSP's `sleep_stats` assert once, recovered by remoteproc, and the ADSP's `Handover signaled` lines on
+  every kernel since the sensors stack: both benign (`docs/guide/troubleshooting.md`).
 
 ## Kernel revision 5 (7.2.7-300.sp11.5) as an update (2026-09-25)
 
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.5.fc45` (Fedora's 7.2.7 with the patch
-set rebased onto `v7.2.7`, `docs/kernel-patches.md`) installed with `dnf install` next to `7.2.5-300.sp11.4` on the
-installation from the revision-4 ISO; support 3.2 unchanged. The boot entry carries the Denali device tree, the SP11
-arguments and tuned's `$tuned_params`, and `saved_entry` names it; dracut printed
-`If you need to use bluetooth, please include it explicitly` twice and nothing else. Confirmed on the device: kernel
-`7.2.7-300.sp11.5` with the SP11 arguments, SELinux enforcing; both speakers, with
-`SP11 stage SP/SPVI enabled with VI+CPS feedback accepted` at every playback and no `All ports busy` (the feedback
-port 13 that 7.2.6's SoundWire check refused, patch 0058); microphone recording and playback; touch, multi-touch and
-pen (`SP11: accepting protocol 9 as QSPI controller`, GPI DMA mode); `/dev/fastrpc-adsp`, `-cdsp` and `-cdsp-secure`
-and both DSPs answering the ping, on a second boot too; the crypto engine with `sha256-qce` and `hmac-sha256-qce`
-only and no failed self-test; no provider waiting for sync_state; light, accelerometer, gyroscope, magnetometer and
-compass readings and the POS tablet-mode switch; the same 422 bound devices as on revision 4; a deep suspend and
-resume. Confirmed by the owner: Wi-Fi, the Flex Keyboard and Slim Pen 2, battery status, the brightness slider, the
-volume keys, keyboard and touchpad, auto-rotation, the power modes, and display, touch, pen, keyboard, Wi-Fi and
-sound after the resume. The journal's errors are again only the ADSP's `Handover signaled, but it already happened`
-(566 in that boot, which included the suspend and several playbacks). Warnings of that boot that revision 4's diag
-boot, which had no suspend, did not show: one `dpu_crtc_disable` frame-done timeout, `IRQ: set affinity failed` and
-a PM ordering warning of a PHY's hwmon device, none with a visible effect. Confirmed by the owner afterwards for
-revision 5 as well: GPU acceleration, USB-C charging and data, Flatpak, the Windows entry in GRUB, tablet mode's
-keyboard lock-out, automatic screen brightness.
+- Installed: the kernel RPMs `7.2.7-300.sp11.5.fc45` (the patch set rebased onto Fedora's 7.2.7) with `dnf install`
+  next to `7.2.5-300.sp11.4` on the installation above; support RPM 3.2 unchanged.
+- Confirmed: as revision 4, plus both speakers with `SP11 stage SP/SPVI enabled with VI+CPS feedback accepted` at
+  every playback and no `All ports busy` (7.2.6's SoundWire port check, patch 0058), the touch controller in QSPI
+  mode (`SP11: accepting protocol 9 as QSPI controller`), the same 422 bound devices, a deep suspend and resume
+  with display, touch, pen, keyboard, Wi-Fi and sound working after it (owner).
+- Found: new warnings against revision 4, none with a visible effect: one `dpu_crtc_disable` frame-done timeout,
+  `IRQ: set affinity failed` and a PM ordering warning of a PHY's hwmon device, in a boot with a suspend.
 
-## Kernel revision 6 (7.2.7-300.sp11.6), libcamera 0.7.2-3.sp11.1, support RPM 3.3: cameras (2026-09-26)
+## Kernel revision 6 (7.2.7-300.sp11.6) and support RPM 3.3: cameras (2026-09-26)
 
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.6.fc45` (revision 5 plus the camera
-commits 0059–0070, `docs/camera.md`) installed with `dnf install` next to `7.2.5-300.sp11.4` and `7.2.7-300.sp11.5`,
-in the same transaction as support 3.3 over 3.2; dracut printed only its two Bluetooth notes. The boot entry carries
-the Denali device tree and the SP11 arguments, and `saved_entry` names it. Confirmed on the device: kernel
-`7.2.7-300.sp11.6` with the SP11 arguments, SELinux enforcing; both speakers with
-`SP11 stage SP/SPVI enabled with VI+CPS feedback accepted`; both DSPs answering the ping, on a second boot too; no
-provider waiting for sync_state before and after camera use (the camera clock controller and CAMSS bound); 438 bound
-devices, the camera clock controller, both CCI buses, CAMSS, the three sensors (`imx681 7-001a`, `ov13858 5-0010`,
-`vd55g0 4-0060`) and the PM8550 flash LED among them; `imx681 7-001a: detected model id 0x0681 (IMX681)`. `cam -l`
-lists `Internal front camera`, `Internal back camera` and `'vd55g0'` by their device-tree paths. With Fedora's
-libcamera the IPA's signature is not valid, the software ISP uses `uncalibrated.yaml` and a raw gain range of
-`0-960`; with 0.7.2-3.sp11.1 the signature is valid and it uses `imx681.yaml` and a gain of `1-16`. The IR camera
-delivers 320x240 8-bit frames at about 59 fps; GNOME Snapshot leaves it out (`IR Camera ignored: vd55g0`). One
-`i2c-qcom-cci ac15000.cci: master 1 queue 0 timeout` when Snapshot switched from the front to the rear camera, which
-the OV13858 retry (0069) recovered. Confirmed by the owner: front and rear camera in Snapshot and in Firefox
-(WebRTC), both cameras after a suspend and resume, touch, pen, keyboard, Wi-Fi, Bluetooth and rotation. Not working:
-the picture is very dark and washed out, with a grey tint; in every 3-second capture the software ISP's brightness
-statistic stayed at its floor (all pixels in the darkest fifth) while the exposure sat at its maximum and the gain
-rose, to 5x on the front and about 30x on the rear camera. The camera light stays off while the front camera streams
-and comes on while the rear camera streams (owner). The journal's errors are the ADSP's
-`Handover signaled, but it already happened` and, once in the diag's boot, the CDSP firmware's known `sleep_stats`
-assert, which remoteproc recovered.
+- Installed: the kernel RPMs `7.2.7-300.sp11.6.fc45` (revision 5 plus the camera commits 0059–0070) with
+  `dnf install` next to revisions 4 and 5, support RPM 3.3 over 3.2 in the same transaction.
+- Confirmed: as revision 5, with the camera clock controller, both CCI buses, CAMSS, the three sensors and the
+  flash LED bound (438 devices); `cam -l` lists the three cameras; front and rear camera in GNOME Snapshot and
+  Firefox, also after a suspend and resume (owner).
+- Found: one `i2c-qcom-cci ac15000.cci: master 1 queue 0 timeout` when Snapshot switched to the rear camera,
+  recovered by the OV13858 retry (0069).
+- Not working: dark, grey pictures (the room, as the next rounds showed); the front camera's light (revision 7).
 
 ## Kernel revision 7 (7.2.7-300.sp11.7): the front camera's light, raw sensor levels (2026-09-26)
 
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.7.fc45` (revision 6 plus the light's
-device-tree commit 0071, `docs/camera.md`) installed with `dnf install`; dnf removed `7.2.5-300.sp11.4` (it keeps
-three kernels) and dracut printed only its two Bluetooth notes; the boot entry carries the Denali device tree and
-`saved_entry` names it. Confirmed on the device: kernel `7.2.7-300.sp11.7`, SELinux enforcing, both DSPs answering
-the ping, the CDSP again on a second boot; no provider waiting for sync_state. The LED `white:camera-indicator` is
-registered, reads 0 with no camera in use, 1 while `cam` streams the front camera and 0 afterwards, and a write to
-it during the stream fails with `Device or resource busy`. `sp11-camera-probe` in the evening, lens open on the room
-and then covered, green levels in 10-bit steps (range 64 to 1023): front camera at 30.01 fps, full exposure (2660
-lines), 65.2 at 1x and 71.3 at 16x against 64.8 and 64.2 covered, so 0.4 and 7.1 steps of light; half the exposure
-gives half the signal (0.50). Rear camera at 29.95 fps, full exposure (3206 lines), 65.5 at 1x and 75.8 at 15.5x
-against 65.4 and 64.5 covered; half exposure 0.50. Nine `i2c-qcom-cci ac15000.cci: master 1 queue 0 timeout` on the
-rear camera's bus in two bursts, 6 and 14 minutes after boot; every probe capture completed. The light sensor
-reported 0 lux in this diag and in both diags of revision 6, and 13 to 14 lux in the revision-4 ISO's diag of the
-evening of 2026-09-24. The CDSP firmware's `sleep_stats` assert once, during the diag's sensor readings, recovered.
-One PipeWire `running -> error (error changing node state: Device or resource busy)` on the front camera's node in
-the Snapshot session after the resume. Confirmed by the owner: the light comes on while the front camera streams.
+- Installed: the kernel RPMs `7.2.7-300.sp11.7.fc45` (revision 6 plus the light's device-tree commit 0071) with
+  `dnf install`; dnf removed `7.2.5-300.sp11.4`.
+- Confirmed: as revision 6; the LED `white:camera-indicator` reads 1 while the front camera streams and 0 otherwise,
+  and the light comes on (owner). `sp11-camera-probe` in a lamp-lit evening room: raw frames almost empty, exposure
+  and gain acting as set.
+- Found: nine CCI queue timeouts on the rear camera's bus in two bursts, every capture completed; the light sensor
+  at 0 lux in this and both revision-6 diags (dim rooms, as the next day showed).
 
 ## Kernel revision 7 in daylight: camera levels, light sensor (2026-09-27)
 
-Revision 7 again, in daylight. The light sensor read 97 to 99 lux in the room and 2,697 to 2,812 lux with the screen
-facing a window, so it works; its 0 lux in the diags of 2026-09-26 mean dim rooms (the owner: a weak lamp in the
-evening). GPIO 105 and 106 sit in the CCI function with pull-up (input, high), GPIO 225 is an output, low with no
-camera in use. `sp11-camera-probe` facing the window: front camera 644.7 green at full exposure and 1x (44 % of the
-green pixels clipped, 86 % at 16x) and 68.6 at the shortest exposure (8 lines), 30.00 fps; rear camera on a bright
-scene 714.8 at full exposure and 1x (36 % clipped), 67.1 at the shortest exposure (4 lines), 29.95 fps. Both sensors
-deliver a normal signal; the dark pictures of the evening came from the room.
+- Installed: revision 7 unchanged, in daylight.
+- Confirmed: the light sensor works (97 to 99 lux in the room, about 2,700 to 2,800 lux facing a window);
+  `sp11-camera-probe` facing the window gives a normal, clipping signal from both cameras, so the evening's dark
+  pictures came from the room. GPIO 105 and 106 sit in the CCI function with pull-up; GPIO 225 is an output, low
+  with no camera in use.
 
-## libcamera 0.7.2-3.sp11.2, frame length and gain range (2026-09-27)
+## Raw sensor measurements: frame length and gain range (2026-09-27)
 
-libcamera `0.7.2-3.sp11.2` installed over sp11.1 with `dnf install` (three packages upgraded); after PipeWire's
-restart `cam -l` uses `imx681.yaml` and the new `ov13858.yaml`, and the IR camera falls back to `uncalibrated.yaml`.
-The light sensor read 0 lux in the room of the tests. The exposure logs of Part B were not captured: in a new
-terminal the camera numbers were empty, so `cam` had no camera to open. `sp11-camera-probe front --frame-length` at
-16x: 30.01 fps at the default frame length (2708 lines to the driver), 30.01 fps at 3554 with the level x1.33 for
-the exposure x1.32, and 19.84 fps at 5416 with the level x2.06 for the exposure x2.02. The IMX681 ignores the frame
-length the driver writes to `0x0340`: it keeps the mode table's 3554 lines at 30 fps (a line of 9.38 us, not the
-driver's 12.3), takes an exposure of 3506 lines within that frame, and lengthens the frame to the exposure plus 8
-lines beyond it (1 / (5376 x 9.38 us) = 19.8 fps). `rear --frame-length`: 29.95, 19.97 and 14.98 fps at 3214, 4821
-and 6428 lines, the level x1.49 and x1.99 for the exposure x1.50 and x2.00. `rear --gain-range` (full exposure, a
-dark scene): the level x2.05 from 4x to 8x, x1.80 to 15.5x, x1.00 to 31x and x1.00 to 64x: the OV13858 applies no
-analogue gain above 15.5x (code 1984). A Snapshot photo of the dark room with the front camera shows a chessboard of
-faintly coloured squares of 240 output pixels, aligned to the frame's top-left corner: libcamera's GPU debayering
-(`docs/camera.md`).
+- Installed: revision 7 unchanged.
+- Confirmed: `sp11-camera-probe --frame-length` and `--gain-range` on both cameras; the rear camera takes the frame
+  length the driver writes (29.95, 19.97 and 14.98 fps at 3214, 4821 and 6428 lines).
+- Found: the IMX681 ignores the frame length at `0x0340` and keeps 3554 lines at 30 fps (fixed in revision 8); the
+  OV13858 applies no analogue gain above 15.5x; a chessboard of faintly coloured squares in dark pictures from
+  libcamera's GPU debayering (`docs/camera.md`).
 
-## Kernel revision 8 (7.2.7-300.sp11.8) and libcamera 0.7.2-3.sp11.3 (2026-09-28)
+## Kernel revision 8 (7.2.7-300.sp11.8): the IMX681's frame length (2026-09-28)
 
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.8.fc45` (revision 7 plus 0072, the
-IMX681's frame length) and libcamera `0.7.2-3.sp11.3` installed in one `dnf install`; dnf removed `7.2.7-300.sp11.5`
-and dracut printed only its two Bluetooth notes; the boot entry carries the Denali device tree and `saved_entry`
-names it. Confirmed on the device: kernel `7.2.7-300.sp11.8`, SELinux enforcing, both DSPs answering the ping, no
-provider waiting for sync_state, no DSP crash and no CCI timeout in the boot.
-`sp11-camera-probe front --frame-length`: the default is now 3554 lines (vertical blanking 914) with the exposure up
-to 3546, and at 3554, 5331 and 7108 lines the front camera ran at 30.01, 20.00 and 15.00 fps both at full exposure
-and at 886 lines, the level x1.50 and x1.97 for the exposure x1.50 and x2.00: the sensor takes the frame length the
-driver writes. `front`: 30.01 fps at the new maximum exposure. In a dark spot (the light sensor at 1 lux) the
-exposure control reached the front camera's maximum (3546 lines, 16x, digital 4x) 0.93 s after its first adjustment,
-with the brightness statistic at 1.07, and the rear camera's (3206 lines,
-`Analogue gain limited to 15.5 by the tuning file`, 15.5x, digital 4x) in 0.92 s, at 1.02: both at their limit in
-that light. The ping after a second boot answered too. Confirmed by the owner: the coloured squares are gone from
-dark pictures (a photo in the dark spot). A daylight photo with the front camera was too bright: the picture
-averaged 169 of 255, 72 % of the face was at 245 or above, 5.7 % of the frame at 250 or above (libcamera's exposure
-target, `docs/camera.md`).
-
-## libcamera 0.7.2-3.sp11.4 and sp11.5: the exposure target (2026-09-28)
-
-libcamera `0.7.2-3.sp11.4` (exposure target 1.8 from the tuning file) installed over sp11.3:
-`Exposure target 1.8 by the tuning file`; the owner tried 1.6, 1.0 and 1.4 on the front camera in daylight by
-editing the tuning file and chose 1.4. `0.7.2-3.sp11.5` (1.4 for both cameras, the exposure control's thresholds
-scaled with the target) installed over sp11.4: both tuning files say 1.4, `Exposure target 1.4 by the tuning file`;
-in a dark spot the front camera's exposure control stepped by 1.96x per update and reached its maximum (3546 lines,
-16x, digital 4x) 1.2 s after its first adjustment, the brightness statistic then at 1.01. Confirmed by the owner:
-both cameras look right in daylight, and settle within a few seconds in dim light without pumping.
-
-## libcamera 0.7.2-3.sp11.6: the nearest gain code (2026-09-28)
-
-libcamera `0.7.2-3.sp11.6` (0009: the sensor's nearest gain code; 0008: the exposure target clamped to 1.3 to 5)
-installed over sp11.5 with `dnf install` (three packages upgraded). In a 1 lux spot (the light sensor at 0 to 1 lux)
-the front camera's exposure log with sp11.5 and then with sp11.6: sp11.5 reached 3546 lines and then 16x in five
-1.96x steps (through 14.65x, which the next jump overshot to the 16x limit) and 4x digital gain; sp11.6, starting
-from the values the sensor kept, reached 4x digital gain within 0.3 s; both ended at a brightness statistic of
-1.077, and sp11.6's lines come from its longer `agc.cpp` (line 274 instead of 257). The spot was darker than the
-band where 0009 acts (about 12 to 17 lux in the model), so the round shows the new build working and unchanged at
-the limits, not the fix's effect. Confirmed by the owner: both cameras by hand in GNOME Snapshot, in the dim spot
-and in daylight; the cameras in Firefox (a WebRTC test page), and after suspend and resume and after reboots.
+- Installed: the kernel RPMs `7.2.7-300.sp11.8.fc45` (revision 7 plus 0072, the IMX681's frame length) with
+  `dnf install`; dnf removed `7.2.7-300.sp11.5`.
+- Confirmed: as revision 7, with no DSP crash and no CCI timeout in the boot; the front camera takes the frame
+  length the driver writes (30.01, 20.00 and 15.00 fps at 3554, 5331 and 7108 lines, `docs/camera.md`).
+- Found: a daylight photo with the front camera too bright (an average of 169 of 255, 72 % of the face at 245 or
+  above): libcamera's default exposure target.
 
 ## Kernel revision 9 (7.2.7-300.sp11.9): the camera driver fixes (2026-09-28)
 
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.7-300.sp11.9.fc45` (revision 8 plus 0073, the
-OV13858's lowest pixel rate, and 0074, the IMX681's control lock) installed with `dnf install`; dnf removed
-`7.2.7-300.sp11.6` and dracut printed only its two Bluetooth notes; the boot entry carries the Denali device tree
-and the SP11 arguments, and `saved_entry` names it. Confirmed on the device: kernel `7.2.7-300.sp11.9`, SELinux
-enforcing, the speakers' feedback accepted each time playback started, the touch controller's lines, both DSPs
-answering the ping (the compute DSP also after a second boot), the crypto engine's two hashes without a failed
-self-test, no provider waiting for sync_state; the ADSP's `Handover signaled, but it already happened` lines as many
-as with revision 8. The front camera streamed 300 frames with its light on (0074). The OV13858's pixel rate control
-reads 216 to 474.24 MHz (revision 8: from 432 MHz). `cam` without a stream size ran the rear camera in its full
-4224x3136 mode at 540 MHz, which revision 8 already described right: 432 MHz, 29.87 fps, a covered full exposure of
-3206 lines reported as 33306 us. No failed stream start and no OV13858 retry in the boot. With a 1280x720 stream
-(`cam -s width=1280,height=720`) the rear camera ran in its 2112x1188 mode at 270 MHz, the one 0073 changes: the
-pixel rate read 216 MHz where revision 8's minimum was 432 MHz, 29.95 fps at CAMSS's clock for that rate, a covered
-full exposure of 3206 lines reported as 33306 us. Confirmed by the owner: both cameras in GNOME Snapshot, Wi-Fi,
-Bluetooth, the pen, tablet mode and the other by-hand checks, suspend and resume.
+- Installed: the kernel RPMs `7.2.7-300.sp11.9.fc45` (revision 8 plus 0073, the OV13858's lowest pixel rate, and
+  0074, the IMX681's control lock) with `dnf install`; dnf removed `7.2.7-300.sp11.6`.
+- Confirmed: as revision 8; the front camera streams 300 frames with its light on (0074); the OV13858's pixel rate
+  control reads 216 to 474.24 MHz and its 2112x1188 mode (`cam -s width=1280,height=720`) reports 216 MHz at
+  29.95 fps with a full exposure of 33306 us, where revision 8 read 432 MHz (0073, `docs/camera.md`); no OV13858
+  retry; both cameras in GNOME Snapshot, Wi-Fi, Bluetooth, the pen, tablet mode and suspend and resume (owner).
 
 ## Support RPM 3.4: sp11-diag's media nodes (2026-09-29)
 
-`sp11-surface-support` `3.4-1.fc45` installed over 3.3 with `dnf install` (one package upgraded; kernel revision 9,
-libcamera `0.7.2-3.sp11.6`). `sp11-diag`'s camera section counts `48 media, video and subdevice nodes` (3.3 counted
-51, with the `/dev/media` directory of by-path links systemd 262's udev creates), lists only `/dev/media0` and the
-buffer devices, and prints the media graph without the `Failed to enumerate /dev/media (-21)` line.
+- Installed: `sp11-surface-support` 3.4-1 over 3.3 with `dnf install`, on revision 9.
+- Confirmed: `sp11-diag`'s camera section counts 48 media, video and subdevice nodes (3.3 counted the `/dev/media`
+  directory too, 51) and prints the media graph without the `Failed to enumerate /dev/media (-21)` line.
 
 ## Fedora 45 Beta KDE Plasma Desktop: live session and installation (2026-09-30)
 
-`Fedora-KDE-Desktop-Live-45_Beta-1.3` remastered with kernel `7.2.7-300.sp11.9`, support RPM 3.4, the sensors stack
-(hexagonrpc `0.5.0-8`, sp11-sensors 1.10) and libcamera `0.7.2-3.sp11.6`: the RPMs already built for Workstation,
-none rebuilt. First build (sha256 `d6c57aeb…d80a`), from the owner's recording of the live session: the Plasma
-desktop draws correctly at 2880x1920, scale 200%; the installer's window, opened in slitherer (Qt WebEngine)
-as Fedora's KDE profile sets it, was corrupted (truncated text, the language list missing, stale window contents).
-With `QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu` slitherer draws a web page correctly; KHelpCenter, on the same Qt
-WebEngine, draws correctly with the GPU on the installed system. The second build (sha256 `f84b60ba…cc01`) opens
-the installer in Firefox (`/etc/anaconda/conf.d/90-sp11-webui.conf`, `docs/fedora-media.md`); the installation from
-it succeeded. Confirmed by the owner on the installed Plasma system: the cameras, Bluetooth, the keyboard, the pen,
-multi-touch, tablet mode, auto-rotation and automatic screen brightness. On 2026-10-01 the owner confirmed the rest
-of the README's feature table there too: the display with GPU acceleration, the brightness slider, Wi-Fi, the
-speakers and the microphone, battery status, power profiles, USB-C charging and data, suspend and resume, Flatpak,
-the Windows entry in the GRUB menu, the Flex Keyboard and Slim Pen 2 pairings shared with Windows, the sensor
-readings and the front camera's light.
+- Installed: `Fedora-KDE-Desktop-Live-45_Beta-1.3` remastered with kernel `7.2.7-300.sp11.9`, support RPM 3.4, the
+  sensors stack (hexagonrpc 0.5.0-8, sp11-sensors 1.10), the RPMs built for Workstation;
+  fresh install from the second build (sha256 `f84b60ba…`), whose installer opens in Firefox.
+- Confirmed: the live session's Plasma desktop draws correctly at 2880x1920, scale 200 % (a recording of the
+  first build, `d6c57aeb…`); on the installed system the whole feature table (owner, 2026-09-30 and
+  2026-10-01), the sensor readings and the front camera's light included.
+- Found: the first build's installer, in slitherer as Fedora's KDE profile sets it, was drawn corrupted by its GPU
+  rendering; step 50 switches the viewer to Firefox (`docs/fedora-media.md`).
 
 ## Kernel revision 10 (7.2.8-300.sp11.10) and Fedora's libcamera, KDE Plasma installation (2026-10-02 to 2026-10-05)
 
-`kernel`, `kernel-core` and `kernel-modules{,-core,-extra}` `7.2.8-300.sp11.10.fc45` (revision 9's 74 patches,
-unchanged, on Fedora's 7.2.8) installed with `dnf install` next to `7.2.7-300.sp11.9`, nothing removed; dracut
-printed only its two Bluetooth notes; the boot entry carries the Denali device tree and the SP11 arguments, and
-`saved_entry` names it. Confirmed on the device: kernel `7.2.8-300.sp11.10`, SELinux enforcing, the speakers'
-feedback accepted at each playback without `feedback incomplete` or `All ports busy`, the touch controller's QSPI
-lines, both DSPs answering the ping, the crypto engine's two hashes without a failed self-test. A second boot
-(2026-10-03) slept 8.5 hours (`PM: suspend entry (deep)`) and resumed; its diagnostics: no provider waiting for
-sync_state, the same 439 bound devices and the same LEDs as revision 9, light and accelerometer readings, the
-CDSP's known `sleep_stats` assert once, during the diagnostics' sensor checks, recovered by remoteproc. libcamera
-then went back to Fedora's `0.7.2-3.fc45` (`dnf distro-sync 'libcamera*'`): `cam -l` lists the three cameras, each
-falling back to `uncalibrated.yaml`, and the front camera streams 300 frames with its light on. Confirmed by the
-owner (2026-10-05): the speakers, the microphone, touch and pen, the display's refresh rate, Wi-Fi, the Bluetooth
-keyboard and pen, brightness, the volume keys, the power profiles, rotation, both cameras, and the rest of the
-README's feature table (GPU acceleration, multi-touch, the touchpad, battery status, USB-C charging and data,
-automatic brightness, the keyboard lock-out in tablet mode, Flatpak, the Windows entry in GRUB, the pairings shared
-with Windows). Found: auto-rotation sometimes stops after a wake until iio-sensor-proxy is restarted (owner); in the
-diagnostics' boot the proxy used 92 % of a core for its whole running time and then crashed in libssc
-(`docs/sensors.md`, Known issues). The journal's other errors are the ADSP's
-`Handover signaled, but it already happened`.
+- Installed: the kernel RPMs `7.2.8-300.sp11.10.fc45` (revision 9's 74 patches on Fedora's 7.2.8) with
+  `dnf install` next to revision 9; libcamera Fedora's `0.7.2-3.fc45`.
+- Confirmed: as revision 9 (the same 439 bound devices and LEDs); a second boot slept 8.5 hours (deep) and
+  resumed; with Fedora's libcamera `cam -l` lists the three cameras on `uncalibrated.yaml` and the front camera
+  streams with its light on; the whole feature table under Plasma, both cameras included (owner, 2026-10-05).
+- Found: auto-rotation sometimes stops after a wake until iio-sensor-proxy is restarted; in the diagnostics' boot
+  the proxy spun at 92 % of a core and crashed in libssc (fixed in libssc 0.4.4-3, `docs/sensors.md` Known issues).
 
 ## libssc 0.4.4-3: the sensor stall (2026-10-07)
 
-`libssc-0.4.4-3.git54dd13e.sp11` (release 2 plus the three patches of `payload/sensors/libssc/`, `docs/sensors.md`
-Known issues) installed over release 2 on the KDE Plasma installation (kernel revision 10, iio-sensor-proxy
-3.9-3.sp11.1). Confirmed: the proxy links release 3's `libssc.so.2`; twenty claim-and-release cycles
-(`monitor-sensor` for 0.3 s each) leave it active without CPU time, with orientation, tilt and compass readings
-afterwards; after a reboot and a sleep, 52 minutes of uptime with 1 s of CPU time, no restart, no SEGV or core
-dump in its journal (owner). The multi-day watch continues.
+- Installed: `libssc-0.4.4-3.git54dd13e.sp11` (release 2 plus the three patches of `payload/sensors/libssc/`) over
+  release 2 on the KDE Plasma installation (kernel revision 10).
+- Confirmed: the proxy links release 3's `libssc.so.2`; twenty claim-and-release cycles (`monitor-sensor` for 0.3 s
+  each) leave it active without CPU time, with orientation, tilt and compass readings afterwards; after a reboot
+  and a sleep, 52 minutes of uptime with 1 s of CPU time and no crash (owner). The multi-day watch continues.

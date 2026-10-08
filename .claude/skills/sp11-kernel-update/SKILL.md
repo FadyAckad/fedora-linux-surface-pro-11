@@ -100,8 +100,8 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 
 - `docs/kernel.md`: the revision in Sources and packages, the tarball fact and the size of Fedora's own patch for
   the version, what this rebase met in the rebase section, a History line.
-- `docs/kernel-patches.md`: a paragraph for the revision (dropped, adapted and new patches, old-to-new numbers),
-  the host proof paragraph, the renumbered Contents table. Patch numbers are cited in `docs/kernel.md`,
+- `docs/kernel-patches.md`: a subsection for the revision (dropped, adapted and new patches, old-to-new numbers)
+  and the renumbered Contents table. Patch numbers are cited in `docs/kernel.md`,
   `docs/hardware.md`, `docs/sensors.md` and `docs/camera.md` as well.
 - `docs/guide/new-release.md`: the default revision.
 - Any other note whose facts the update changed; a new fact goes into its note first (`CLAUDE.md`, Conventions).

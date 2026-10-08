@@ -1,135 +1,93 @@
 # SP11 patch set
 
-The SP11 patch set is the branch `sp11/<version>` of the project's fork of the stable kernel (`KERNEL_PATCH_REPO` in
-`sp11.conf`): one commit per patch, with its original author, on top of the stable tag whose tree Fedora's source
-tarball carries. `sp11.conf` pins the base and the head commit (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`).
-`scripts/10-fetch-sources.sh` fetches them (a shallow partial clone of a few MB) and writes the series with
-`git format-patch`; `scripts/20-build-kernel.sh` checks that the series rebuilds the pinned commit's tree and
-concatenates it into Fedora's `linux-kernel-test.patch` (the slot `kernel.spec` provides for local builds, applied
-with `git apply` after Fedora's own `patch-<x.y>-redhat.patch`). `payload/kernel-local` sets the three new
-configuration symbols (the touch controller and two camera sensors) and enables two drivers Fedora's configuration
-leaves out. Nothing else about Fedora's kernel changes. Every change needs a new `KERNEL_SP11_REV` (see
-`docs/kernel.md`). A pushed branch is never rewritten, so every pinned commit stays fetchable: fixes go on top as
-new commits, a new kernel base on a new branch.
+The SP11 patch set is the branch `sp11/<version>` of the project's kernel fork (`KERNEL_PATCH_REPO` in `sp11.conf`):
+one commit per patch, with its original author, on the stable tag whose tree Fedora's source tarball carries. The
+pipeline:
 
-The patches are derived from the Linux kernel and, like the files they modify, licensed GPL-2.0 (the new
-`mshw0485_touch.c` and headers carry their own SPDX lines). Authorship is in each commit; this repository does not
-carry the patches.
+1. `sp11.conf` pins the base and the head commit (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`).
+2. Step 10 writes the pinned commits out as a series; step 20 checks it against the pinned tree and feeds it to
+   `kernel.spec`'s `linux-kernel-test.patch` slot (`docs/kernel.md`).
+3. `payload/kernel-local` sets the patch set's three new symbols and enables two drivers Fedora leaves out.
+4. Every change needs a new `KERNEL_SP11_REV`; a pushed branch is never rewritten: fixes go on top, a new base on a
+   new branch.
+
+License: GPL-2.0 like the kernel files they modify; `mshw0485_touch.c` and its headers carry SPDX lines.
 
 ## Where they come from
 
-Revision 1 (2026-09-23) was extracted from the kernel the project had verified on the device: ooaklee's
-linux_ms_dev_kit-sp11 release `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (commit `ce78e6ebc3d7`) with the kernel.org 7.2.5
-stable update, built as `7.2.5-jg-0sp11v23.2-qcom-x1e`. That tree is Ubuntu's qcom-x1e concept kernel with jglathe's
-X1E tree (jglathe/linux_ms_dev_kit) and ooaklee's Surface Pro 11 work on top. The extraction kept 61 patches; in the
-numbering of the current branch `sp11/7.2.8`:
+Dates and Fedora kernels: the revision table in `docs/kernel.md`.
 
-- 0001–0041: commits of jglathe's 7.2.0 tree (`746b3477`) that change code or device-tree nodes this machine uses,
-  as the original commits (author, message and diff; 0014 without a jglathe-only X1P file, 0030 with only its
-  Denali hunk). Which commits qualify was decided from the built v23.2 tree: the source files compiled into the
-  drivers the Denali OLED device tree binds, plus the Surface Aggregator, pmic_glink, HID and PCI (Wi-Fi) devices.
-- 0042–0047: ooaklee's branch commits that apply as they are (OLED link-rate quirk, dwc3 PHY re-init, platform
-  profile).
-- 0048–0056: ooaklee's work as topic patches of the validated files (their headers name the source commits and
-  authors): touch and pen, audio, the Surface battery guard, the Denali device tree.
-- 0057: this repository's POS tablet-mode switch.
+### Revision 1: the extraction from v23.2
 
-Revision 2 (2026-09-23) added a CDSP boot-order patch that did not help and was dropped again. Revisions 3 and 4
-(2026-09-24) carry these 61 patches unchanged; they add configuration only (`payload/kernel-local`,
-`docs/kernel.md`). On 2026-09-24 the patches moved from this repository into the fork as the branch `sp11/7.2.5`
-(head `df9cc406`): its tree equals the former patch files applied to `v7.2.5`, and only the POS switch's author
-changed, from a build placeholder to the fork's owner.
+- Source: the v23.2 kernel described in `docs/kernel.md`, ooaklee's linux_ms_dev_kit-sp11 release
+  `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (`ce78e6ebc3d7`) with the 7.2.5 stable update.
+- Result: 61 patches reproducing 70 of the 80 files they touch byte for byte from v23.2; the other 10 differ only by
+  the parts left out (below). In the numbering of the current branch `sp11/7.2.8`:
+  - 0001–0041: jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses (selection:
+    `docs/kernel.md`); 0014 lacks a jglathe-only X1P file, 0030 keeps only its Denali hunk.
+  - 0042–0047: ooaklee's branch commits as they are (OLED link-rate quirk, dwc3 PHY re-init, platform profile).
+  - 0048–0056: ooaklee's work as topic patches (touch and pen, audio, the Surface battery guard, the Denali device
+    tree) whose headers name the source commits and authors.
+  - 0057: this repository's POS tablet-mode switch.
+- Lesson: a file comparison misses prerequisite commits: the first build stopped in `net/qrtr/smd.c`, whose race fix
+  needs the rpmsg helper (0005).
 
-Revision 5 (2026-09-25) is the branch `sp11/7.2.7` (head `8ed6c0df`, tree `1ec390ba`): the 61 commits of
-`sp11/7.2.5` rebased onto `v7.2.7` in one step (`git rebase --onto v7.2.7 v7.2.5`; a stable tag contains every
-earlier one of its series, and of the stable changes since 7.2.5 only 7.2.6's touch the patch set's files), plus one
-new commit. Four commits are in 7.2.6 and dropped out: the DP EDID update and the DPU and DSI
-`dev_pm_opp_set_rate(0)` removals verbatim, the Denali QMP PHY supplies as the Denali hunk of the same fix for every
-X1E board. Three were adapted, each with an `[sp11: ...]` note in its message: 0031 keeps only the hunk in
-`msm_dp_ctrl_off_link_stream()`, which 7.2.6's version of the same fix lacks (mainline no longer has the function);
-0049's QSPI path returns `-EPROBE_DEFER` directly, because 7.2.6's `spi_geni_init()` holds its runtime PM reference
-in a scoped guard and no longer has the `out_pm` label (the textual merge was clean, the compile would not have
-been); 0052 takes 7.2.6's form of `q6apm_graph_start()`, which counts a graph only once the DSP accepted its start,
-as the SP11 version already did, and keeps 7.2.6's guard in `q6apm_graph_stop()`. 0058 is new: 7.2.6's port check in
-`qcom_swrm_stream_alloc_ports()` refuses the controller's highest master port, which the SP11 maps both amplifiers'
-CPS feedback to (port 13 of the WSA controller's 13). Old numbers to new: 0001–0023 unchanged, 0025–0031 to
-0024–0030, 0033 to 0031, 0035–0044 to 0032–0041, 0046–0061 to 0042–0057.
+### Revisions 2 to 4: configuration and the move into the fork
 
-Revision 6 (2026-09-26) adds the cameras (`docs/camera.md`) as twelve new commits on top of revision 5's branch
-(0059–0070; the branch grows, nothing is rewritten): the ten camera commits of turbineBMW/surface-pro-11-linux's
-reviewed branch `sp11-camera-review` (`kernel/sp11-camera-review.bundle` at that repository's commit `15e590c3`,
-sha256 `bacf60dc…` as turbineBMW published it, on their `sp11-sanitized2`, Linux 7.1.3) without its three ath12k
-rfkill commits (this series has its own, 0015 and 0016); their OV13858 retry (branch
-`integration/review10-camera-switch`); and ooaklee's IMX681 exposure fix (linux_ms_dev_kit-sp11 `b1754869f458`,
-only its `imx681.c` hunk). Every commit carries an `[sp11: ...]` note naming its source; four say what changed:
-the C-PHY support (0064) is rebased around the test pattern generator routing 7.2 added to the CSID code
-(`4b14db418b6e`, `51fe835c485b`), as in turbineBMW's own 7.3 port; the two Denali device-tree commits (0065,
-0068) add the same lines to this series' Denali tree; the sensor drivers (0062) put the IMX681 Kconfig entry and
-Makefile line after the MAX9271 library entry, because Fedora's `patch-7.2-redhat.patch` adds an IMX471 driver at
-their alphabetical place and `git apply` refuses the hunks there (the first build of revision 6 stopped in
-`%prep`). Every driver file equals turbineBMW's 7.3 port, their daily kernel.
+- Revision 2's CDSP boot-order patch did not help and was dropped; 3 and 4 add configuration only
+  (`payload/kernel-local`). The patches then moved into the fork as `sp11/7.2.5` (head `df9cc406`, the former patch
+  files on `v7.2.5`; only the POS switch's author changed).
 
-Revision 7 (2026-09-26) adds 0071 (this repository): the front camera's light, on TLMM GPIO 225, the pin Windows'
-camera platform device (ACPI `QCOM0C32`) drives and mainline's Denali tree already names `cam_indicator_en`, as a
-GPIO LED that the IMX681 gets as its `privacy` LED, so the V4L2 core switches it with the sensor's stream. Active
-high, as on the other X1 laptops; the ACPI resource states no polarity.
+### Revision 5: the rebase onto 7.2.7
 
-Revision 8 (2026-09-27) adds 0072 (this repository): the IMX681's frame length goes to the 24-bit register `0x033d`
-the sensor uses (the driver wrote `0x0340`, which it ignores; `docs/camera.md`), the mode's 3554 lines are the
-default and the shortest frame (30 fps), the exposure keeps 8 lines to the frame length instead of 48, and the line
-is counted in the 548.57 MHz CSI-2 pixel rate the driver reports (5144 pixels, the sensor's 9.378 us). The exposure
-reaches 3546 lines at 30 fps instead of 2660. Revisions 6 to 8 went to the fork in one push on 2026-09-28 (head
-`95a74f27`, tree `9d1a0c38`); revisions 6 and 7 were built from the trees of its commits 0070 and 0071.
+- `sp11/7.2.7` (head `8ed6c0df`, tree `1ec390ba`): the 61 commits rebased onto `v7.2.7` in one step
+  (`git rebase --onto v7.2.7 v7.2.5`) plus one new commit.
+- Dropped, upstream in 7.2.6: the DP EDID update, the DPU and DSI `dev_pm_opp_set_rate(0)` removals, the Denali QMP
+  PHY supplies.
+- Adapted, each with an `[sp11: ...]` note:
+  - 0031 keeps only the `msm_dp_ctrl_off_link_stream()` hunk that 7.2.6's version of the fix lacks.
+  - 0049's QSPI path returns `-EPROBE_DEFER` directly: 7.2.6's `spi_geni_init()` lost the `out_pm` label it used.
+  - 0052 takes 7.2.6's `q6apm_graph_start()` and keeps its guard in `q6apm_graph_stop()`.
+- New: 0058, since 7.2.6's port check in `qcom_swrm_stream_alloc_ports()` refuses the controller's highest master
+  port, the amplifiers' CPS feedback (13 of 13).
+- Old numbers to new: 0001–0023 unchanged, 0025–0031 to 0024–0030, 0033 to 0031, 0035–0044 to 0032–0041, 0046–0061
+  to 0042–0057.
 
-Revision 9 (2026-09-28) adds two fixes a review of the camera commits found (this repository). 0073 takes the
-OV13858's lowest pixel rate from the lowest link frequency: the Surface Pro 11 mode had put 592.8 MHz at the head of
-the link frequency menu, so the minimum came from 540 MHz, and the 270 MHz modes (2112x1188 among them, the one
-GNOME Snapshot gets) reported 432 instead of 216 MHz, which halved the line and exposure times libcamera derives.
-0074 applies the IMX681's controls at stream start under the control handler's lock (`v4l2_ctrl_handler_setup()`),
-so a control set from userspace meanwhile no longer interleaves with them. Revision 9 went to the fork on 2026-09-28
-(head `30c57e66`, tree `5ef459c8`), after the device round of the kernel built from that tree.
+### Revision 6: the cameras
 
-Revision 10 (2026-10-02) is the branch `sp11/7.2.8`: the 74 commits of `sp11/7.2.7` rebased onto `v7.2.8` in one
-step (`git rebase --onto v7.2.8 v7.2.7`) without a conflict. None is upstream in 7.2.8, none needed an adaptation
-and none is new, so every number stays; five of 7.2.8's stable commits touch files of the series, none of them its
-code (`docs/kernel.md`). It went to the fork on 2026-10-05 (head `c9a90d97`, tree `6b506039`), after the device
-round of the kernel built from that tree.
+- Twelve commits on top of revision 5's branch (0059–0070, `docs/camera.md`); every driver file equals turbineBMW's
+  7.3 port.
+- Sources (each commit's `[sp11: ...]` note):
+  - ten commits of turbineBMW/surface-pro-11-linux's `sp11-camera-review` (bundle `kernel/sp11-camera-review.bundle`
+    at commit `15e590c3`, sha256 `bacf60dc…`, on Linux 7.1.3) minus its three ath12k rfkill commits (0015 and 0016
+    here);
+  - turbineBMW's OV13858 retry (branch `integration/review10-camera-switch`);
+  - ooaklee's IMX681 exposure fix (linux_ms_dev_kit-sp11 `b1754869f458`, only its `imx681.c` hunk).
+- Adapted:
+  - 0064 (C-PHY) is rebased around 7.2's CSID test pattern generator routing (`4b14db418b6e`, `51fe835c485b`);
+  - 0065 and 0068 add their lines to this series' Denali tree;
+  - 0062 puts the IMX681 Kconfig and Makefile entries after MAX9271's, clear of Fedora's IMX471 hunks in
+    `patch-7.2-redhat.patch`.
 
-Proven on the host before the first build: the series applied to kernel.org 7.2.5 reproduces 70 of the 80 files it
-touches byte for byte from the v23.2 source; the other 10 differ only by the left-out parts listed below. The Denali
-OLED device tree it builds has the same enabled nodes as v23.2's, minus the camera, the privacy LED, the PMK8550 ADC
-(which the v23.2 kernel had no driver for) and the ThinkPad T14s compatible. The series applies to Fedora's
-`kernel-7.2.5-300.fc45` sources with `git apply` and no offsets, and with Fedora's configuration plus `kernel-local`
-every directory it touches compiles without an error or a warning, as do all Qualcomm arm64 device trees. (A file
-comparison does not see a missing API: the first build of revision 1 stopped in `net/qrtr/smd.c`, whose race fix
-needs the rpmsg helper that is now 0005.)
+### Revisions 7 to 9: this repository's camera fixes
 
-Proven on the host for revision 5: Fedora's `linux-7.2.7.tar.xz` holds exactly the `v7.2.7` tree (every path, mode
-and blob); with Fedora's 7.2.7 configuration plus `kernel-local`, every directory the series touches compiles
-without an error or a warning, as do all arm64 device trees; `git am` of the series onto `v7.2.7` reproduces the
-branch's tree with the same authors, dates and messages.
+- Revision 7, 0071: the front camera's light (TLMM GPIO 225, active high) as the IMX681's `privacy` GPIO LED,
+  switched by the V4L2 core with the stream (`docs/camera.md`).
+- Revision 8, 0072: the IMX681's frame length at the 24-bit register `0x033d` the sensor uses, not the ignored
+  `0x0340`; revisions 6 to 8 pushed together 2026-09-28 (head `95a74f27`, tree `9d1a0c38`).
+- Revision 9, 0073: the OV13858's lowest pixel rate from the lowest link frequency (the 270 MHz modes had reported
+  432 instead of 216 MHz, halving libcamera's line and exposure times); 0074: the IMX681's controls applied at
+  stream start under the control handler's lock (`v4l2_ctrl_handler_setup()`). Pushed 2026-09-28 (head `30c57e66`,
+  tree `5ef459c8`).
 
-Proven on the host for revision 6: with Fedora's 7.2.7 configuration plus `kernel-local`, every directory the series
-touches compiles without an error or a warning (the camera directories also with `W=1`), as do all arm64 device
-trees; the series applies with `git apply` to Fedora's `linux-7.2.7.tar.xz` after `patch-7.2-redhat.patch`, and
-every file it touches then equals the branch's, but for the three Fedora's patch changes as well (the media
-`Kconfig` and `Makefile`, `MAINTAINERS`); the Denali OLED DTB enables the camera clock controller, CAMSS, both CCI
-buses, the three sensors, the PM8010 camera regulators and the IR flash LED, and `scripts/sync-state-drivers.py`
-finds a driver in Fedora's packages for every new user of the rails and the interconnect. Revision 7: every arm64
-device tree compiles without a warning, and `checkpatch.pl --strict` reports only the missing `Signed-off-by`.
-Revision 9: `drivers/media/i2c/` compiles without an error or a warning (the two changed files also with `W=1`), and
-`checkpatch.pl --strict` reports only the missing `Signed-off-by`. Its packages hold the same modules as revision
-8's; the IMX681 module imports `v4l2_ctrl_handler_setup` instead of `__v4l2_ctrl_handler_setup`, and the OV13858
-module's code differs from revision 8's only in the constant of the pixel rate's minimum.
+### Revision 10: the rebase onto 7.2.8
 
-Proven on the host for revision 10: Fedora's `linux-7.2.8.tar.xz` holds exactly the `v7.2.8` tree (every path, mode
-and blob); `git range-diff` against `sp11/7.2.7` finds every patch unchanged, with the same authors, dates and
-messages; with Fedora's 7.2.8 configuration plus `kernel-local`, every directory the series touches compiles without
-an error or a warning, as do all arm64 device trees; `git am` of the series onto `v7.2.8` reproduces the branch's
-tree (one trailing-whitespace warning, as with 7.2.7). Its packages hold the same 5664 modules as revision 9's, and
-the Denali OLED DTB is byte for byte revision 9's (7.2.8 changes no Qualcomm device tree).
+- `sp11/7.2.8`: the 74 commits of `sp11/7.2.7` rebased onto `v7.2.8` unchanged (`docs/kernel.md`), so every number
+  stays. Pushed 2026-10-05 (head `c9a90d97`, tree `6b506039`).
 
 ## Contents
+
+The patches by number, with their origin and what each is needed for.
 
 | Patches | What | Origin | Needed for |
 |---|---|---|---|
@@ -172,23 +130,20 @@ the Denali OLED DTB is byte for byte revision 9's (7.2.8 changes no Qualcomm dev
 
 ## Left out of v23.2, and the device check for each
 
-Nothing here drives hardware the feature table depends on; each entry ends with what the device check of
-2026-09-23 covered.
+Nothing here drives hardware the feature table depends on; in parentheses, what the device check covered.
 
-- Ubuntu's packaging, configuration annotations, out-of-tree drivers and SAUCE patches (AppArmor, lockdown, FAN
-  networking, ...), including three that touch hardware this machine uses: the eDP PHY regulator-load removal (Johan
-  Hovold's patch as Ubuntu carries it; upstream behaviour is what every other X1E laptop runs — display), the revert
-  of the ps883x accessibility check (USB-C) and a UCSI connector-cleanup race fix (USB-C unplug).
-- The ADSP attach series (remoteproc, SMP2P, pmic_glink probe-order hack): mainline's PAS
-  driver shuts the UEFI-started ADSP down and boots the full firmware, as on every other X1E laptop — audio,
-  battery, sensors, USB-C after boot.
-- The clock `sync_state` series and a gcc UFS log change — boot, suspend (the kernel arguments keep unused clocks
-  and power domains on).
-- The PCIe ASPM API series and ath12k's MAC-from-device-tree hack — Wi-Fi and NVMe, also after resume.
-- v23.2's camera stack (IMX681, CAMSS, CCI, C-PHY through a separate CSI PHY driver, privacy LED): its picture was
-  far too dark to use (checked 2026-09-23), so revisions 1 to 5 carry no camera; revision 6 carries turbineBMW's
-  camera branch instead (0059–0070, `docs/camera.md`), which has no privacy LED.
-- The spi-hid series (unused: the MSHW0485 driver frames HID-over-SPI itself) and the uncalled
+- Ubuntu's packaging, annotations, out-of-tree drivers and SAUCE patches: the eDP PHY regulator-load removal
+  (display), the ps883x accessibility-check revert (USB-C), a UCSI connector-cleanup race fix (USB-C unplug).
+- The ADSP attach series (remoteproc, SMP2P, pmic_glink probe order): mainline's PAS driver restarts the ADSP itself
+  (`docs/kernel.md`; audio, battery, sensors, USB-C after boot).
+- The clock `sync_state` series and a gcc UFS log change; the kernel arguments keep unused clocks and power domains
+  on (boot, suspend).
+- The PCIe ASPM API series and ath12k's MAC-from-device-tree hack (Wi-Fi and NVMe, also after resume).
+- v23.2's camera stack (far too dark): revision 6 carries turbineBMW's instead (0059–0070), revision 7 the privacy
+  LED (0071).
+- The spi-hid series (the MSHW0485 driver frames HID-over-SPI itself) and the uncalled
   `qcom_geni_spi_biosref_xfer()` helper.
-- Debug output (DP, QMP combo, drm_dp_helper, UCSI feature print), the DPU underflow colour, DP audio (the Denali
-  sound card has no DisplayPort DAI), other laptops' device trees, panels, EC and QSEECOM entries, EL2, X1P.
+- Debug output (DP, QMP combo, drm_dp_helper, UCSI), the DPU underflow colour, DP audio (Denali's sound card has no
+  DisplayPort DAI).
+- Other laptops' device trees, panels, EC and QSEECOM entries, EL2, X1P, Denali's ThinkPad T14s compatible and
+  PMK8550 ADC (no driver in v23.2).

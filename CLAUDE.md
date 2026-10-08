@@ -28,13 +28,13 @@ a guide says only what concretely works.
 - `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors), tablet
   mode and auto-rotation; its dated history is at the end. Read before touching steps 45, 46 and 75,
   `payload/sensors/` or the hexagonrpc fork.
-- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), Fedora's libcamera
-  (the project's rebuild was dropped on 2026-10-02), the raw-capture probe, what the device has shown. Read before
+- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), Fedora's libcamera,
+  the raw-capture probe, what the device has shown. Read before
   touching `payload/camera/` or the kernel fork's camera commits.
 - `docs/verified.md`: what has been confirmed on the device, by date and package version. Read before stating
   that something works; add to it after a device round.
 - `docs/guide/*.md`: the user guides (`build`, `install`, `update`, `support-rpm-history`, `bluetooth-pairings`,
-  `sensors`, `cameras`, `troubleshooting`, `design`, `new-release`, `layout`, `credits`), linked from `README.md`.
+  `sensors`, `troubleshooting`, `design`, `new-release`, `layout`, `credits`), linked from `README.md`.
   Update the guide whose procedure or result changes.
 
 ## Layout
