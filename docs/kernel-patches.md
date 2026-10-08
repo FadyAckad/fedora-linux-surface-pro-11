@@ -22,7 +22,7 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
 - Source: the v23.2 kernel described in `docs/kernel.md`, ooaklee's linux_ms_dev_kit-sp11 release
   `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (`ce78e6ebc3d7`) with the 7.2.5 stable update.
 - Result: 61 patches reproducing 70 of the 80 files they touch byte for byte from v23.2; the other 10 differ only by
-  the parts left out (below). In the numbering of the current branch `sp11/7.2.8`:
+  the parts left out (below). In the numbering of the current branch `sp11/7.2.9`:
   - 0001–0041: jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses (selection:
     `docs/kernel.md`); 0014 lacks a jglathe-only X1P file, 0030 keeps only its Denali hunk.
   - 0042–0047: ooaklee's branch commits as they are (OLED link-rate quirk, dwc3 PHY re-init, platform profile).
@@ -84,6 +84,11 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
 
 - `sp11/7.2.8`: the 74 commits of `sp11/7.2.7` rebased onto `v7.2.8` unchanged (`docs/kernel.md`), so every number
   stays. Pushed 2026-10-05 (head `c9a90d97`, tree `6b506039`).
+
+### Revision 11: the rebase onto 7.2.9
+
+- `sp11/7.2.9`: the 74 commits of `sp11/7.2.8` rebased onto `v7.2.9` unchanged (`docs/kernel.md`), so every number
+  stays. Pushed 2026-10-08 (head `0fdddb4d`, tree `c94f9d28`).
 
 ## Contents
 
@@ -160,7 +165,7 @@ Not started. The workaround in use is KDE's power button set to Lock screen (`do
 - ACPI's `drivers/acpi/button.c` sets `button->suspended` in `.suspend`, clears it in `.resume`, and while it is set
   reports no key, only `acpi_pm_wakeup_event()`.
 
-### The driver in 7.2.8
+### The driver in 7.2.9
 
 - A threaded handler, `devm_request_threaded_irq(..., NULL, pm8941_pwrkey_irq, IRQF_ONESHOT, ...)`, reads
   `PON_RT_STS` and reports press and release with `input_report_key()`; for a release without a press it reports a
@@ -183,7 +188,7 @@ Not started. The workaround in use is KDE's power button set to Lock screen (`do
 
 ### In this project
 
-1. A commit on top of the pinned `sp11/<version>` branch of the fork (0075 after revision 10), with a `[sp11: ...]`
+1. A commit on top of the pinned `sp11/<version>` branch of the fork (0075 after revision 11), with a `[sp11: ...]`
    note for anything adapted; a pushed branch is never rewritten.
 2. A compile check of `drivers/input/misc` and the DTBs on the host with Fedora's configuration plus
    `kernel-local` (`docs/kernel.md`, Rebase, step 4), then the new pins: `KERNEL_PATCH_COMMIT`, `KERNEL_SP11_REV`

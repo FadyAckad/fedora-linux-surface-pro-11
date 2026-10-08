@@ -231,3 +231,16 @@ What has been confirmed on the tested unit, by date and package version. "The ke
   profiles) the tablet stayed awake after a power-key wake.
 - Found: the CDSP asserted (`sleep_statsi.c:537`) during one of the five stops, while the proxy closed its streams,
   and once during `sp11-sensors-check`'s `ssccli` readings.
+
+## Kernel revision 11 (7.2.9-300.sp11.11) (2026-10-08)
+
+- Installed: the kernel RPMs `7.2.9-300.sp11.11.fc45` (revision 10's 74 patches on Fedora's 7.2.9) with
+  `dnf install` next to revision 10, on the KDE Plasma installation.
+- Confirmed: the boot entry with the Denali device tree and the SP11 arguments, `Enforcing`; the four GENI I2C buses
+  and both PS8830 retimers bound, with no I2C or retimer message in this boot or in revision 10's; the speaker stage
+  with VI+CPS feedback, the QSPI touch path, both DSPs over FastRPC (the CDSP again in a second boot), the crypto
+  engine's two hashes, the three cameras and the front camera's light, no provider waiting for sync_state; the same
+  439 bound devices and loaded modules as revision 10, no new kind of kernel warning; the five sensors' readings and
+  the proxy's orientation and compass; the whole feature table under Plasma (owner).
+- Found: the CDSP's known `sleep_statsi.c:537` assert once while `sp11-diag` ran, in a boot without a sleep,
+  recovered by remoteproc (`docs/sensors.md`, Known issues).

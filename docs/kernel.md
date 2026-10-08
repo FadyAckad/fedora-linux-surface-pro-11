@@ -9,9 +9,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 - The result: Fedora's package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
-- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7 and 7.2.8 checked). Fedora's own
-  `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8) shares only the media `Kconfig`,
-  `Makefile` and `MAINTAINERS` with the patch set, applied after it.
+- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8 and 7.2.9 checked). Fedora's
+  own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in 7.2.9) shares only the media
+  `Kconfig`, `Makefile` and `MAINTAINERS` with the patch set, applied after it.
 
 ### The builds, by revision
 
@@ -26,6 +26,7 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 | 8 | 2026-09-27 | `kernel-7.2.7-300.fc45` | IMX681 frame length |
 | 9 | 2026-09-28 | `kernel-7.2.7-300.fc45` | OV13858 pixel rate, IMX681 control lock |
 | 10 | 2026-10-02 | `kernel-7.2.8-300.fc45` | Rebased onto `v7.2.8` |
+| 11 | 2026-10-08 | `kernel-7.2.9-300.fc45` | Rebased onto `v7.2.9` |
 
 ## kernel.spec slots and the build
 
@@ -114,8 +115,8 @@ No listed feature uses the CDSP.
 - Forcing the sync: write `1` without a newline to `state_synced`; the stuck CDSP answers at once.
 - The fix in `kernel-local`: both drivers, the crypto engine limited to its hashes (`CRYPTO_DEV_QCE_ENABLE_SHA`)
   because its AES XTS and CTR fail the kernel's self-tests at boot; dm-crypt never uses the engine (it masks
-  `CRYPTO_ALG_ALLOCATES_MEMORY`, which the engine's ciphers set). A `sleep_stats` fatal error once in a boot after
-  the first wake is known; remoteproc restarts the CDSP.
+  `CRYPTO_ALG_ALLOCATES_MEMORY`, which the engine's ciphers set). The CDSP's `sleep_stats` assert around sensor
+  stream changes is known (`docs/sensors.md`, Known issues); remoteproc restarts the CDSP.
 
 ## Rebase to a new Fedora kernel
 
@@ -126,6 +127,10 @@ Every command with its expected output: `.claude/skills/sp11-kernel-update/`.
 - 7.2.5 to 7.2.7 (revision 5): every stable change to a file of the patch set came with 7.2.6, none with 7.2.7.
 - 7.2.7 to 7.2.8 (revision 10): the 74 commits rebased unchanged, without a conflict; five stable commits touch
   files of the series, none its code.
+- 7.2.8 to 7.2.9 (revision 11): the 74 commits rebased unchanged, without a conflict; no stable commit touches a
+  file of the series, and Fedora's configuration differs only in `BUILD_SALT`. `i2c-qcom-geni` now selects the
+  serial engine's clock-table entry for 32 or 19.2 MHz (it wrote index 0) and refuses to probe without one; X1E's
+  QUP tables carry both. Its four buses carry the two PS8830 USB-C retimers.
 
 ### Procedure
 
@@ -180,3 +185,5 @@ Every command with its expected output: `.claude/skills/sp11-kernel-update/`.
 - 2026-09-28: revisions 6 to 8 pushed (`95a74f27`); revision 9, two camera fixes, passed and pushed (`30c57e66`).
 - 2026-10-02: rebased onto `kernel-7.2.8-300.fc45` (revision 10, `sp11/7.2.8`); passed 2026-10-03 and pushed
   (`c9a90d97`).
+- 2026-10-08: rebased onto `kernel-7.2.9-300.fc45` (revision 11, `sp11/7.2.9`); passed the same day and pushed
+  (`0fdddb4d`).

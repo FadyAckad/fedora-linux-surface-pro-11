@@ -4,8 +4,8 @@
 
 Builds a Fedora 45 live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition with the
 Samsung OLED panel (Snapdragon X Elite X1E80100). The kernel is Fedora's own kernel package
-(`kernel-7.2.8-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
-Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.8-300.sp11.10.fc45.aarch64`). GRUB
+(`kernel-7.2.9-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
+Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.9-300.sp11.11.fc45.aarch64`). GRUB
 loads the Denali OLED device tree. The build runs on the Surface itself, in WSL, and tailors every ISO to the unit
 that built it with files from its Windows installation. Secure Boot has to be off and Windows stays on the device
 (see Status and scope).
@@ -13,12 +13,12 @@ that built it with files from its Windows installation. Secure Boot has to be of
 ## What works
 
 Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). The KDE Plasma Desktop column was confirmed on the
-installation of 2026-09-30 (`FEDORA_EDITION=KDE-Desktop`), running kernel revision 10
-(`7.2.8-300.sp11.10.fc45.aarch64`) and support RPM 3.4; the Workstation column on an installation from the ISO
+installation of 2026-09-30 (`FEDORA_EDITION=KDE-Desktop`), running kernel revision 11
+(`7.2.9-300.sp11.11.fc45.aarch64`) and support RPM 3.4; the Workstation column on an installation from the ISO
 built on 2026-09-24, with revision 9 (`7.2.7-300.sp11.9.fc45.aarch64`) and support RPM 3.4.
 [`docs/verified.md`](docs/verified.md) has the details and the results with earlier kernels.
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.7-300 (sp11.9) | Fedora 45 Beta KDE Plasma Desktop, Fedora's 7.2.8-300 (sp11.10) |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.7-300 (sp11.9) | Fedora 45 Beta KDE Plasma Desktop, Fedora's 7.2.9-300 (sp11.11) |
 |---|:-:|:-:|
 | Boot from the internal NVMe drive | yes | yes |
 | Display with GPU acceleration | yes | yes |
@@ -94,8 +94,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.8-300.sp11.10.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.8-300.sp11.10.fc45.aarch64.iso`, with a `.sha256` beside it.
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.9-300.sp11.11.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.9-300.sp11.11.fc45.aarch64.iso`, with a `.sha256` beside it.
 
 - Every option and step: [`docs/guide/build.md`](docs/guide/build.md).
 - Writing the media and installing: [`docs/guide/install.md`](docs/guide/install.md).
