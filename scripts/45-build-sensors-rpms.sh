@@ -5,7 +5,8 @@
 #   hexagonrpc        hexagonrpcd from the project's fork (HEXAGONRPC_REPO): serves the DSP's sensor framework its
 #                     configuration and registry over FastRPC
 #   libssc (+devel)   upstream QMI client library and ssccli, with the project's patches (payload/sensors/libssc/)
-#   iio-sensor-proxy  Fedora's own source RPM of the target release, rebuilt with -Dssc-support=enabled
+#   iio-sensor-proxy  Fedora's own source RPM of the target release, rebuilt with -Dssc-support=enabled and the
+#                     project's patches (payload/sensors/iio-sensor-proxy/)
 #   sp11-sensors      this unit's payload (Windows sensor configuration, the registry exported by scripts/75, platform
 #                     identity) plus the udev, systemd, SELinux and dnf integration from payload/sensors/
 # The first three are chain-built in a mock buildroot of the target release (iio-sensor-proxy needs libssc-devel,
@@ -76,6 +77,7 @@ git -C "$CACHE_DIR/hexagonrpc" archive --format=tar.gz --prefix="hexagonrpc-$HEX
 git -C "$CACHE_DIR/libssc" archive --format=tar.gz --prefix="libssc-$LIBSSC_COMMIT/" -o "$SRC/libssc-$LIBSSC_COMMIT.tar.gz" HEAD
 install -m 0644 "$PAYLOAD_DIR/sensors/hexagonrpc.sysusers.conf" "$PAYLOAD_DIR/sensors/60-hexagonrpc-fastrpc.rules" "$SRC/"
 install -m 0644 "$PAYLOAD_DIR"/sensors/libssc/*.patch "$SRC/"   # applied by rpm/libssc.spec.in (%autosetup -p1)
+install -m 0644 "$PAYLOAD_DIR"/sensors/iio-sensor-proxy/*.patch "$SRC/"   # applied by rpm/iio-sensor-proxy.spec.in (%autosetup -p1)
 ( cd "$SRC" && rpm2cpio "$ISP_SRPM" | cpio -idm --quiet ) || die "cannot unpack $(basename "$ISP_SRPM")"
 [ -s "$SRC/iio-sensor-proxy-$ISP_VERSION.tar.bz2" ] || die "$(basename "$ISP_SRPM") does not carry iio-sensor-proxy-$ISP_VERSION.tar.bz2"
 # The template is Fedora's spec plus the SSC option and the release suffix: a spec Fedora changed (a build
@@ -101,6 +103,9 @@ rpm -qpl "$RPM_HEX" | grep -x /usr/lib/sysusers.d/hexagonrpc.conf >/dev/null || 
 rpm -qpl "$RPM_SSC" | grep -x /usr/bin/ssccli >/dev/null || die "libssc RPM lacks ssccli"
 # The point of the rebuild: the proxy must link libssc.
 rpm -qp --requires "$RPM_ISP" | grep -E '^libssc\.so\.' >/dev/null || die "iio-sensor-proxy was built without libssc (requires: $(rpm -qp --requires "$RPM_ISP" | tr '\n' ' '))"
+# ... and its sleep pause (payload/sensors/iio-sensor-proxy/): it subscribes to logind's PrepareForSleep.
+rpm2cpio "$RPM_ISP" | cpio -i --quiet --to-stdout ./usr/libexec/iio-sensor-proxy | grep -a PrepareForSleep >/dev/null \
+  || die "iio-sensor-proxy was built without the sleep pause (no PrepareForSleep in /usr/libexec/iio-sensor-proxy)"
 rpm -qpl "$RPM_ISP" | grep -x /usr/lib/udev/rules.d/80-iio-sensor-proxy.rules >/dev/null || die "iio-sensor-proxy RPM lacks its udev rule"
 log "chain RPMs: $(basename "$RPM_HEX") $(basename "$RPM_SSC") $(basename "$RPM_ISP")"
 

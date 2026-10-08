@@ -1,5 +1,6 @@
 # Hardware
-The tested unit, its peripherals and userspace, and the Bluetooth pairings shared with Windows.
+The tested unit, its peripherals and userspace, sleep and its wake sources, and the Bluetooth pairings shared with
+Windows.
 
 ## Target hardware (tested unit)
 
@@ -49,6 +50,37 @@ The tested unit, its peripherals and userspace, and the Bluetooth pairings share
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` with `/usr/libexec/sp11/sp11-grub-modules`, which copies
   `chain.mod` and its dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi` on every grub2-mkconfig and
   on an RPM trigger on `grub2-efi-aa64-modules`.
+
+## Sleep
+
+- The kernel sleeps in `deep` (`/sys/power/mem_sleep`: `s2idle [deep]`): the non-boot CPUs go offline, then PSCI
+  SYSTEM_SUSPEND. CPU idle has only `WFI` and `cpu-sleep-0`: patch 0056 empties the Denali cluster domains'
+  `domain-idle-states` for s2idle resume reliability.
+- Wake-armed (`power/wakeup` enabled): the power key (`pmic@0:pon@1300:pwrkey`); `gpio-keys`, with the lid on TLMM
+  GPIO 2 (`wakeup-event-action = EV_ACT_DEASSERTED`: opening wakes, closing does not) and the volume keys on PM8550
+  GPIO 6 and 8; both USB controllers (`a600000.usb`, `a800000.usb`); the four tsens thermal sensors; the ADSP and
+  CDSP remoteprocs. Not armed: `smp2p-adsp` and `smp2p-cdsp` (upstream default), the Surface Aggregator.
+- Any ADSP message ends a deep sleep: IPCC's summary interrupt is `IRQF_NO_SUSPEND` and its child chip lacks
+  `IRQCHIP_MASK_ON_SUSPEND`, `glink-smem` is `IRQF_NO_SUSPEND`, and PSCI's suspend has no `suspend_again`. Open
+  sensor streams (`docs/sensors.md`, Known issues) and charger or battery notices wake the tablet this way.
+- `cat /sys/power/pm_wakeup_irq` names the wake-armed interrupt of the last wake; after an ADSP wake it answers
+  `No data available`.
+- PowerDevil 6.7 sleeps again 10 s after a wake if the lid is closed, no external monitor counts and the lid action
+  is Sleep (`checkWakeup`); after a wake by network, telephony or timer, after 30 s idle instead.
+- The power key's driver (`pm8941-pwrkey`) reports the press that woke the system, about 0.2 s before
+  `System returned from sleep`, and synthesizes a press for a release without one; ACPI's button driver on x86
+  suppresses that press. Under KDE the waking press counts as a power-button press: each of 10 power-key wakes on
+  2026-10-08 was followed by a new sleep 1 to 6 s later. Opening the cover wakes without that.
+- PowerDevil 6.7 runs its `PowerButtonAction` (`powerdevilrc`, `[<profile>][SuspendAndShutdown]`: 0 nothing,
+  1 sleep, 16 logout screen (the default), 32 lock screen, 64 screen off, 128 screen toggle) for that press. Lock
+  screen is the setting used (`docs/guide/troubleshooting.md`): the session is locked after a sleep already, and
+  screen off or toggle would blank the screen just woken. With it the tablet stayed awake after a power-key wake
+  (`docs/verified.md`). With nothing, `HandleButtonEvents::loadAction()` returns
+  false and the core does not activate the action. In tablet mode PowerDevil unbinds the power button's shortcut.
+- PowerDevil holds a logind `block` inhibitor on the power key, the sleep keys and the lid whatever the setting, so
+  logind's own key handling never runs. The kernel-side fix is planned in `docs/kernel-patches.md`.
+- BlueZ logs `Controller resume with wake event 0x1` after every resume; it is not a wake cause (the Bluetooth UART
+  is not wake-armed).
 
 ## Bluetooth dual-boot pairings
 

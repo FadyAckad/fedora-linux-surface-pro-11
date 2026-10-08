@@ -4,7 +4,9 @@
 # relies on fails (seen with refused writes: sns_registry_sensor.c:279), and udev starts this unit again after every
 # recovery, which turned one such failure into a crash loop. Exit 3 makes systemd skip the unit without a failure,
 # so Restart= does not re-run it (an ExecStartPre failure would be restarted until the start limit); a reboot clears
-# it. Also caps the attaches per boot.
+# it. Also caps the attaches per boot. The re-attach after a wake is not counted: the daemon is stopped before every
+# sleep, and sp11-sensors-resume.service, which starts it again, leaves /run/sp11-sensors/resume for this script
+# (20 sleeps in one boot had reached the cap). It is still refused after an ADSP crash or once the cap is exceeded.
 set -u
 if journalctl -k -b -q --no-pager -g 'crash detected in adsp' 2>/dev/null | grep -q .; then
   logger -t sp11-sensors "not attaching hexagonrpcd: the ADSP crashed in this boot (journalctl -k -b -g 'crash detected'); reboot to try again"
@@ -12,7 +14,13 @@ if journalctl -k -b -q --no-pager -g 'crash detected in adsp' 2>/dev/null | grep
 fi
 mkdir -p /run/sp11-sensors
 n=0; [ -f /run/sp11-sensors/attaches ] && n=$(cat /run/sp11-sensors/attaches)
-n=$((n + 1)); echo "$n" > /run/sp11-sensors/attaches
+if [ -e /run/sp11-sensors/resume ]; then
+  rm -f /run/sp11-sensors/resume
+  r=0; [ -f /run/sp11-sensors/resume-attaches ] && r=$(cat /run/sp11-sensors/resume-attaches)
+  echo "$((r + 1))" > /run/sp11-sensors/resume-attaches
+else
+  n=$((n + 1)); echo "$n" > /run/sp11-sensors/attaches
+fi
 if [ "$n" -gt 12 ]; then
   logger -t sp11-sensors "not attaching hexagonrpcd: $n attaches in this boot; reboot to try again"
   exit 3

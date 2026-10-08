@@ -104,8 +104,14 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
 
 ### iio-sensor-proxy
 
-- Fedora's SRPM of the target release rebuilt with `-Dssc-support=enabled`, release `<fedora>.sp11.1`; the SRPM is
-  pinned by URL and checksum (`IIO_SENSOR_PROXY_SRPM`, Koji's unsigned copy; `docs/pipeline.md`).
+- Fedora's SRPM of the target release rebuilt with `-Dssc-support=enabled` and the project's patch, release
+  `<fedora>.sp11.<n>` (`IIO_SENSOR_PROXY_RPM_SUFFIX`, `sp11.2` since the patch); the SRPM is pinned by URL and
+  checksum (`IIO_SENSOR_PROXY_SRPM`, Koji's unsigned copy; `docs/pipeline.md`).
+- The patch, `payload/sensors/iio-sensor-proxy/0001-Pause-sensor-polling-across-system-sleep.patch` (Runtime
+  design): step 45 copies it into the source RPM, the spec applies it with `%autosetup -p1`, and step 45 refuses a
+  proxy binary without `PrepareForSleep`. The suffix rises for a change to the template or the patch.
+- The patch adds `test_system_sleep` to upstream's `tests/integration-test.py` (umockdev, python-dbusmock's logind
+  template). Run upstream's suite when the patch is rebased: it needs no SSC hardware.
 - Step 45 refuses an SRPM with patches, and one whose spec differs from the copy the template was made from
   (`IIO_SENSOR_PROXY_BASE_SPEC_SHA256`): refresh the template, then the pin.
 
@@ -127,10 +133,14 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   `stdbuf -oL` (stdout is fully buffered on the journal socket), `ExecCondition=+sp11-sensors-guard`,
   `Restart=on-failure`, `RestartSec=5`, `StartLimitBurst=4` per 5 min.
 - `sp11-sensors-guard` refuses an attach with exit 3 once `crash detected in adsp` is in the boot's kernel log, and
-  after 12 attaches per boot (counted in `/run/sp11-sensors/attaches`, resumes included). It must be a condition:
+  after 12 attaches per boot (counted in `/run/sp11-sensors/attaches`). It must be a condition:
   `RestartPreventExitStatus=` covers the main process only and an `ExecStartPre` exit 3 is restarted until the
   start limit, while an `ExecCondition` exit 1-254 skips the unit without a failure. Step 46 asserts the drop-in
   has neither setting.
+- Since 1.12 the re-attach after a wake does not count: `sp11-sensors-resume.service` leaves
+  `/run/sp11-sensors/resume`, and the guard removes it and counts that start in `resume-attaches` instead. Such a
+  start is still refused after an ADSP crash or once the cap is exceeded. A daemon that fails after a wake is still
+  stopped by the start limit, and its restarts count.
 - The daemon serves `/var/lib/sp11/hexagonrpc` (tmpfiles): links to the package's `sensors/config`,
   `sensors/sns_reg.conf` and `socinfo`, and a `fastrpc`-owned `sensors/persist/` (the DSP's
   `/persist/sensors/registry`) with a `C`-copy (mtimes kept) of the registry in `persist/registry/` and of the two
@@ -142,8 +152,23 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   initramfs when a 1.1/1.2 package is upgraded away (hence `Requires: dracut`).
 - `sp11-sensors-resume.service` restarts the daemon `After=suspend.target`: the stock unit's
   `Conflicts=suspend.target` stops it, nothing restarts a conflict-stopped unit, and `sleep.target` is active
-  before the suspend. `sp11-sensors-wait` (the online unit, `TimeoutStartSec=5min`) waits for a light reading,
-  then hands iio-sensor-proxy what its own probe missed, without restarting it (Compass).
+  before the suspend. Since 1.12 it runs `systemctl reset-failed` on the daemon first, which also resets its start
+  limit: a wake is not a restart loop, and five wakes in five minutes had hit the limit.
+- `sp11-sensors-wait` (the online unit, `TimeoutStartSec=5min`) waits for a light reading, then hands
+  iio-sensor-proxy what its own probe missed, without restarting it (Compass).
+- iio-sensor-proxy stops every sensor when logind sends `PrepareForSleep(true)` and starts the claimed ones on
+  `PrepareForSleep(false)`, logging `Pausing sensor polling for system sleep` and `Resuming sensor polling after
+  system sleep`. A first claim made during the sleep is answered with the first reading after the wake.
+- While awake the proxy holds a `sleep` `delay` inhibitor lock (`systemd-inhibit --list`) and releases it once the
+  sensors are stopped, so logind waits for that, at most `InhibitDelayMaxSec` (5 s), before the kernel sleeps.
+  Without a lock, `PrepareForSleep` alone does not delay the sleep.
+- The CIL module allows the proxy's D-Bus messages with logind and the lock's FIFO
+  (`systemd_logind_inhibit_var_run_t`): the rules Fedora's policy gives fprintd for its own sleep lock.
+- One function, `reconcile_polling()`, starts and stops the drivers for claims, releases, hotplug and sleep. A
+  claim, release or sleep notice served inside libssc's synchronous calls only makes it go round again, so libssc's
+  open and close never nest.
+- The proxy is never stopped or restarted around a sleep: the CDSP asserts around its exits (Known issues), while
+  the pause ran 35 sleeps without an assert.
 - `91-sp11-sensors.conf` excludes `iio-sensor-proxy` in dnf's main configuration (the support RPM's kernel
   exclusion is a repository override, `docs/pipeline.md`; step 46 checks both). The exclusion also filters a local
   RPM of the package: the four RPMs go in one transaction, and a later SP11 build of the proxy needs
@@ -170,9 +195,12 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
 
 ## sp11-sensors-check
 
-- `sp11-sensors-check` (also run by `sp11-diag`) reports the stack from boot to desktop: the daemon, the DSP's
-  file requests measured against `/run/sp11-sensors/attaches`, one `ssccli` reading per sensor, iio-sensor-proxy,
+- `sp11-sensors-check` (also run by `sp11-diag`) reports the stack from boot to desktop: the daemon, the guard's
+  two counters, the DSP's file requests measured against `/run/sp11-sensors/attaches` (the last counted attach; a
+  re-attach after a wake leaves it alone since 1.12), one `ssccli` reading per sensor, iio-sensor-proxy, sleep,
   SELinux and tablet mode.
+- Its sleep section lists the inhibitor locks, the proxy's pause and resume lines, and one line per sleep of the
+  boot with its length and the `Handover signaled` lines logged during it (0 for a sleep without a stream open).
 - `PanelOrientationManaged` is asked on the logged-in user's session bus with `runuser`/`gdbus`, so run the check
   with `sudo` from a terminal in the desktop. `libinput-utils` is optional.
 
@@ -233,6 +261,10 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
 - The CDSP firmware asserts (`sleep_statsi.c:537`, recovered in 0.1–0.2 s) around sensor streams starting or
   stopping on the ADSP, for instance after an ADSP crash or a boot-time proxy restart. Nothing on Linux uses the
   CDSP (`/dev/fastrpc-cdsp` has no client). Tracked, not fixed.
+- 2026-10-06 to 10-08 it asserted at the end of four boots, where the proxy stopped at shutdown with KWin's stream
+  open, and when the proxy crashed; never at a client's last release (about 200 in the same boots).
+- With 3.9-3.sp11.2 (2026-10-08) it asserted during one of five shutdowns, while the proxy closed its streams in its
+  92 ms stop, and once between two of `sp11-sensors-check`'s `ssccli` readings; 35 sleeps with the pause had none.
 
 ### hexagonrpcd's memory
 
@@ -256,14 +288,64 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   - the proxy's SSC drivers `open_sync` on the first claim and `close_sync` on the last, so churn nests two opens;
   - both opens share the sensor's one `report_id`: the first done unhooks the other's handler (the spin) and leaves
     its own on freed data (the crash).
-- The trigger is claim churn, not the wake: KWin and PowerDevil toggle their sensor claims around screen-off and
-  wake; GNOME's daemons claim once.
+- The trigger is claim churn, not the wake: in Plasma 6.7 KWin holds the claims itself (`KWin::LightSensor` for
+  automatic brightness, `KWin::OrientationSensor` for auto-rotation in tablet mode), toggles them around screen-off
+  and wake, and claims again when the proxy reappears (`onServiceRegistered`); PowerDevil holds none. GNOME's
+  daemons claim once.
 - Fixed by the three patches of `payload/sensors/libssc/`, confirmed on the device (`docs/verified.md`):
   - the wait iterates the main context blocking, so a pending open costs no CPU;
   - each request keeps its report handler in its own context, so a completing request disconnects only its own;
   - the subclasses reset a leftover handler on open and close and drop the client reference they leaked.
-- Not changed: the proxy keeps a sensor marked as polling after a failed `open_sync` and never retries until a
-  restart. Not seen on the device.
+- Not changed: the proxy keeps a sensor marked as polling after a failed `open_sync` and retries only after a
+  restart or, since 3.9-3.sp11.2, the next sleep and wake. Not seen on the device.
+
+### The sensor streams woke the system from deep sleep (fixed in iio-sensor-proxy 3.9-3.sp11.2)
+
+- Symptom, under KDE Plasma with libssc release 3: after a sleep the tablet woke within seconds, cover closed or
+  not; with the cover closed it slept and woke in a loop, since PowerDevil sleeps again 10 s after a wake with the
+  lid closed (`docs/hardware.md`, Sleep).
+- While a sensor stream is open, the ADSP raises about one SMP2P interrupt per second (each logs
+  `qcom_q6v5_pas 6800000.remoteproc: Handover signaled, but it already happened`) and about two GLINK interrupts.
+  The first one ends a deep sleep.
+- Over seven boots (2026-10-06 to 10-08), 193 of the 198 sleeps that ended within 10 s (2.2–3.8 s typical) had
+  ADSP signals in the sleep window, and none of the 14 sleeps of 48 s to 14.6 h had any.
+- Switching KDE's automatic brightness off (KWin releases the light sensor) stopped the SMP2P interrupts at once.
+- The proxy starts a stream at a sensor's first claim and stops it at the last release; KWin does not reliably
+  release before a sleep, so nothing stopped the streams. With libssc release 2 the proxy had crashed after a wake
+  (2026-10-06), which closed them, and the sleeps after it lasted hours.
+- Fixed by the proxy's sleep pause (Runtime design), iio-sensor-proxy 3.9-3.sp11.2 with sp11-sensors 1.11,
+  confirmed on the device (`docs/verified.md`): 20 sleeps in one boot without an ADSP signal, up to 1.9 h.
+- Not fixed: plugging the charger in during a sleep wakes the tablet the same way (the ADSP's battery manager over
+  GLINK; `pm_wakeup_irq` names no interrupt), followed by more wakes in the first ~1.5 min. With the cover closed
+  PowerDevil puts it back to sleep about 10 s after each. Needs a kernel change; left for later.
+
+### hexagonrpcd stayed down after many wakes in a boot (fixed in sp11-sensors 1.12)
+
+- Up to 1.11, `sp11-sensors-resume.service` restarted the daemon after every wake and each start counted: the guard
+  refused from the 13th start of a boot (exit 3), and more than four starts in five minutes hit the unit's start
+  limit (`StartLimitBurst=4`), which left it `failed (start-limit-hit)`.
+- 2026-10-08, 20 sleeps in one boot: 15 starts counted, the unit failed for the rest of the boot. The sensors kept
+  working: a re-attach after a resume makes no file request, and all five read after the last wake.
+- The wake loops before the sleep pause reached the cap as well; with lasting sleeps, ordinary use reaches it.
+- 1.12 does not count the re-attach after a wake and resets the start limit before it (Runtime design). On the
+  device (`docs/verified.md`): 15 wakes within seven minutes, the counters at 1 and 15, the daemon running.
+- systemd forgets the start limit of a unit it unloads: a test unit nothing references is unloaded once stopped and
+  never hits the limit. The daemon's unit stays loaded, so a test of the limit needs a unit that holds it.
+
+### The proxy's stop timed out in an open that never completed (3.9-3.sp11.1; not seen with 3.9-3.sp11.2)
+
+- At the upgrade to 3.9-3.sp11.2 the old proxy (3.9-3.sp11.1) did not exit within the 45 s stop timeout: dnf's
+  removal step took 47 s, and the proxy left a SIGABRT core dump. Fedora's `service.d/10-timeout-abort.conf` sets
+  `TimeoutStopFailureMode=abort`, so systemd aborts a service that does not stop in time.
+- The core's stack: the proxy waited in `ssc_sensor_accelerometer_open_sync`, called from
+  `ssc_accelerometer_set_polling`: return address 0xde0c follows that call in the 3.9-3.sp11.1 binary of the live
+  root (build ID `4a0def55`). systemd-coredump named the frame `input_accel_open`, from the symbols of the file
+  that had replaced the binary.
+- A libssc open completes on the sensor's first configuration update or measurement and has no timeout of its own;
+  SIGTERM only quits the main loop, which a pending synchronous open never returns to.
+- In 3.9-3.sp11.1 a release served inside that wait runs a nested close of the same sensor, after which the
+  pending open can wait forever. 3.9-3.sp11.2 calls no driver nested (`reconcile_polling()`); it stopped in 69 to
+  92 ms at five reboots on 2026-10-08 (`docs/verified.md`).
 
 ## Upstream state
 
@@ -274,6 +356,8 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   to modify `/usr/share/qcom` should fail loudly, which the fork does.
 - The fork's `sp11-sensors` branch (head 40e5041) carries five signed commits by the owner; fork only for now, no
   pull request.
+- iio-sensor-proxy: master is still the 3.9 tag (2026-03-02) and has no sleep handling; no merge request proposes
+  one (checked 2026-10-08). The sleep patch is generic, covers every sensor type and carries its test.
 
 ## History
 
@@ -285,3 +369,9 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
 - 2026-09-30: 0.5.0-8 and 1.10 on KDE Plasma: tablet mode, auto-rotation and automatic brightness confirmed.
 - 2026-10-03: kernel revision 10 on KDE Plasma: auto-rotation stopping after some wakes, traced to libssc.
 - 2026-10-07: libssc release 3 on the device: no spin or crash over twenty claim cycles, a reboot and a sleep.
+- 2026-10-08: under Plasma the tablet would not stay asleep: open sensor streams end the deep sleep.
+  iio-sensor-proxy 3.9-3.sp11.2 (the sleep pause) and sp11-sensors 1.11 on the device the same day: 20 sleeps in
+  one boot without an ADSP signal, up to 1.9 h; hexagonrpcd's attach cap reached after many wakes. 1.12 on the
+  device the same evening: the re-attach after a wake no longer counts, the daemon ran through 15 quick wakes.
+  The old proxy's 45 s stop at the upgrade traced to a pending accelerometer open; the new one stopped in under
+  0.1 s at five reboots.

@@ -1,0 +1,458 @@
+Pause sensor polling across system sleep
+
+A sensor keeps polling while the system sleeps as long as a client
+holds its claim, and clients do not reliably release their claims
+before a sleep. On the Surface Pro 11 (Snapdragon X1E), whose sensors
+sit behind the ADSP's Sensor Core, an open sensor stream makes the
+ADSP signal the CPUs about once a second, and the first signal ends a
+suspend to RAM: the tablet woke 2-4 s after every sleep that began
+with a stream open, and with the cover closed it went back to sleep
+and woke again in a loop.
+
+Stop every sensor when logind sends PrepareForSleep(true) and start
+the claimed ones again on PrepareForSleep(false). A "delay" inhibitor
+lock, held while the system is awake and released once the sensors
+are stopped, makes logind wait for that before the system sleeps.
+Without logind nothing changes. A first claim made during the sleep
+is answered with the first reading after the wake, as first claims
+are otherwise answered with the first reading.
+
+Polling is now decided in one place, reconcile_polling(), from each
+sensor's clients and whether the system is going to sleep; the claim,
+release and hotplug paths call it instead of driver_set_polling(). A
+driver may iterate the main context while it starts or stops a sensor
+(the libssc drivers do, through libssc's synchronous calls), and a
+claim, release or sleep notification handled meanwhile now only makes
+the running reconcile_polling() go round again, so no driver is
+started or stopped re-entrantly. Sensors claimed while the proxy was
+still opening them start once they are open. On exit the drivers are
+closed as before, with no polling decision taken meanwhile.
+
+The integration test runs logind's mock and checks the lock, the
+pause, the resume, a release during the sleep and a claim made during
+the sleep.
+---
+ src/iio-sensor-proxy.c    | 228 ++++++++++++++++++++++++++++++++++++--
+ tests/integration-test.py |  74 +++++++++++++
+ 2 files changed, 290 insertions(+), 12 deletions(-)
+
+diff --git a/src/iio-sensor-proxy.c b/src/iio-sensor-proxy.c
+index 9c7e8cd..1aca54a 100644
+--- a/src/iio-sensor-proxy.c
++++ b/src/iio-sensor-proxy.c
+@@ -19,6 +19,7 @@
+ 
+ #include <glib-unix.h>
+ #include <gio/gio.h>
++#include <gio/gunixfdlist.h>
+ #include <gudev/gudev.h>
+ #include <polkit/polkit.h>
+ #include "drivers.h"
+@@ -32,6 +33,10 @@
+ #define SENSOR_PROXY_IFACE_NAME         SENSOR_PROXY_DBUS_NAME
+ #define SENSOR_PROXY_COMPASS_IFACE_NAME SENSOR_PROXY_DBUS_NAME ".Compass"
+ 
++#define LOGIND_DBUS_NAME                "org.freedesktop.login1"
++#define LOGIND_DBUS_PATH                "/org/freedesktop/login1"
++#define LOGIND_IFACE_NAME               "org.freedesktop.login1.Manager"
++
+ #define NUM_SENSOR_TYPES DRIVER_TYPE_PROXIMITY + 1
+ 
+ typedef struct {
+@@ -52,6 +57,19 @@ typedef struct {
+ 	GPtrArray         *sensor_startup_dbus_invocations_delayed[NUM_SENSOR_TYPES];
+ 	gboolean           sensor_startup_dbus_event_delayed[NUM_SENSOR_TYPES];
+ 
++	/* What driver_set_polling() was last told, see reconcile_polling() */
++	gboolean           polling[NUM_SENSOR_TYPES];
++	gboolean           reconciling;
++	gboolean           reconcile_again;
++
++	/* System sleep: no polling between logind's PrepareForSleep(true) and
++	 * PrepareForSleep(false), and a "delay" inhibitor lock held while
++	 * awake so that logind waits for the sensors to stop */
++	guint              prepare_for_sleep_id;
++	gboolean           sleeping;
++	int                sleep_lock_fd;
++	GCancellable      *sleep_lock_cancellable;
++
+ 	/* Accelerometer */
+ 	OrientationUp previous_orientation;
+ 	Tilt          previous_tilt;
+@@ -405,6 +423,168 @@ any_sensors_left (SensorData *data)
+ 	return exists;
+ }
+ 
++static void
++release_sleep_lock (SensorData *data)
++{
++	if (data->sleep_lock_fd < 0)
++		return;
++
++	close (data->sleep_lock_fd);
++	data->sleep_lock_fd = -1;
++	g_debug ("Released the sleep delay lock");
++}
++
++static void
++take_sleep_lock_cb (GObject      *source_object,
++		    GAsyncResult *res,
++		    gpointer      user_data)
++{
++	SensorData *data;
++	g_autoptr(GError) error = NULL;
++	g_autoptr(GUnixFDList) fd_list = NULL;
++	g_autoptr(GVariant) ret = NULL;
++	gint32 idx;
++	int fd;
++
++	ret = g_dbus_connection_call_with_unix_fd_list_finish (G_DBUS_CONNECTION (source_object),
++							       &fd_list, res, &error);
++	/* Cancelled on exit, data is being freed */
++	if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
++		return;
++
++	data = user_data;
++	g_clear_object (&data->sleep_lock_cancellable);
++
++	if (ret == NULL) {
++		if (g_error_matches (error, G_DBUS_ERROR, G_DBUS_ERROR_SERVICE_UNKNOWN) ||
++		    g_error_matches (error, G_DBUS_ERROR, G_DBUS_ERROR_NAME_HAS_NO_OWNER))
++			g_debug ("No logind, sensors will keep polling while the system sleeps");
++		else
++			g_warning ("Could not take a sleep delay lock: %s", error->message);
++		return;
++	}
++
++	g_variant_get (ret, "(h)", &idx);
++	fd = fd_list ? g_unix_fd_list_get (fd_list, idx, &error) : -1;
++	if (fd < 0) {
++		g_warning ("Could not take a sleep delay lock: %s",
++			   error ? error->message : "no file descriptor in the reply");
++		return;
++	}
++
++	/* The system started going to sleep while we were asking */
++	if (data->sleeping) {
++		close (fd);
++		return;
++	}
++
++	data->sleep_lock_fd = fd;
++	g_debug ("Took a sleep delay lock");
++}
++
++/* PrepareForSleep(true) alone does not make logind wait: a "delay" lock
++ * held while awake does, until it is released or InhibitDelayMaxSec */
++static void
++take_sleep_lock (SensorData *data)
++{
++	if (data->sleeping ||
++	    data->sleep_lock_fd >= 0 ||
++	    data->sleep_lock_cancellable != NULL)
++		return;
++
++	data->sleep_lock_cancellable = g_cancellable_new ();
++	g_dbus_connection_call_with_unix_fd_list (data->connection,
++						  LOGIND_DBUS_NAME,
++						  LOGIND_DBUS_PATH,
++						  LOGIND_IFACE_NAME,
++						  "Inhibit",
++						  g_variant_new ("(ssss)",
++								 "sleep",
++								 "iio-sensor-proxy",
++								 "Pause the sensor streams before the system sleeps",
++								 "delay"),
++						  G_VARIANT_TYPE ("(h)"),
++						  G_DBUS_CALL_FLAGS_NONE,
++						  -1,
++						  NULL,
++						  data->sleep_lock_cancellable,
++						  take_sleep_lock_cb,
++						  data);
++}
++
++/* Start or stop each sensor so that it polls if, and only if, it has
++ * clients and the system is not going to sleep. Drivers can iterate the
++ * main context while they start or stop a sensor (libssc's synchronous
++ * calls do), so a claim, a release or a sleep notification can arrive in
++ * the middle of this: such a nested call only makes the running one go
++ * round again, so a driver is never started or stopped re-entrantly. */
++static void
++reconcile_polling (SensorData *data)
++{
++	guint i;
++
++	if (data->reconciling) {
++		data->reconcile_again = TRUE;
++		return;
++	}
++
++	data->reconciling = TRUE;
++	do {
++		data->reconcile_again = FALSE;
++		for (i = 0; i < NUM_SENSOR_TYPES; i++) {
++			gboolean polling;
++
++			if (!driver_type_exists (data, i) || DEVICE_FOR_TYPE(i) == NULL)
++				continue;
++
++			polling = !data->sleeping && g_hash_table_size (data->clients[i]) > 0;
++			if (data->polling[i] == polling)
++				continue;
++
++			g_debug ("%s polling the %s",
++				 polling ? "Starting" : "Stopping",
++				 driver_type_to_str (i));
++			data->polling[i] = polling;
++			driver_set_polling (DEVICE_FOR_TYPE(i), polling);
++		}
++	} while (data->reconcile_again);
++	data->reconciling = FALSE;
++
++	/* Nothing polls any more, the system can go to sleep */
++	if (data->sleeping)
++		release_sleep_lock (data);
++}
++
++static void
++prepare_for_sleep_cb (GDBusConnection *connection,
++		      const gchar     *sender_name,
++		      const gchar     *object_path,
++		      const gchar     *interface_name,
++		      const gchar     *signal_name,
++		      GVariant        *parameters,
++		      gpointer         user_data)
++{
++	SensorData *data = user_data;
++	gboolean sleeping;
++
++	if (!g_variant_is_of_type (parameters, G_VARIANT_TYPE ("(b)")))
++		return;
++
++	g_variant_get (parameters, "(b)", &sleeping);
++	if (sleeping == data->sleeping)
++		return;
++
++	if (sleeping)
++		g_message ("Pausing sensor polling for system sleep");
++	else
++		g_message ("Resuming sensor polling after system sleep");
++
++	data->sleeping = sleeping;
++	/* Ask for the next lock first: the system may go back to sleep soon */
++	take_sleep_lock (data);
++	reconcile_polling (data);
++}
++
+ static void
+ client_release (SensorData            *data,
+ 		const char            *sender,
+@@ -423,11 +603,8 @@ client_release (SensorData            *data,
+ 
+ 	g_hash_table_remove (ht, sender);
+ 
+-	if (driver_type_exists (data, driver_type) &&
+-	    g_hash_table_size (ht) == 0) {
+-		SensorDevice *sensor_device = DEVICE_FOR_TYPE(driver_type);
+-		driver_set_polling (sensor_device, FALSE);
+-	}
++	/* No clients left for this sensor? Stop it */
++	reconcile_polling (data);
+ }
+ 
+ static void
+@@ -523,9 +700,8 @@ handle_generic_method_call (SensorData            *data,
+ 		g_hash_table_insert (ht, g_strdup (sender), GUINT_TO_POINTER (watch_id));
+ 
+ 		if (driver_type_exists (data, driver_type)) {
+-			SensorDevice *sensor_device = DEVICE_FOR_TYPE(driver_type);
+-
+-			/* No other clients for this sensor? Start it */
++			/* No other clients for this sensor? Start it, or after the
++			 * system sleep if one is under way */
+ 			if (g_hash_table_size (ht) == 1) {
+ 				/* Return the dbus invocation only after we receive the first
+ 				 * reading from the sensor, so that the client has a valid
+@@ -533,7 +709,7 @@ handle_generic_method_call (SensorData            *data,
+ 				g_ptr_array_add (data->sensor_startup_dbus_invocations_delayed[driver_type],
+ 						 invocation);
+ 
+-				driver_set_polling (sensor_device, TRUE);
++				reconcile_polling (data);
+ 			} else if (data->sensor_startup_dbus_invocations_delayed[driver_type]->len > 0 ||
+ 				   data->sensor_startup_dbus_event_delayed[driver_type]) {
+ 				/* Client added while the sensor is still starting up, add it to
+@@ -746,6 +922,17 @@ bus_acquired_handler (GDBusConnection *connection,
+ 		data->clients[i] = create_clients_hash_table ();
+ 
+ 	data->connection = g_object_ref (connection);
++
++	data->prepare_for_sleep_id = g_dbus_connection_signal_subscribe (connection,
++									 LOGIND_DBUS_NAME,
++									 LOGIND_IFACE_NAME,
++									 "PrepareForSleep",
++									 LOGIND_DBUS_PATH,
++									 NULL,
++									 G_DBUS_SIGNAL_FLAGS_NONE,
++									 prepare_for_sleep_cb,
++									 data,
++									 NULL);
+ }
+ 
+ static void
+@@ -786,6 +973,10 @@ name_acquired_handler (GDBusConnection *connection,
+ 
+ 	send_dbus_event (data, PROP_ALL);
+ 	send_dbus_event (data, PROP_ALL_COMPASS);
++
++	/* Start the sensors claimed while they were being opened */
++	reconcile_polling (data);
++	take_sleep_lock (data);
+ 	return;
+ 
+ bail:
+@@ -1005,6 +1196,17 @@ free_sensor_data (SensorData *data)
+ 		data->name_id = 0;
+ 	}
+ 
++	if (data->prepare_for_sleep_id != 0) {
++		g_dbus_connection_signal_unsubscribe (data->connection, data->prepare_for_sleep_id);
++		data->prepare_for_sleep_id = 0;
++	}
++	g_cancellable_cancel (data->sleep_lock_cancellable);
++	g_clear_object (&data->sleep_lock_cancellable);
++
++	/* Leave polling alone from here on, whatever arrives while the
++	 * drivers are being closed */
++	data->reconciling = TRUE;
++
+ 	for (i = 0; i < NUM_SENSOR_TYPES; i++) {
+ 		if (driver_type_exists (data, i))
+ 			driver_close (DEVICE_FOR_TYPE(i));
+@@ -1013,6 +1215,8 @@ free_sensor_data (SensorData *data)
+ 		g_clear_pointer (&data->sensor_startup_dbus_invocations_delayed[i], g_ptr_array_unref);
+ 	}
+ 
++	release_sleep_lock (data);
++
+ 	g_clear_object (&data->auth);
+ 	g_clear_pointer (&data->introspection_data, g_dbus_node_info_unref);
+ 	g_clear_object (&data->connection);
+@@ -1048,6 +1252,7 @@ sensor_changes (GUdevClient *client,
+ 				driver_close (DEVICE_FOR_TYPE(i));
+ 				DEVICE_FOR_TYPE(i) = NULL;
+ 				DRIVER_FOR_TYPE(i) = NULL;
++				data->polling[i] = FALSE;
+ 
+ 				g_clear_pointer (&data->clients[i], g_hash_table_unref);
+ 				data->clients[i] = create_clients_hash_table ();
+@@ -1104,14 +1309,12 @@ sensor_changes (GUdevClient *client,
+ 					ht = data->clients[driver->type];
+ 
+ 					if (g_hash_table_size (ht) > 0) {
+-						SensorDevice *sensor_device = DEVICE_FOR_TYPE(driver->type);
+-
+ 						/* Sensor just appeared but it's already claimed by some clients. Wait
+ 						 * with calling send_driver_changed_dbus_event() until the first measurement
+ 						 * appears, so that the clients have a valid measurement to work with. */
+ 						data->sensor_startup_dbus_event_delayed[driver->type] = TRUE;
+ 
+-						driver_set_polling (sensor_device, TRUE);
++						reconcile_polling (data);
+ 					} else {
+ 						send_driver_changed_dbus_event (data, driver->type);
+ 					}
+@@ -1169,6 +1372,7 @@ int main (int argc, char **argv)
+ 	data->previous_orientation = ORIENTATION_UNDEFINED;
+ 	data->previous_tilt = TILT_UNDEFINED;
+ 	data->uses_lux = TRUE;
++	data->sleep_lock_fd = -1;
+ 
+ 	/* Set up D-Bus */
+ 	setup_dbus (data, replace);
+diff --git a/tests/integration-test.py b/tests/integration-test.py
+index 23bf623..ec756f3 100755
+--- a/tests/integration-test.py
++++ b/tests/integration-test.py
+@@ -707,6 +707,80 @@ class Tests(dbusmock.DBusTestCase):
+ 
+         self.stop_daemon()
+ 
++    def test_system_sleep(self):
++        '''no polling while the system sleeps'''
++        self.testbed.add_device('input', 'fake-light', None,
++            [],
++            ['NAME', '"Power Button"']
++        )
++        logind, obj_logind = self.spawn_server_template(
++            'logind', {}, stdout=subprocess.PIPE)
++        self.addCleanup(logind.stdout.close)
++        self.addCleanup(logind.wait)
++        self.addCleanup(logind.kill)
++        env = os.environ.copy()
++        env['FAKE_LIGHT_SENSOR'] = '1'
++        self.start_daemon(env)
++
++        def sleep_locks():
++            return [i for i in obj_logind.ListInhibitors()
++                    if i[0] == 'sleep' and i[1] == 'iio-sensor-proxy' and i[3] == 'delay']
++
++        def prepare_for_sleep(start):
++            obj_logind.EmitSignal('org.freedesktop.login1.Manager', 'PrepareForSleep', 'b',
++                                  [start], dbus_interface=dbusmock.MOCK_IFACE)
++
++        def level_after(seconds):
++            time.sleep(seconds)
++            return self.get_dbus_property('LightLevel')
++
++        # A delay lock while awake
++        self.assertEventually(lambda: len(sleep_locks()) == 1)
++        self.proxy.ClaimLight()
++        self.assertEventually(lambda: self.get_dbus_property('LightLevel') >= 1.0)
++
++        # No readings and no lock while the system sleeps
++        prepare_for_sleep(True)
++        self.assertEventually(lambda: self.have_text_in_log('Pausing sensor polling for system sleep'))
++        self.assertEventually(lambda: len(sleep_locks()) == 0)
++        level = self.get_dbus_property('LightLevel')
++        self.assertEqual(level_after(2.5), level)
++
++        # Readings and a new lock after the wake
++        prepare_for_sleep(False)
++        self.assertEventually(lambda: self.have_text_in_log('Resuming sensor polling after system sleep'))
++        self.assertEventually(lambda: self.get_dbus_property('LightLevel') > level)
++        self.assertEventually(lambda: len(sleep_locks()) == 1)
++
++        # A sensor released during the sleep stays off after the wake
++        prepare_for_sleep(True)
++        self.assertEventually(lambda: len(sleep_locks()) == 0)
++        self.proxy.ReleaseLight()
++        prepare_for_sleep(False)
++        self.assertEventually(lambda: len(sleep_locks()) == 1)
++        level = self.get_dbus_property('LightLevel')
++        self.assertEqual(level_after(2.5), level)
++
++        # A first claim during the sleep is answered with the first reading after the wake
++        prepare_for_sleep(True)
++        self.assertEventually(lambda: len(sleep_locks()) == 0)
++        replies = []
++        self.proxy.call('ClaimLight', None, Gio.DBusCallFlags.NONE, -1, None,
++                        lambda proxy, res, *args: replies.append(proxy.call_finish(res)))
++        ctx = GLib.MainContext.default()
++        deadline = time.time() + 1.5
++        while time.time() < deadline:
++            ctx.iteration(False)
++            time.sleep(0.05)
++        self.assertEqual(replies, [])
++        prepare_for_sleep(False)
++        self.assertEventually(lambda: len(replies) == 1)
++        self.assertEventually(lambda: self.get_dbus_property('LightLevel') > level)
++        self.assertEventually(lambda: len(sleep_locks()) == 1)
++
++        self.proxy.ReleaseLight()
++        self.stop_daemon()
++
+     def test_iio_scale_decimal_separator(self):
+         '''scale decimal separator'''
+         top_srcdir = os.getenv('top_srcdir', '.')

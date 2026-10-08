@@ -147,3 +147,51 @@ Nothing here drives hardware the feature table depends on; in parentheses, what 
   DisplayPort DAI).
 - Other laptops' device trees, panels, EC and QSEECOM entries, EL2, X1P, Denali's ThinkPad T14s compatible and
   PMK8550 ADC (no driver in v23.2).
+
+## Planned: drop the power key's waking press
+
+Not started. The workaround in use is KDE's power button set to Lock screen (`docs/guide/troubleshooting.md`).
+
+### The problem and the precedent
+
+- `drivers/input/misc/pm8941-pwrkey.c`, bound to `qcom,pmk8350-pwrkey` (`pon_pwrkey` under `pmk8550_pon: pon@1300`
+  in `hamoa-pmics.dtsi`), reports the press that woke the system. A desktop whose power button means sleep then
+  sleeps again 1 to 6 s after every power-key wake (`docs/hardware.md`, Sleep).
+- ACPI's `drivers/acpi/button.c` sets `button->suspended` in `.suspend`, clears it in `.resume`, and while it is set
+  reports no key, only `acpi_pm_wakeup_event()`.
+
+### The driver in 7.2.8
+
+- A threaded handler, `devm_request_threaded_irq(..., NULL, pm8941_pwrkey_irq, IRQF_ONESHOT, ...)`, reads
+  `PON_RT_STS` and reports press and release with `input_report_key()`; for a release without a press it reports a
+  press first. An optional software debounce drops events shortly after a release.
+- `.suspend` and `.resume` (`DEFINE_SIMPLE_DEV_PM_OPS`) only arm and disarm the interrupt as a wake source.
+- Fedora builds it as a module (`CONFIG_INPUT_PM8941_PWRKEY=m`); `pm_wakeup_irq()`, which names the interrupt that
+  woke the system, is not exported, while `pm_wakeup_dev_event()` is.
+
+### What the commit has to do
+
+1. Flag the sleep in `.suspend` when the device may wake the system, as ACPI does.
+2. While the flag is set, report no key event: account the wake (`pm_wakeup_dev_event()`), keep `last_status`
+   current, and drop the press, its release and the press the handler would synthesize.
+3. Clear the flag at the release that ends the waking press, and after a wake from another source (the cover, the
+   ADSP), so that the next real press counts. The IRQ thread is not frozen and can run before `.resume`, so a flag
+   cleared there alone races with the waking press; compare a `.complete` callback, a check of the interrupt's
+   pending state in a noirq callback, and clearing on the first release.
+4. Make it opt-in, a device-tree property or a module parameter set for Denali: phones use the waking press to turn
+   the screen on, so an unconditional change is unlikely to go upstream (linux-input, linux-arm-msm).
+
+### In this project
+
+1. A commit on top of the pinned `sp11/<version>` branch of the fork (0075 after revision 10), with a `[sp11: ...]`
+   note for anything adapted; a pushed branch is never rewritten.
+2. A compile check of `drivers/input/misc` and the DTBs on the host with Fedora's configuration plus
+   `kernel-local` (`docs/kernel.md`, Rebase, step 4), then the new pins: `KERNEL_PATCH_COMMIT`, `KERNEL_SP11_REV`
+   and the `KERNEL_SP11_REV_SHA256` step 20 prints.
+3. Steps 10, 20 and 36; a revision entry here and in `docs/kernel.md`'s table; the device round; the push after it.
+
+### Device checks
+
+- After a power-key wake: no `Power key pressed short.` line from `systemd-logind` for the waking press, and KDE
+  with the button on Sleep stays awake; `cat /sys/power/pm_wakeup_irq` still names the power key's interrupt.
+- A press while awake still runs KDE's button action; after a wake by the cover the first press counts.

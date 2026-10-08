@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # Surface Pro 11 sensor stack check (Snapdragon Sensor Core on the ADSP): boot timeline, initramfs contents,
-# daemon, its file requests, QRTR service, one reading per sensor, iio-sensor-proxy, SELinux. Read-only; never
+# daemon, its file requests, QRTR service, one reading per sensor, iio-sensor-proxy, sleep, SELinux. Read-only; never
 # touches the remoteproc state (stopping the ADSP hard-resets the SoC). Usage: sudo /usr/libexec/sp11/sp11-sensors-check
 # (sp11-diag runs it as one of its sections)
 set -u
@@ -31,7 +31,8 @@ run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all |
 run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | grep -cE '^write\(' || echo 0"
 run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | head -n 120"
 run sh -c "journalctl -b --no-pager -u hexagonrpcd-adsp-sensorspd -o cat --all | tail -n 40"
-run cat /run/sp11-sensors/attaches
+# The guard's counters: attaches (boot, udev and Restart= starts; capped at 12) and re-attaches after a wake.
+run sh -c 'for f in attaches resume-attaches; do printf "%s: %s\n" "$f" "$(cat "/run/sp11-sensors/$f" 2>/dev/null || echo 0)"; done'
 run systemctl status sp11-sensors-online.service --no-pager -l; run journalctl -b --no-pager -t sp11-sensors -n 20
 run ls -la @PAYLOAD_DIR@/sensors @PAYLOAD_DIR@/sensors/registry-parent @PAYLOAD_DIR@/socinfo
 run sh -c 'ls @PAYLOAD_DIR@/sensors/registry | wc -l'
@@ -51,6 +52,19 @@ for s in light accelerometer gyroscope magnetometer compass; do run timeout 8 st
 sec "sensors: iio-sensor-proxy"; run systemctl status iio-sensor-proxy.service --no-pager -l
 run journalctl -b --no-pager -u iio-sensor-proxy -n 40
 run timeout 5 monitor-sensor
+# An open Sensor Core stream makes the ADSP signal the CPUs about once a second ("Handover signaled"), and the first
+# signal ends a deep sleep. The proxy stops its sensors when logind announces a sleep, under a "sleep" "delay" lock
+# it holds while awake, and logs a pause and a resume around every sleep; one line per sleep of this boot follows.
+sleeps() {
+  journalctl -b --no-pager -o short-unix -g 'Handover signaled|Performing sleep operation|System returned from sleep' \
+    | awk '/Performing sleep operation/ {ts = $1; s = 1; h = 0; next}
+           /Handover signaled/ {if (s) h++; next}
+           /System returned from sleep/ {if (s) {printf "%s slept %.1f s, ADSP signals in the window: %d\n", strftime("%m-%d %H:%M:%S", ts), $1 - ts, h; s = 0}}' \
+    | tail -n 30
+}
+sec "sensors: sleep"; run systemd-inhibit --list --no-pager
+run sh -c "journalctl -b --no-pager -u iio-sensor-proxy -o short-monotonic -g 'sensor polling|sleep delay lock' | tail -n 40"
+run sleeps
 sec "sensors: SELinux"; run getenforce; run sh -c "semodule -l | grep -E '^sp11' || echo 'no sp11 module loaded'"
 run sh -c "journalctl -k -b --no-pager -g 'avc:  denied' | grep -E 'iiosensorproxy|hexagonrpc|fastrpc|qipcrtr' | tail -n 40"
 # GNOME shows the auto-rotate toggle only while mutter's panel-orientation-managed is true: touch mode (a

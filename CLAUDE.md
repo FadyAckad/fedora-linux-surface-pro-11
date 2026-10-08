@@ -13,14 +13,14 @@ a guide says only what concretely works.
   steps 35, 36, 46 and 60, the version and content-pin rules, the WSL host, shell pitfalls. Read before touching
   `sp11.conf`, `scripts/`, `rpm/` or `payload/`.
 - `docs/hardware.md`: the tested unit's identity, the Denali DTB and the SKU regexes, firmware, audio, Wi-Fi, the
-  Bluetooth address, the pen, the live-only DSP blacklist, the Windows GRUB entry, the Bluetooth pairings shared
-  with Windows. Read before anything that depends on the device.
+  Bluetooth address, the pen, the live-only DSP blacklist, the Windows GRUB entry, sleep and wake sources, the
+  Bluetooth pairings shared with Windows. Read before anything that depends on the device.
 - `docs/kernel.md`: Fedora's kernel source RPM rebuilt with the SP11 patch set, `kernel.spec`'s local-build slots,
   `KERNEL_SP11_REV`, the configuration, sync state and the CDSP, how the patch set was extracted and how to rebase
   it, kernel install and removal, SELinux. Read before touching steps 10 and 20, `payload/kernel-local`, the kernel
   fork pins (`KERNEL_PATCH_*` in `sp11.conf`) or SELinux.
 - `docs/kernel-patches.md`: the patch manifest: the kernel fork's branch, where each commit comes from, what it is
-  needed for, what was left out of v23.2.
+  needed for, what was left out of v23.2, the planned patch for the power key's waking press.
 - `docs/fedora-media.md`: the live media and Fedora's live menu, GRUB, Anaconda's installation order and the
   installer's viewer, the kernel-install plugin, the live initramfs and root, `kernel-uki-dtbloader`, the dnf
   repository override, and the Fedora 45 differences. Read before touching steps 50 and 60, GRUB, the installer
@@ -43,9 +43,10 @@ a guide says only what concretely works.
   `scripts/NN-*.sh` (the pipeline steps; "step 50" in the notes means `scripts/50-build-iso.sh`), `rpm/*.spec.in`
   (spec templates).
 - `payload/`: payload of the support RPM (`payload/15-sp11-surface.install` is the kernel-install plugin), the
-  kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files, the libssc patches and
-  the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture probe). The kernel patches are
-  commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in `sp11.conf`.
+  kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files, the libssc and
+  iio-sensor-proxy patches and the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture
+  probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in
+  `sp11.conf`.
 - `docs/`: the working notes; `docs/guide/`: the user guides. `build/` (git-ignored): caches, work trees, RPMs and
   output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
@@ -76,9 +77,9 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   is never rewritten.
 - In `sp11.conf`: `IPTSD_RPM_RELEASE` (the iptsd spec), `HEXAGONRPC_RPM_RELEASE` (the number, for the spec, its
   payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec or its patches in `payload/sensors/libssc/`),
-  `IIO_SENSOR_PROXY_RPM_SUFFIX` (its template; for a new SRPM its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum,
-  and `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`), `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the
-  registry export).
+  `IIO_SENSOR_PROXY_RPM_SUFFIX` (its template or its patches in `payload/sensors/iio-sensor-proxy/`; for a new SRPM
+  its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum, and `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`),
+  `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the registry export).
 
 ## Conventions
 

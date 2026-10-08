@@ -2,7 +2,8 @@
 # drivers enabled. Fedora builds with -Dssc-support=disabled because libssc is not packaged in Fedora; the
 # release carries Fedora's number plus a suffix so this build replaces Fedora's in place, and sp11-sensors
 # excludes the package from dnf updates so a later Fedora build does not take the drivers away again.
-# Refresh from the target release's source RPM when Fedora changes the spec (scripts/45 refuses one with patches).
+# Refresh from the target release's source RPM when Fedora changes the spec (scripts/45 refuses one with patches);
+# the project's own patches come from payload/sensors/iio-sensor-proxy/, copied next to the sources by scripts/45.
 %global debug_package %{nil}
 
 Name:           iio-sensor-proxy
@@ -14,6 +15,9 @@ Summary:        IIO accelerometer sensor to input device proxy, with Qualcomm Se
 License:        GPL-3.0-or-later
 URL:            https://gitlab.freedesktop.org/hadess/iio-sensor-proxy
 Source0:        %{name}-%{version}.tar.bz2
+# The project's patch (payload/sensors/iio-sensor-proxy/; docs/sensors.md, Known issues): no sensor polls while the
+# system sleeps, under a logind delay lock, so an open Sensor Core stream no longer wakes the system from deep sleep.
+Patch0:         0001-Pause-sensor-polling-across-system-sleep.patch
 
 BuildRequires:  meson
 BuildRequires:  gcc
@@ -32,6 +36,8 @@ BuildRequires:  systemd-rpm-macros
 drivers that read the accelerometer, light and compass sensors of Qualcomm's
 Snapdragon Sensor Core through libssc (QMI over QRTR), which the Fedora package
 leaves out. Built for the Surface Pro 11, whose sensors sit behind that DSP.
+The proxy also stops every sensor when logind announces a system sleep, holding
+a delay lock until they are stopped, and starts them again after the wake.
 
 %prep
 %autosetup -p1
@@ -63,5 +69,11 @@ leaves out. Built for the Surface Pro 11, whose sensors sit behind that DSP.
 %{_datadir}/polkit-1/actions/net.hadess.SensorProxy.policy
 
 %changelog
-* Sat Sep 19 2026 SP11 build <sp11@localhost> - @VERSION@-@BASEREL@.@SUFFIX@
-- Rebuild Fedora's @VERSION@-@BASEREL@ with -Dssc-support=enabled (libssc) for the Surface Pro 11 sensors
+* Thu Oct 08 2026 SP11 build <sp11@localhost> - @VERSION@-@BASEREL@.@SUFFIX@
+- Pause sensor polling across system sleep: every sensor stops on logind's PrepareForSleep(true), under a delay
+  lock held until they are stopped, and starts again on PrepareForSleep(false); one function decides polling, so
+  a claim, release or sleep notice served inside a driver's start or stop no longer re-enters the driver. An open
+  Sensor Core stream woke the Surface Pro 11 from deep sleep within seconds.
+
+* Sat Sep 19 2026 SP11 build <sp11@localhost> - 3.9-3.sp11.1
+- Rebuild Fedora's 3.9-3 with -Dssc-support=enabled (libssc) for the Surface Pro 11 sensors

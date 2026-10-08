@@ -49,7 +49,8 @@ built on 2026-09-24, with revision 9 (`7.2.7-300.sp11.9.fc45.aarch64`) and suppo
 | NPU (AI acceleration) | no | no |
 
 *yes*: confirmed on the tested unit. *no*: not covered by this project. Under KDE Plasma, auto-rotation could stop
-until iio-sensor-proxy was restarted; the sensors RPMs fix this since 2026-10-07 (libssc 0.4.4-3,
+until iio-sensor-proxy was restarted, and with automatic brightness on the tablet did not stay asleep; the sensors
+RPMs fix these since 2026-10-07 (libssc 0.4.4-3) and 2026-10-08 (iio-sensor-proxy 3.9-3.sp11.2,
 [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 
 In the live session, audio and battery status are unavailable because the audio DSP stays off while running from

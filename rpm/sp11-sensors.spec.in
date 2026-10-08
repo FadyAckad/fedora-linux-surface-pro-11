@@ -21,7 +21,8 @@ AutoReqProv:    no
 # 0.5.0-3 serves the framework's registry writes, including large ones, and its temporary file next to the registry
 Requires:       hexagonrpc >= 0.5.0-3
 Requires:       libssc
-Requires:       iio-sensor-proxy >= 3.9
+# 3.9-3.sp11.2 stops its sensors across system sleep; the policy module's logind rules are for that
+Requires:       iio-sensor-proxy >= 3.9-3.sp11.2
 Requires:       qrtr
 Requires:       systemd
 Requires:       systemd-udev
@@ -40,8 +41,9 @@ the registry the framework wrote on this unit's Windows installation (per-sensor
 platform data and calibration) and the platform identity files, under
 @PAYLOAD_DIR@. It adds the udev and systemd glue that starts the file server when
 the ADSP comes up and hands the sensors to iio-sensor-proxy (auto-rotation,
-ambient light, compass), a SELinux module for iio-sensor-proxy's QRTR sockets, a
-dnf exclusion that keeps the SSC-enabled iio-sensor-proxy, and sp11-sensors-check.
+ambient light, compass), a SELinux module for iio-sensor-proxy's QRTR sockets and
+its logind sleep lock, a dnf exclusion that keeps the SSC-enabled iio-sensor-proxy,
+and sp11-sensors-check.
 The configuration and registry files are Microsoft/Qualcomm proprietary and must
 not be redistributed. Reboot after installing: the framework reads the registry
 only when the ADSP boots.
@@ -105,7 +107,19 @@ fi
 /etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf
 
 %changelog
-* Tue Sep 22 2026 SP11 build <sp11@localhost> - @VERSION@-1
+* Thu Oct 08 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- The re-attach of hexagonrpcd after a wake no longer counts against the guard's cap of 12 attaches per boot
+  (counted in /run/sp11-sensors/resume-attaches instead), and sp11-sensors-resume resets the daemon's start limit
+  before it: with lasting sleeps, a day's wakes left the unit refused and failed (start-limit-hit); the sensors kept
+  working. sp11-sensors-check shows both counters
+
+* Thu Oct 08 2026 SP11 build <sp11@localhost> - 1.11-1
+- SELinux: iio-sensor-proxy receives logind's PrepareForSleep and holds a sleep delay lock (iio-sensor-proxy
+  3.9-3.sp11.2, now required, stops its sensors across system sleep); sp11-sensors-check: a "sensors: sleep"
+  section (the inhibitor locks, the proxy's pause and resume lines, each sleep of the boot with the ADSP signals
+  logged in it)
+
+* Tue Sep 22 2026 SP11 build <sp11@localhost> - 1.10-1
 - The initramfs is regenerated only when a 1.1 or 1.2 package (the initramfs hook) is upgraded away, by a
   trigger, not on every install; sp11-sensors-reset says the rebuilt registry copy is read at the next boot;
   comments in the daemon drop-in, the check and wait helpers match the current design (registry read once per

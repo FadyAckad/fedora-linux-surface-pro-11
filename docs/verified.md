@@ -199,3 +199,35 @@ What has been confirmed on the tested unit, by date and package version. "The ke
 - Confirmed: the proxy links release 3's `libssc.so.2`; twenty claim-and-release cycles (`monitor-sensor` for 0.3 s
   each) leave it active without CPU time, with orientation, tilt and compass readings afterwards; after a reboot
   and a sleep, 52 minutes of uptime with 1 s of CPU time and no crash (owner). The multi-day watch continues.
+
+## iio-sensor-proxy 3.9-3.sp11.2 and sp11-sensors 1.11: the sleep pause (2026-10-08)
+
+- Installed: `iio-sensor-proxy-3.9-3.sp11.2` and `sp11-sensors-1.11-1` over 3.9-3.sp11.1 and 1.10 with
+  `dnf install --setopt=disable_excludes='*'`, on the KDE Plasma installation (kernel revision 10, libssc
+  release 3).
+- Confirmed: the proxy holds a `sleep` `delay` inhibitor lock, no AVC; awake with automatic brightness on, the light
+  stream runs (10 SMP2P interrupts in 10 s); 20 sleeps in one boot, each with its pause and resume logged and none
+  with an ADSP signal in its window, among them 25 minutes and 1.9 hours with the cover closed; the proxy ran the
+  boot without a restart or crash (0.54 s of CPU in 4 h 40 min), no ADSP or CDSP crash; after the last wake
+  `ssccli` reads all five sensors and the proxy streams the compass.
+- Found: from the 13th start of a boot the guard refuses hexagonrpcd, and quick sleeps hit its start limit, so the
+  unit ends the boot failed; the sensors keep working. At the upgrade the old proxy did not stop within the 45 s
+  stop timeout and was aborted (core dump).
+
+## sp11-sensors 1.12: hexagonrpcd after many wakes (2026-10-08)
+
+- Installed: `sp11-sensors-1.12-1` over 1.11 with `dnf install`, then a reboot (iio-sensor-proxy 3.9-3.sp11.2).
+- Confirmed: 15 sleeps and wakes with the cover within seven minutes, none with an ADSP signal; the guard's
+  counters at `attaches: 1` and `resume-attaches: 15`; the daemon running after the last wake, without a refusal or
+  a start-limit line; the proxy streams the accelerometer and the compass afterwards.
+- Found: each of the 10 wakes with the power key that evening was followed by a new sleep 1 to 6 s later, without
+  another press; the old proxy's core dump from the upgrade shows it waiting in an accelerometer open.
+
+## iio-sensor-proxy 3.9-3.sp11.2 at shutdown, KDE's power button on Lock screen (2026-10-08)
+
+- Confirmed: at the five reboots after the install of 3.9-3.sp11.2 (17:27 to 21:15) the proxy stopped in 69 to
+  92 ms, without a time-out or a core dump.
+- Confirmed: with KDE's power button on Lock screen (`PowerButtonAction` 32 in the AC, Battery and LowBattery
+  profiles) the tablet stayed awake after a power-key wake.
+- Found: the CDSP asserted (`sleep_statsi.c:537`) during one of the five stops, while the proxy closed its streams,
+  and once during `sp11-sensors-check`'s `ssccli` readings.

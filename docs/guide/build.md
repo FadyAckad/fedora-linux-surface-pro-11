@@ -188,7 +188,8 @@ FEDORA_TARGET=beta scripts/45-build-sensors-rpms.sh
 ```
 
 This builds `hexagonrpc` (from this project's fork, see [`docs/guide/credits.md`](credits.md)), `libssc`,
-`iio-sensor-proxy` (Fedora's own source RPM with `-Dssc-support=enabled`) and `sp11-sensors`, and verifies them in
-the extracted live root. `SENSORS_VERSION` in `sp11.conf` versions `sp11-sensors`; a changed payload at the same
-version stops the step, as does a change in Fedora's iio-sensor-proxy spec until the template is refreshed.
+`iio-sensor-proxy` (Fedora's own source RPM with `-Dssc-support=enabled` and this project's sleep patch) and
+`sp11-sensors`, and verifies them in the extracted live root. `SENSORS_VERSION` in `sp11.conf` versions
+`sp11-sensors`; a changed payload at the same version stops the step, as does a change in Fedora's iio-sensor-proxy
+spec until the template is refreshed.
 Installing them: [`docs/guide/sensors.md`](sensors.md).

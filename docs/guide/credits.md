@@ -31,7 +31,8 @@ version 3 or later (`LICENSE`). Everything third-party is downloaded and package
     issue #19 and pull request #21.
   - [DylanVanAssche/libssc](https://codeberg.org/DylanVanAssche/libssc) (GPL-3.0-or-later), with three of this
     project's patches to its synchronous API (`payload/sensors/libssc/`).
-  - Fedora's `iio-sensor-proxy` source RPM (GPL-3.0-or-later), unmodified.
+  - Fedora's `iio-sensor-proxy` source RPM (GPL-3.0-or-later), built with its SSC drivers and with this project's
+    patch that stops the sensors while the system sleeps (`payload/sensors/iio-sensor-proxy/`).
 
   The approach follows [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The
   sensor configuration and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files

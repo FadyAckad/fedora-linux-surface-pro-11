@@ -17,8 +17,8 @@ The repository's files, the pipeline and verification steps, the WSL build host,
   `/usr/lib/...`; `payload/README-iso.txt.in` is the note inside the ISO.
 - `payload/kernel-local`: kernel configuration additions, a build input of step 20 and part of `KERNEL_SP11_REV`;
   the patch set is the kernel fork's, pinned by `KERNEL_PATCH_*`.
-- `payload/sensors/`: `sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the unpackaged
-  `sp11-sam-posture` probe.
+- `payload/sensors/`: `sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the patches of libssc
+  (`libssc/`) and iio-sensor-proxy (`iio-sensor-proxy/`), the unpackaged `sp11-sam-posture` probe.
 - `payload/camera/`: the unpackaged `sp11-camera-probe` (`docs/camera.md`).
 - `build/`, git-ignored: `cache/` (downloads, source RPMs, checkouts, `rpm-deps/`, the fork's partial clone
   `kernel-patches.git`, its series `kernel-patches/<commit>/`), `kernel/` (step 20's tree and logs; the build runs
@@ -57,7 +57,8 @@ The repository's files, the pipeline and verification steps, the WSL build host,
 - `45-build-sensors-rpms.sh` builds `hexagonrpc`, `libssc` and `iio-sensor-proxy` with `mock --chain`
   (`mock_chain` in `lib.sh`) and `sp11-sensors` from files (`build_rpm`), always in mock so the host never gets
   unpackaged libraries; libssc's spec applies the patches of `payload/sensors/libssc/`, a change there bumps
-  `LIBSSC_RPM_RELEASE` (`docs/sensors.md`).
+  `LIBSSC_RPM_RELEASE`, and iio-sensor-proxy's those of `payload/sensors/iio-sensor-proxy/`, a change there bumps
+  `IIO_SENSOR_PROXY_RPM_SUFFIX` (`docs/sensors.md`). It refuses a proxy without libssc or without the sleep pause.
 - `46-verify-sensors-rpms.sh` installs the four RPMs into an overlay of the live root with scriptlets and the
   runtime dependencies of `SENSORS_DEPS_PKGS`, matched by capability (F45 ships `protobuf-c` as `protobuf3-c`),
   and checks the installed stack, a write as `fastrpc` and the erase; `SENSORS_PREVIOUS_RPMS="<earlier RPMs>"`

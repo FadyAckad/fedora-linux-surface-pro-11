@@ -6,7 +6,7 @@
 # modified. What only the device can show (the DSP accepting the
 # registry, sensor data, orientation) is not covered: see sp11-sensors-check on the installed system.
 . "$(dirname "$0")/lib.sh"
-require_cmd rpm findmnt
+require_cmd rpm findmnt bzcat
 
 BASE="$WORK_DIR/iso/rootfs"
 as_root test -d "$BASE/usr/lib/modules" || die "no extracted live root at $BASE (run scripts/50-build-iso.sh first)"
@@ -93,6 +93,11 @@ check as_root grep -q 'ssc-light ssc-compass' "$M/usr/lib/udev/rules.d/80-iio-se
 check as_root grep -q 'RestrictAddressFamilies=.*AF_QIPCRTR' "$M/usr/lib/systemd/system/iio-sensor-proxy.service"
 # %post loaded the CIL module into the root's policy store (no policy is active in the chroot, so it only compiles).
 check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-sensors"
+# The proxy stops its sensors across system sleep (logind's PrepareForSleep, a sleep delay lock); the module's logind
+# rules allow that and are in the store, not only in the shipped file.
+check as_root grep -q PrepareForSleep "$M/usr/libexec/iio-sensor-proxy"
+check as_root grep -q systemd_logind_inhibit_var_run_t "$M/usr/share/selinux/packages/sp11-sensors.cil"
+check as_root sh -c "bzcat '$M/var/lib/selinux/targeted/active/modules/400/sp11-sensors/cil' | grep -q systemd_logind_inhibit_var_run_t"
 # Both dnf exclusions have to stay in force: the support RPM's repository override keeps stock kernels out of every
 # repository (per repository, so it shows in the repository's configuration, not the main one), the sensors
 # drop-in keeps Fedora's iio-sensor-proxy out.
@@ -155,6 +160,17 @@ check as_root sh -c "! grep -qE '^(ExecStartPre|RestartPreventExitStatus)=' '$M/
 # No crash in this (non-)boot: the guard lets the attach through and counts it.
 check inroot /usr/libexec/sp11/sp11-sensors-guard
 check as_root test -s "$M/run/sp11-sensors/attaches"
+# The re-attach after a wake (sp11-sensors-resume.service leaves the marker) passes without counting against the cap
+# (1.12; 20 sleeps in one boot had reached it); the 13th counted start is refused, and so is a re-attach after it.
+check as_root sh -c "chroot '$M' /usr/bin/touch /run/sp11-sensors/resume && chroot '$M' /usr/libexec/sp11/sp11-sensors-guard"
+check as_root test ! -e "$M/run/sp11-sensors/resume"
+check test "$(as_root cat "$M/run/sp11-sensors/attaches")" = 1
+check test "$(as_root cat "$M/run/sp11-sensors/resume-attaches")" = 1
+check as_root sh -c "echo 12 > '$M/run/sp11-sensors/attaches'; chroot '$M' /usr/libexec/sp11/sp11-sensors-guard; [ \$? -eq 3 ]"
+check as_root sh -c "chroot '$M' /usr/bin/touch /run/sp11-sensors/resume; chroot '$M' /usr/libexec/sp11/sp11-sensors-guard; [ \$? -eq 3 ]"
+check test "$(as_root cat "$M/run/sp11-sensors/attaches")" = 13
+check as_root grep -q '^ExecStart=/usr/bin/touch /run/sp11-sensors/resume$' "$M/usr/lib/systemd/system/sp11-sensors-resume.service"
+check as_root grep -q '^ExecStart=-/usr/bin/systemctl reset-failed hexagonrpcd-adsp-sensorspd.service$' "$M/usr/lib/systemd/system/sp11-sensors-resume.service"
 check inroot /usr/bin/bash -n /usr/libexec/sp11/sp11-sensors-reset
 # The initramfs is regenerated only when a 1.1/1.2 package (the initramfs hook) is upgraded away, by a trigger; the
 # unconditional dracut run of 1.3-1.9's %posttrans must not come back.
@@ -261,10 +277,14 @@ if [ -n "${SENSORS_PREVIOUS_RPMS:-}" ]; then
   check test "$(as_root chroot "$M" /usr/bin/stat -c %U /var/lib/sp11/hexagonrpc/sensors/persist)" = fastrpc
   check test "$(as_root chroot "$M" /usr/bin/stat -c %U /var/lib/sp11/hexagonrpc/sensors/persist/registry)" = fastrpc
   check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-sensors"
+  check as_root sh -c "bzcat '$M/var/lib/selinux/targeted/active/modules/400/sp11-sensors/cil' | grep -q systemd_logind_inhibit_var_run_t"
+  check as_root grep -q PrepareForSleep "$M/usr/libexec/iio-sensor-proxy"
   check as_root sh -c "grep -q 'Could not remove' '$M/usr/bin/hexagonrpcd'"
   check as_root sh -c "grep -q 'Could not fetch large input buffers' '$M/usr/bin/hexagonrpcd'"
   check as_root sh -c "grep -q '/sensors/persist/registry' '$M/usr/bin/hexagonrpcd'"
   check as_root test -x "$M/usr/libexec/sp11/sp11-sensors-guard"
+  check as_root grep -q 'resume-attaches' "$M/usr/libexec/sp11/sp11-sensors-guard"
+  check as_root grep -q '^ExecStart=-/usr/bin/systemctl reset-failed hexagonrpcd-adsp-sensorspd.service$' "$M/usr/lib/systemd/system/sp11-sensors-resume.service"
   check as_root test -x "$M/usr/libexec/sp11/sp11-sensors-reset"
   check as_root sh -c "chroot '$M' /usr/bin/rpm -qf /usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-sp11.conf | grep -q '^sp11-sensors-'"
   log "  upgraded: $(for f in "${NEW[@]}"; do basename "$f"; done | tr '\n' ' ')"

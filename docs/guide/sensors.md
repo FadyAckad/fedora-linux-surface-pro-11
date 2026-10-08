@@ -19,7 +19,7 @@ The four RPMs come from a build (`build/rpms/`, step 45 of [`docs/guide/build.md
 this from the directory holding the RPMs:
 
 ```bash
-sudo dnf install ./hexagonrpc-*.rpm ./libssc-0*.rpm ./iio-sensor-proxy-*.rpm ./sp11-sensors-*.rpm
+sudo dnf install --setopt=disable_excludes='*' ./hexagonrpc-*.rpm ./libssc-0*.rpm ./iio-sensor-proxy-*.rpm ./sp11-sensors-*.rpm
 ```
 
 Reboot after installing. The framework reads and writes its registry in a copy under
@@ -28,11 +28,10 @@ the package, effective at the next boot. After an ADSP crash the daemon does not
 a failure costs one recoverable crash and a log rather than a loop; a reboot brings the stack back.
 
 `sp11-sensors` excludes `iio-sensor-proxy` from dnf updates, since a later Fedora build would replace the
-SSC-enabled one without a word. The exclusion also covers a local RPM of that package, so install the four in one
-command as above, and install a later SP11 build of it with
-`sudo dnf --setopt=disable_excludes='*' install ./iio-sensor-proxy-<version>.rpm`, the same override as for the
-kernel packages. Never stop or restart the ADSP through `/sys/class/remoteproc` to "reset" the sensors: that resets
-the SoC.
+SSC-enabled one without a word. The exclusion also covers a local RPM of that package, hence
+`--setopt=disable_excludes='*'` in the command above, the same override as for the kernel packages; a plain
+`dnf upgrade` keeps the SP11 build. Never stop or restart the ADSP through `/sys/class/remoteproc` to "reset" the
+sensors: that resets the SoC.
 
 ## Check
 

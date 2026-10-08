@@ -2,3 +2,10 @@
 ;; Fedora's iiosensorproxy policy does not allow (it was written for IIO sysfs devices). Installed by
 ;; sp11-sensors (semodule -i); removed with the package.
 (allow iiosensorproxy_t self (qipcrtr_socket (create bind connect getattr setattr read write ioctl getopt setopt shutdown)))
+;; The project's proxy stops its sensors across system sleep: it receives logind's PrepareForSleep signal and holds a
+;; "delay" inhibitor lock, the write end of a FIFO under /run/systemd/inhibit that logind passes over D-Bus. These are
+;; the rules Fedora's policy gives fprintd for its own sleep delay lock.
+(allow iiosensorproxy_t systemd_logind_t (dbus (send_msg)))
+(allow systemd_logind_t iiosensorproxy_t (dbus (send_msg)))
+(allow iiosensorproxy_t systemd_logind_t (fd (use)))
+(allow iiosensorproxy_t systemd_logind_inhibit_var_run_t (fifo_file (write)))
