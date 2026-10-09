@@ -14,7 +14,8 @@ What each file and directory of the repository is. The build tree's caches and o
   the README inside the ISO. `payload/sensors/` holds the files and helper scripts of `sp11-sensors`, hexagonrpc's
   sysusers entry and udev rule, the patches of `libssc` and `iio-sensor-proxy`, and `sp11-sam-posture`, an
   unpackaged probe of the Surface Aggregator's cover and posture state. `payload/camera/` holds
-  `sp11-camera-probe`, an unpackaged measurement of the cameras' raw output.
+  `sp11-camera-probe`, an unpackaged measurement of the cameras' raw output, and `sp11-camera-calibrate`, which
+  computes the cameras' colour matrices from its captures of a colour chart.
 - `images/`: the README's screenshot.
 - `LICENSE`: GPL-3.0-or-later for the repository's content (see [`docs/guide/credits.md`](credits.md)).
 - `CLAUDE.md`: entry point of the working notes (the index of `docs/`, rules for every session, references).

@@ -1,0 +1,869 @@
+#!/usr/bin/python3
+"""Colour calibration of the Surface Pro 11's cameras for libcamera's software ISP, from ColorChecker captures.
+
+Usage: sp11-camera-calibrate preview INPUT OUT.png [--corners CORNERS] [--scale N]
+       sp11-camera-calibrate ccm [--dark DARK.json] [--saturation S] [--exclude N,...] CAPTURE.json CORNERS [...]
+       sp11-camera-calibrate evaluate FRAME.ppm CORNERS [--exclude N,...]
+       sp11-camera-calibrate noise CAPTURE.json [...]
+       sp11-camera-calibrate selftest
+
+INPUT is the .json a `sp11-camera-probe --save` capture wrote, or a frame `cam -F frame-#.ppm` wrote. CORNERS are
+the centres of the chart's four corner patches as X,Y,X,Y,X,Y,X,Y, in the order dark skin (1), bluish green (6),
+black (24), white (19), in the coordinates of preview's image without --scale: one pixel per 2x2 Bayer quad for a
+capture, the frame's own pixels for a PPM. preview draws a line every 100 pixels (every 500 brighter) and, with
+--corners, the squares that ccm and evaluate sample.
+
+ccm: per capture, the patches' raw means (black level subtracted, averaged over the capture's frames), the white
+balance of the neutral patches 20-22, the colour temperature libcamera 0.7.2's simple IPA assigns to that balance,
+and the 3x3 matrix (rows summing to 1) that takes the balanced camera RGB to the chart's linear sRGB with the least
+mean CIEDE2000; prints the tuning file's `Ccm` block, which goes between `Awb` and `Adjust` (docs/camera.md, Tuning
+files; one `ct` per capture). --dark takes the black level per channel
+from a capture with the lens covered instead of the capture's nominal one; --saturation folds the saturation of
+libcamera's Adjust algorithm into the matrices; --exclude drops patches (glare, a shadow). evaluate: the CIEDE2000
+of the chart in a frame libcamera processed (its gamma of 2.2, default contrast), for comparing tuning files. noise:
+per channel the mean level above black and the temporal noise (each pixel's spread over the frames) in the frame's
+central 128x128 quads, for comparing sensor modes (2x2 binning doubles the signal-to-noise ratio of the same light,
+skipping keeps it). Only the Python standard library is used.
+"""
+import io
+import json
+import math
+import os
+import struct
+import sys
+import tempfile
+import zlib
+
+# ColorChecker Classic, editions after November 2014: CIE L*a*b* under ICC D50 from X-Rite (2016), "New color
+# specifications for ColorChecker SG and Classic Charts", as tabulated by colour-science
+# (colour/characterisation/datasets/colour_checkers/chromaticity_coordinates.py, BSD-3-Clause). Row by row from
+# dark skin (1) at the top left to black (24) at the bottom right; 19 to 24 are the neutral row.
+PATCHES = [
+    ('dark skin', 37.54, 14.37, 14.92), ('light skin', 64.66, 19.27, 17.5), ('blue sky', 49.32, -3.82, -22.54),
+    ('foliage', 43.46, -12.74, 22.72), ('blue flower', 54.94, 9.61, -24.79), ('bluish green', 70.48, -32.26, -0.37),
+    ('orange', 62.73, 35.83, 56.5), ('purplish blue', 39.43, 10.75, -45.17), ('moderate red', 50.57, 48.64, 16.67),
+    ('purple', 30.1, 22.54, -20.87), ('yellow green', 71.77, -24.13, 58.19), ('orange yellow', 71.51, 18.24, 67.37),
+    ('blue', 28.37, 15.42, -49.8), ('green', 54.38, -39.72, 32.27), ('red', 42.43, 51.05, 28.62),
+    ('yellow', 81.8, 2.67, 80.41), ('magenta', 50.63, 51.28, -14.12), ('cyan', 49.57, -29.71, -28.32),
+    ('white 9.5', 95.19, -1.03, 2.93), ('neutral 8', 81.29, -0.57, 0.44), ('neutral 6.5', 66.89, -0.75, -0.06),
+    ('neutral 5', 50.76, -0.13, 0.14), ('neutral 3.5', 35.63, -0.46, -0.48), ('black 2', 20.64, 0.07, -0.46),
+]
+BALANCE = (19, 20, 21)          # neutral 8, 6.5 and 5 (0-based): bright, but clear of the white patch's clipping
+CLIP = 1022                     # a 10-bit sample at or above this counts as clipped
+FLOOR = 0.01                    # patches whose green is below this fraction of full scale are too noisy to fit
+
+
+# Linear algebra on lists, enough for 3x3 matrices and the small systems below.
+
+def matmul(a, b):
+    return [[sum(a[i][k] * b[k][j] for k in range(len(b))) for j in range(len(b[0]))] for i in range(len(a))]
+
+
+def matvec(m, v):
+    return [sum(m[i][k] * v[k] for k in range(len(v))) for i in range(len(m))]
+
+
+def solve(a, b):
+    """x with a x = b, Gaussian elimination with partial pivoting."""
+    n = len(b)
+    m = [list(map(float, a[i])) + [float(b[i])] for i in range(n)]
+    for c in range(n):
+        p = max(range(c, n), key=lambda r: abs(m[r][c]))
+        if abs(m[p][c]) < 1e-12:
+            raise ValueError('singular system')
+        m[c], m[p] = m[p], m[c]
+        for r in range(c + 1, n):
+            f = m[r][c] / m[c][c]
+            for k in range(c, n + 1):
+                m[r][k] -= f * m[c][k]
+    x = [0.0] * n
+    for r in range(n - 1, -1, -1):
+        x[r] = (m[r][n] - sum(m[r][k] * x[k] for k in range(r + 1, n))) / m[r][r]
+    return x
+
+
+def inv3(m):
+    cols = [solve(m, [1.0 if i == j else 0.0 for i in range(3)]) for j in range(3)]
+    return [[cols[j][i] for j in range(3)] for i in range(3)]
+
+
+# Colorimetry: the chart's L*a*b* (D50) to sRGB's linear RGB (D65) through Bradford adaptation, and back to L*a*b*
+# for CIEDE2000.
+
+def xy_to_xyz(x, y):
+    return [x / y, 1.0, (1 - x - y) / y]
+
+
+WHITE_D50 = xy_to_xyz(0.3457, 0.3585)           # ICC D50, the illuminant of the chart data
+WHITE_D65 = xy_to_xyz(0.3127, 0.3290)           # sRGB's white point (IEC 61966-2-1)
+
+
+def rgb_to_xyz_matrix(primaries, white):
+    p = [[x / y for x, y in primaries], [1.0] * 3, [(1 - x - y) / y for x, y in primaries]]
+    s = solve(p, white)
+    return [[p[i][j] * s[j] for j in range(3)] for i in range(3)]
+
+
+SRGB_TO_XYZ = rgb_to_xyz_matrix([(0.64, 0.33), (0.30, 0.60), (0.15, 0.06)], WHITE_D65)
+XYZ_TO_SRGB = inv3(SRGB_TO_XYZ)
+BRADFORD = [[0.8951, 0.2664, -0.1614], [-0.7502, 1.7135, 0.0367], [0.0389, -0.0685, 1.0296]]
+
+
+def adaptation(src, dst):
+    s, d = matvec(BRADFORD, src), matvec(BRADFORD, dst)
+    return matmul(inv3(BRADFORD), matmul([[d[i] / s[i] if i == j else 0.0 for j in range(3)] for i in range(3)],
+                                         BRADFORD))
+
+
+D50_TO_D65 = adaptation(WHITE_D50, WHITE_D65)
+EPS, KAPPA = 216 / 24389, 24389 / 27
+
+
+def lab_to_xyz(lab, white):
+    L, a, b = lab
+    fy = (L + 16) / 116
+    fx, fz = fy + a / 500, fy - b / 200
+    finv = lambda f: f ** 3 if f ** 3 > EPS else (116 * f - 16) / KAPPA
+    yr = fy ** 3 if L > KAPPA * EPS else L / KAPPA
+    return [finv(fx) * white[0], yr * white[1], finv(fz) * white[2]]
+
+
+def xyz_to_lab(xyz, white):
+    f = lambda t: t ** (1 / 3) if t > EPS else (KAPPA * t + 16) / 116
+    fx, fy, fz = (f(xyz[i] / white[i]) for i in range(3))
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
+
+
+def linear_srgb_to_lab(rgb):
+    return xyz_to_lab(matvec(SRGB_TO_XYZ, rgb), WHITE_D65)
+
+
+REF_LINEAR = [matvec(XYZ_TO_SRGB, matvec(D50_TO_D65, lab_to_xyz(p[1:], WHITE_D50))) for p in PATCHES]
+REF_LAB = [linear_srgb_to_lab(rgb) for rgb in REF_LINEAR]
+
+
+def ciede2000(lab1, lab2):
+    """CIEDE2000 colour difference (Sharma, Wu and Dalal, 2005)."""
+    L1, a1, b1 = lab1
+    L2, a2, b2 = lab2
+    cbar7 = ((math.hypot(a1, b1) + math.hypot(a2, b2)) / 2) ** 7
+    g = 0.5 * (1 - math.sqrt(cbar7 / (cbar7 + 25 ** 7)))
+    a1p, a2p = (1 + g) * a1, (1 + g) * a2
+    c1p, c2p = math.hypot(a1p, b1), math.hypot(a2p, b2)
+    h1p = math.degrees(math.atan2(b1, a1p)) % 360 if c1p else 0.0
+    h2p = math.degrees(math.atan2(b2, a2p)) % 360 if c2p else 0.0
+    dlp, dcp = L2 - L1, c2p - c1p
+    if c1p * c2p == 0:
+        dhp = 0.0
+    else:
+        dhp = h2p - h1p
+        dhp = dhp - 360 if dhp > 180 else dhp + 360 if dhp < -180 else dhp
+    dHp = 2 * math.sqrt(c1p * c2p) * math.sin(math.radians(dhp / 2))
+    lbar, cbar = (L1 + L2) / 2, (c1p + c2p) / 2
+    if c1p * c2p == 0:
+        hbar = h1p + h2p
+    elif abs(h1p - h2p) <= 180:
+        hbar = (h1p + h2p) / 2
+    else:
+        hbar = (h1p + h2p + 360) / 2 if h1p + h2p < 360 else (h1p + h2p - 360) / 2
+    cos = lambda d: math.cos(math.radians(d))
+    t = 1 - 0.17 * cos(hbar - 30) + 0.24 * cos(2 * hbar) + 0.32 * cos(3 * hbar + 6) - 0.20 * cos(4 * hbar - 63)
+    dtheta = 30 * math.exp(-((hbar - 275) / 25) ** 2)
+    rc = 2 * math.sqrt(cbar ** 7 / (cbar ** 7 + 25 ** 7))
+    sl = 1 + 0.015 * (lbar - 50) ** 2 / math.sqrt(20 + (lbar - 50) ** 2)
+    sc, sh = 1 + 0.045 * cbar, 1 + 0.015 * cbar * t
+    rt = -math.sin(math.radians(2 * dtheta)) * rc
+    return math.sqrt((dlp / sl) ** 2 + (dcp / sc) ** 2 + (dHp / sh) ** 2 + rt * (dcp / sc) * (dHp / sh))
+
+
+def estimate_cct(r, g, b):
+    """libcamera 0.7.2's ipa::estimateCCT() (src/ipa/libipa/colours.cpp, BSD-2-Clause). The simple IPA's Awb passes
+    it the inverse of its gains, (R/G, 1, B/G) of the black-subtracted channel sums, and its Ccm interpolates the
+    tuning file's matrices by the result, so a matrix's `ct` has to be this value, not the lamp's rating."""
+    m = ((-0.14282, 1.54924, -0.95641), (-0.32466, 1.57837, -0.73191), (-0.68202, 0.77073, 0.56332))
+    X, Y, Z = (m[i][0] * r + m[i][1] * g + m[i][2] * b for i in range(3))
+    s = X + Y + Z
+    n = (X / s - 0.3320) / (0.1858 - Y / s)
+    return int(449 * n ** 3 + 3525 * n ** 2 + 6823.3 * n + 5520.33)
+
+
+def saturation_matrix(s):
+    """libcamera 0.7.2's Adjust::applySaturation() (src/ipa/simple/algorithms/adjust.cpp): BT.601 chroma scaling."""
+    rgb2ycbcr = [[0.256788235294, 0.504129411765, 0.0979058823529],
+                 [-0.148223529412, -0.290992156863, 0.439215686275],
+                 [0.439215686275, -0.367788235294, -0.0714274509804]]
+    ycbcr2rgb = [[1.16438356164, 0, 1.59602678571], [1.16438356164, -0.391762290094, -0.812967647235],
+                 [1.16438356164, 2.01723214285, 0]]
+    return matmul(ycbcr2rgb, matmul([[1, 0, 0], [0, s, 0], [0, 0, s]], rgb2ycbcr))
+
+
+# Chart geometry: the four corner centres give a homography from patch indices to image coordinates.
+
+def homography(src, dst):
+    a, b = [], []
+    for (x, y), (u, v) in zip(src, dst):
+        a.append([x, y, 1, 0, 0, 0, -u * x, -u * y])
+        b.append(u)
+        a.append([0, 0, 0, x, y, 1, -v * x, -v * y])
+        b.append(v)
+    h = solve(a, b)
+    return [h[0:3], h[3:6], h[6:8] + [1.0]]
+
+
+def project(h, x, y):
+    w = h[2][0] * x + h[2][1] * y + h[2][2]
+    return ((h[0][0] * x + h[0][1] * y + h[0][2]) / w, (h[1][0] * x + h[1][1] * y + h[1][2]) / w)
+
+
+def patch_squares(corners):
+    """The 24 sampling squares (x0, y0, x1, y1), half-open: centred on each patch, a side of 40 % of the local patch
+    pitch (a patch covers about 85 % of the pitch, so the square keeps clear of the gaps)."""
+    h = homography([(0, 0), (5, 0), (5, 3), (0, 3)], corners)
+    out = []
+    for i in range(24):
+        u, v = i % 6, i // 6
+        cx, cy = project(h, u, v)
+        pitch = min(math.dist(project(h, u + 0.5, v), project(h, u - 0.5, v)),
+                    math.dist(project(h, u, v + 0.5), project(h, u, v - 0.5)))
+        half = 0.2 * pitch
+        if half < 2:
+            sys.exit(f'the chart is too small: patch pitch {pitch:.1f} pixels')
+        out.append((round(cx - half), round(cy - half), round(cx + half) + 1, round(cy + half) + 1))
+    return out
+
+
+def parse_corners(text):
+    try:
+        v = [float(x) for x in text.split(',')]
+    except ValueError:
+        v = []
+    if len(v) != 8:
+        sys.exit(f'corners must be X,Y,X,Y,X,Y,X,Y: {text}')
+    return [(v[0], v[1]), (v[2], v[3]), (v[4], v[5]), (v[6], v[7])]
+
+
+# Raw captures of sp11-camera-probe --save: packed RAW10 frames and a JSON description.
+
+QUAD = {'RGGB': ('R', 'Gr', 'Gb', 'B'), 'GRBG': ('Gr', 'R', 'B', 'Gb'),
+        'GBRG': ('Gb', 'B', 'R', 'Gr'), 'BGGR': ('B', 'Gb', 'Gr', 'R')}
+
+
+def decode_row(seg):
+    """10-bit samples of whole MIPI RAW10 groups: four high bytes, then a byte of the four low bit pairs."""
+    lsb = seg[4::5]
+    out = [0] * (4 * len(lsb))
+    for j in range(4):
+        out[j::4] = [(m << 2) | ((l >> (2 * j)) & 3) for m, l in zip(seg[j::5], lsb)]
+    return out
+
+
+class Capture:
+    def __init__(self, path):
+        with open(path) as f:
+            self.meta = json.load(f)
+        m = self.meta
+        self.width, self.height, self.order = m['width'], m['height'], m['order']
+        self.stride, self.frame_size, self.black = m['stride'], m['frame_size'], m['black']
+        self.raw = os.path.join(os.path.dirname(os.path.abspath(path)), m['file'])
+        count = os.path.getsize(self.raw) // self.frame_size
+        self.indices = list(range(m.get('skip', 0), count))
+        if not self.indices:
+            sys.exit(f'{self.raw}: no complete frame after the first {m.get("skip", 0)}')
+        if m['order'] not in QUAD:
+            sys.exit(f'{path}: unknown Bayer order {m["order"]}')
+
+    def frames(self):
+        with open(self.raw, 'rb') as f:
+            for i in self.indices:
+                f.seek(i * self.frame_size)
+                yield f.read(self.frame_size)
+
+    def region(self, frame, square):
+        """Sums, sample counts and peaks per channel over the quads of square (in quad coordinates)."""
+        x0, y0, x1, y1 = square
+        x0, y0 = max(0, x0), max(0, y0)
+        x1, y1 = min(self.width // 2, x1), min(self.height // 2, y1)
+        if x1 <= x0 or y1 <= y0:
+            sys.exit(f'sampling square {square} is outside the {self.width}x{self.height} frame')
+        names = QUAD[self.order]
+        sums, counts, peaks = dict.fromkeys(names, 0), dict.fromkeys(names, 0), dict.fromkeys(names, 0)
+        g0, g1 = (2 * x0) // 4, (2 * x1 + 3) // 4
+        a = 2 * x0 - 4 * g0
+        for qy in range(y0, y1):
+            for dy in (0, 1):
+                base = (2 * qy + dy) * self.stride
+                px = decode_row(frame[base + 5 * g0:base + 5 * g1])[a:a + 2 * (x1 - x0)]
+                for dx in (0, 1):
+                    vals = px[dx::2]
+                    name = names[2 * dy + dx]
+                    sums[name] += sum(vals)
+                    counts[name] += len(vals)
+                    peaks[name] = max(peaks[name], max(vals))
+        return sums, counts, peaks
+
+    def values(self, frame, square):
+        """Per channel, the samples of the quads of square (in quad coordinates), row by row."""
+        x0, y0, x1, y1 = square
+        names = QUAD[self.order]
+        out = {k: [] for k in names}
+        g0, g1 = (2 * x0) // 4, (2 * x1 + 3) // 4
+        a = 2 * x0 - 4 * g0
+        for qy in range(y0, y1):
+            for dy in (0, 1):
+                base = (2 * qy + dy) * self.stride
+                px = decode_row(frame[base + 5 * g0:base + 5 * g1])[a:a + 2 * (x1 - x0)]
+                for dx in (0, 1):
+                    out[names[2 * dy + dx]] += px[dx::2]
+        return out
+
+    def means(self, squares):
+        """Per square: (R, G, B) means over all frames in 10-bit units (G the mean of Gr and Gb), and whether a
+        sample reached the clipping level."""
+        acc = [None] * len(squares)
+        for frame in self.frames():
+            for i, sq in enumerate(squares):
+                s, n, p = self.region(frame, sq)
+                if acc[i] is None:
+                    acc[i] = [s, n, p]
+                else:
+                    for k in s:
+                        acc[i][0][k] += s[k]
+                        acc[i][1][k] += n[k]
+                        acc[i][2][k] = max(acc[i][2][k], p[k])
+        out = []
+        for s, n, p in acc:
+            m = {k: s[k] / n[k] for k in s}
+            out.append(((m['R'], (m['Gr'] + m['Gb']) / 2, m['B']), max(p.values()) >= CLIP))
+        return out
+
+    def black_levels(self):
+        """(R, G, B) means of the frame's central sixteenth, for a capture with the lens covered."""
+        w, h = self.width // 2, self.height // 2
+        sq = (3 * w // 8, 3 * h // 8, 5 * w // 8, 5 * h // 8)
+        return self.means([sq])[0][0]
+
+
+def cmd_noise(args):
+    if not args:
+        sys.exit(__doc__.split('\n\n')[1])
+    print(f"{'capture':<28} {'mode':>9} {'exposure':>8} {'gain':>6}  "
+          + '  '.join(f'{c:>6} level {c:>2} noise {c:>2} snr' for c in ('R', 'G', 'B')))
+    for path in args:
+        cap = Capture(path)
+        if len(cap.indices) < 3:
+            sys.exit(f'{path}: noise needs three frames or more after the first {cap.meta.get("skip", 0)}')
+        w, h = cap.width // 2, cap.height // 2
+        sq = (w // 2 - 64, h // 2 - 64, w // 2 + 64, h // 2 + 64)
+        acc = None
+        for frame in cap.frames():
+            vals = cap.values(frame, sq)
+            if acc is None:
+                acc = {k: [[0] * len(v), [0] * len(v)] for k, v in vals.items()}
+            for k, v in vals.items():
+                s1, s2 = acc[k]
+                for i, x in enumerate(v):
+                    s1[i] += x
+                    s2[i] += x * x
+        n = len(cap.indices)
+        stats = {}
+        for k, (s1, s2) in acc.items():
+            level = sum(s1) / (n * len(s1)) - cap.black
+            var = sum((b - a * a / n) / (n - 1) for a, b in zip(s1, s2)) / len(s1)
+            stats[k] = (level, math.sqrt(max(var, 0.0)))
+        g = ((stats['Gr'][0] + stats['Gb'][0]) / 2, math.hypot(stats['Gr'][1], stats['Gb'][1]) / math.sqrt(2))
+        cols = []
+        for level, sd in (stats['R'], g, stats['B']):
+            cols.append(f'{level:12.1f} {sd:8.2f} {level / sd if sd else float("inf"):6.1f}')
+        m = cap.meta
+        print(f"{os.path.basename(path):<28} {cap.width}x{cap.height:<4} {m.get('exposure', '?'):>8} "
+              f"{m.get('gain', '?'):>6}  " + '  '.join(cols))
+
+
+# Processed frames of cam -F *.ppm (binary P6, 8 bits).
+
+def read_ppm(path):
+    with open(path, 'rb') as f:
+        data = f.read()
+    fields, pos = [], 0
+    while len(fields) < 4:
+        while data[pos:pos + 1].isspace():
+            pos += 1
+        if data[pos:pos + 1] == b'#':
+            pos = data.index(b'\n', pos) + 1
+            continue
+        end = pos
+        while not data[end:end + 1].isspace():
+            end += 1
+        fields.append(data[pos:end])
+        pos = end
+    if fields[0] != b'P6' or int(fields[3]) != 255:
+        sys.exit(f'{path}: not an 8-bit binary PPM')
+    w, h = int(fields[1]), int(fields[2])
+    return w, h, data[pos + 1:pos + 1 + 3 * w * h]
+
+
+def ppm_means(w, h, pixels, squares):
+    out = []
+    for x0, y0, x1, y1 in squares:
+        x0, y0, x1, y1 = max(0, x0), max(0, y0), min(w, x1), min(h, y1)
+        if x1 <= x0 or y1 <= y0:
+            sys.exit(f'sampling square {(x0, y0, x1, y1)} is outside the {w}x{h} frame')
+        acc, n = [0, 0, 0], 0
+        for y in range(y0, y1):
+            row = pixels[3 * (y * w + x0):3 * (y * w + x1)]
+            for c in range(3):
+                acc[c] += sum(row[c::3])
+            n += x1 - x0
+        out.append([a / n for a in acc])
+    return out
+
+
+# The fit.
+
+def errors(m, cam, k, used):
+    """CIEDE2000 per patch of matrix m applied to the balanced camera RGB, scaled by 1/k to the chart's exposure and
+    clipped at zero as libcamera's shader clips (patches not in used get None)."""
+    out = []
+    for i in range(24):
+        if not used[i]:
+            out.append(None)
+            continue
+        rgb = [max(0.0, v / k) for v in matvec(m, cam[i])]
+        out.append(ciede2000(REF_LAB[i], linear_srgb_to_lab(rgb)))
+    return out
+
+
+def mean(vals):
+    vals = [v for v in vals if v is not None]
+    return sum(vals) / len(vals) if vals else float('nan')
+
+
+def least_squares(cam, target, used):
+    """Per row, the least-squares fit of cam to target with the row's entries summing to 1 (the matrix leaves the
+    balanced neutrals alone), from the bordered normal equations."""
+    m = []
+    for row in range(3):
+        a = [[0.0] * 4 for _ in range(4)]
+        b = [0.0] * 4
+        for i in range(24):
+            if used[i]:
+                for p in range(3):
+                    for q in range(3):
+                        a[p][q] += cam[i][p] * cam[i][q]
+                    b[p] += cam[i][p] * target[i][row]
+        for p in range(3):
+            a[p][3] = a[3][p] = 1.0
+        b[3] = 1.0
+        m.append(solve(a, b)[:3])
+    return m
+
+
+def nelder_mead(f, x0, step=0.05, iterations=2000, tolerance=1e-6):
+    pts = [list(x0)] + [[x0[j] + (step if j == i else 0) for j in range(len(x0))] for i in range(len(x0))]
+    vals = [f(p) for p in pts]
+    for _ in range(iterations):
+        order = sorted(range(len(pts)), key=lambda i: vals[i])
+        pts, vals = [pts[i] for i in order], [vals[i] for i in order]
+        if vals[-1] - vals[0] < tolerance:
+            break
+        centre = [sum(p[j] for p in pts[:-1]) / (len(pts) - 1) for j in range(len(x0))]
+        along = lambda t: [centre[j] + t * (pts[-1][j] - centre[j]) for j in range(len(x0))]
+        refl = along(-1)
+        fr = f(refl)
+        if fr < vals[0]:
+            exp = along(-2)
+            fe = f(exp)
+            pts[-1], vals[-1] = (exp, fe) if fe < fr else (refl, fr)
+        elif fr < vals[-2]:
+            pts[-1], vals[-1] = refl, fr
+        else:
+            con = along(0.5)
+            fc = f(con)
+            if fc < vals[-1]:
+                pts[-1], vals[-1] = con, fc
+            else:
+                pts = [pts[0]] + [[pts[0][j] + 0.5 * (p[j] - pts[0][j]) for j in range(len(x0))] for p in pts[1:]]
+                vals = [vals[0]] + [f(p) for p in pts[1:]]
+    best = min(range(len(pts)), key=lambda i: vals[i])
+    return pts[best]
+
+
+def from_free(x):
+    return [[x[2 * r], x[2 * r + 1], 1 - x[2 * r] - x[2 * r + 1]] for r in range(3)]
+
+
+def fit(raw, clipped, black, exclude):
+    """The white balance, colour temperature, scale and matrices (identity, least squares, CIEDE2000) of one
+    capture, from the patches' (R, G, B) means."""
+    signal = [[v - black[c] for c, v in enumerate(rgb)] for rgb in raw]
+    full = 1023 - black[1]
+    used = [not clipped[i] and signal[i][1] > FLOOR * full and min(signal[i]) > 0 and i + 1 not in exclude
+            for i in range(24)]
+    for i in BALANCE:
+        if not used[i]:
+            sys.exit(f'patch {i + 1} ({PATCHES[i][0]}) is clipped, too dark or excluded; it sets the white balance')
+    # The neutral row darkens from white to black (white may clip): anything else means corners in another order or
+    # squares off the chart.
+    greens = [signal[i][1] for i in range(18, 24)]
+    if any(a <= b for a, b in zip(greens[1:], greens[2:])) or (greens[0] < greens[1] and not clipped[18]):
+        sys.exit('the neutral row (patches 19-24) does not darken from white to black: check the corners (dark '
+                 'skin, bluish green, black, white) against preview --corners; green above black: ' +
+                 ', '.join(f'{g:.0f}' for g in greens))
+    sums = [sum(signal[i][c] for i in BALANCE) for c in range(3)]
+    gains = [sums[1] / sums[0], 1.0, sums[1] / sums[2]]
+    ct = estimate_cct(1 / gains[0], 1.0, 1 / gains[2])
+    cam = [[signal[i][c] * gains[c] for c in range(3)] for i in range(24)]
+    k = sum(cam[i][1] for i in BALANCE) / sum(REF_LINEAR[i][1] for i in BALANCE)
+    target = [[k * v for v in REF_LINEAR[i]] for i in range(24)]
+    ident = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    ls = least_squares(cam, target, used)
+    cost = lambda x: mean(errors(from_free(x), cam, k, used))
+    best = from_free(nelder_mead(cost, [ls[0][0], ls[0][1], ls[1][0], ls[1][1], ls[2][0], ls[2][1]]))
+    return dict(gains=gains, ct=ct, cam=cam, k=k, used=used, signal=signal, identity=ident, ls=ls, best=best)
+
+
+def format_ccm(m, indent):
+    rows = [', '.join(f'{v:7.4f}' for v in row) for row in m]
+    pad = ' ' * (indent + 7)
+    return f'[ {rows[0]},\n{pad}{rows[1]},\n{pad}{rows[2]} ]'
+
+
+def report(name, r, saturation):
+    print(f"{name}: white balance R {r['gains'][0]:.3f}, B {r['gains'][2]:.3f}; libcamera's colour temperature "
+          f"{r['ct']} K; neutral 5's green {r['signal'][21][1]:.0f} above black")
+    for c, g in ((0, 'R'), (2, 'B')):
+        if r['gains'][c] > 4:
+            print(f'  warning: libcamera 0.7.2 caps the {g} gain at 4; under this light the picture keeps a cast')
+    e_id = errors(r['identity'], r['cam'], r['k'], r['used'])
+    e_ls = errors(r['ls'], r['cam'], r['k'], r['used'])
+    e_best = errors(r['best'], r['cam'], r['k'], r['used'])
+    print(f"  {'patch':<18} {'signal R/G/B':>20} {'dE00 none':>9} {'lsq':>6} {'fit':>6}")
+    for i in range(24):
+        sig = '/'.join(f'{v:.0f}' for v in r['signal'][i])
+        if r['used'][i]:
+            print(f'  {i + 1:2} {PATCHES[i][0]:<15} {sig:>20} {e_id[i]:9.2f} {e_ls[i]:6.2f} {e_best[i]:6.2f}')
+        else:
+            print(f'  {i + 1:2} {PATCHES[i][0]:<15} {sig:>20} {"not used (clipped, dark or excluded)":>23}')
+    print(f'  mean dE00: {mean(e_id):.2f} without a matrix, {mean(e_ls):.2f} least squares, '
+          f'{mean(e_best):.2f} fitted; worst fitted {max(e for e in e_best if e is not None):.2f}')
+    m = r['best']
+    if saturation is not None:
+        m = matmul(saturation_matrix(saturation), m)
+        print(f'  saturation {saturation} folded in: mean dE00 {mean(errors(m, r["cam"], r["k"], r["used"])):.2f}')
+    return m
+
+
+def cmd_ccm(args):
+    dark, saturation, exclude, pairs = None, None, set(), []
+    while args:
+        a = args.pop(0)
+        if a == '--dark' and args:
+            dark = Capture(args.pop(0)).black_levels()
+        elif a == '--saturation' and args:
+            saturation = float(args.pop(0))
+        elif a == '--exclude' and args:
+            exclude = {int(x) for x in args.pop(0).split(',')}
+        elif args and not a.startswith('--'):
+            pairs.append((a, parse_corners(args.pop(0))))
+        else:
+            sys.exit(__doc__.split('\n\n')[1])
+    if not pairs:
+        sys.exit(__doc__.split('\n\n')[1])
+    if dark:
+        print('black level from the dark capture: ' + ', '.join(f'{c} {v:.2f}' for c, v in zip('RGB', dark)))
+    entries = []
+    for path, corners in pairs:
+        cap = Capture(path)
+        black = dark or [cap.black] * 3
+        means = cap.means(patch_squares(corners))
+        r = fit([m for m, _ in means], [c for _, c in means], black, exclude)
+        entries.append((r['ct'], report(path, r, saturation)))
+    entries.sort()
+    for (a, _), (b, _) in zip(entries, entries[1:]):
+        if b - a < 100:
+            print(f'warning: {a} K and {b} K are closer than the 100 K libcamera waits for before it changes '
+                  'matrix')
+    print('\n  - Ccm:\n      ccms:')
+    for ct, m in entries:
+        print(f'        - ct: {ct}\n          ccm: {format_ccm(m, 10)}')
+
+
+def cmd_evaluate(args):
+    exclude = set()
+    if '--exclude' in args:
+        i = args.index('--exclude')
+        exclude = {int(x) for x in args[i + 1].split(',')}
+        del args[i:i + 2]
+    if len(args) != 2:
+        sys.exit(__doc__.split('\n\n')[1])
+    w, h, pixels = read_ppm(args[0])
+    means = ppm_means(w, h, pixels, patch_squares(parse_corners(args[1])))
+    # libcamera's shader ends with pow(rgb, 1 / 2.2) after the default contrast curve, which is the identity.
+    lin = [[(v / 255) ** 2.2 for v in rgb] for rgb in means]
+    k = sum(lin[i][1] for i in BALANCE) / sum(REF_LINEAR[i][1] for i in BALANCE)
+    errs = []
+    print(f"  {'patch':<18} {'mean R/G/B':>14} {'L*':>6} {'a*':>6} {'b*':>6} {'dE00':>6}")
+    for i in range(24):
+        lab = linear_srgb_to_lab([v / k for v in lin[i]])
+        clipped = max(means[i]) >= 254.5
+        e = None if clipped or i + 1 in exclude else ciede2000(REF_LAB[i], lab)
+        errs.append(e)
+        rgb = '/'.join(f'{v:.0f}' for v in means[i])
+        print(f'  {i + 1:2} {PATCHES[i][0]:<15} {rgb:>14} {lab[0]:6.1f} {lab[1]:6.1f} {lab[2]:6.1f} ' +
+              (f'{e:6.2f}' if e is not None else '  clipped' if clipped else '  excluded'))
+    chroma = [e for e in errs[:18] if e is not None]
+    print(f'mean dE00 {mean(errs):.2f} (colour patches {mean(chroma):.2f}, neutral row {mean(errs[18:]):.2f}), '
+          f'worst {max(e for e in errs if e is not None):.2f}; exposure normalised on patches 20-22')
+
+
+# Preview images.
+
+def write_png(path, w, h, rows):
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    raw = b''.join(b'\x00' + bytes(r) for r in rows)
+    with open(path, 'wb') as f:
+        f.write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) +
+                chunk(b'IDAT', zlib.compress(raw, 6)) + chunk(b'IEND', b''))
+
+
+def capture_rows(cap):
+    """One frame at one pixel per quad: grey-world balanced, the mean set to a fifth of full scale, gamma 2.2, from
+    the samples' high bytes (enough for a preview)."""
+    frame = next(cap.frames())
+    names = QUAD[cap.order]
+    used = cap.width * 5 // 4
+    chans = []
+    for qy in range(cap.height // 2):
+        quad = {}
+        for dy in (0, 1):
+            row = frame[(2 * qy + dy) * cap.stride:(2 * qy + dy) * cap.stride + used]
+            even, odd = bytearray(len(row[0::5]) * 2), bytearray(len(row[1::5]) * 2)
+            even[0::2], even[1::2] = row[0::5], row[2::5]
+            odd[0::2], odd[1::2] = row[1::5], row[3::5]
+            quad[names[2 * dy]], quad[names[2 * dy + 1]] = even, odd
+        chans.append((quad['R'], quad['Gr'], quad['B']))
+    sample = chans[::8]
+    level = [max(1e-3, sum(sum(c[i]) for c in sample) / sum(len(c[i]) for c in sample) * 4 - cap.black)
+             for i in range(3)]
+    full = 1023 - cap.black
+    luts = []
+    for i in range(3):
+        scale = 0.2 * full / level[1] * (level[1] / level[i])
+        luts.append(bytes(round(255 * min(1.0, max(0.0, (v * 4 + 1.5 - cap.black) / full * scale)) ** (1 / 2.2))
+                          for v in range(256)))
+    rows = []
+    for r, g, b in chans:
+        out = bytearray(3 * len(r))
+        out[0::3], out[1::3], out[2::3] = r.translate(luts[0]), g.translate(luts[1]), b.translate(luts[2])
+        rows.append(out)
+    return cap.width // 2, cap.height // 2, rows
+
+
+def cmd_preview(args):
+    corners, scale = None, 1
+    if '--corners' in args:
+        i = args.index('--corners')
+        corners = parse_corners(args[i + 1])
+        del args[i:i + 2]
+    if '--scale' in args:
+        i = args.index('--scale')
+        scale = max(1, int(args[i + 1]))
+        del args[i:i + 2]
+    if len(args) != 2:
+        sys.exit(__doc__.split('\n\n')[1])
+    src, out = args
+    if src.endswith('.json'):
+        w, h, rows = capture_rows(Capture(src))
+    else:
+        w, h, pixels = read_ppm(src)
+        rows = [bytearray(pixels[3 * w * y:3 * w * (y + 1)]) for y in range(h)]
+
+    def dot(x, y, colour):
+        if 0 <= x < w and 0 <= y < h:
+            rows[y][3 * x:3 * x + 3] = bytes(colour)
+    for x in range(0, w, 100):
+        for y in range(0, h, 2):
+            dot(x, y, (255, 255, 0) if x % 500 == 0 else (0, 200, 200))
+    for y in range(0, h, 100):
+        for x in range(0, w, 2):
+            dot(x, y, (255, 255, 0) if y % 500 == 0 else (0, 200, 200))
+    if corners:
+        for x0, y0, x1, y1 in patch_squares(corners):
+            for t in (0, 1):
+                for x in range(x0 - 1, x1 + 1):
+                    dot(x, y0 - 1 - t, (255, 0, 255))
+                    dot(x, y1 + t, (255, 0, 255))
+                for y in range(y0 - 1, y1 + 1):
+                    dot(x0 - 1 - t, y, (255, 0, 255))
+                    dot(x1 + t, y, (255, 0, 255))
+    if scale > 1:
+        rows = [bytearray(b''.join(bytes(r[3 * x:3 * x + 3]) for x in range(0, w, scale))) for r in rows[::scale]]
+        w, h = len(rows[0]) // 3, len(rows)
+    write_png(out, w, h, rows)
+    print(f'{out}: {w}x{h}' + (f', 1 pixel = {scale} preview pixels' if scale > 1 else ''))
+
+
+# Self-test: reference values, CIEDE2000, and a synthetic capture and frame through the whole fit.
+
+SHARMA = [  # Sharma, Wu and Dalal (2005), as in colour-science's tests (pair 14 left out, as there)
+    ((50, 2.6772, -79.7751), (50, 0, -82.7485), 2.0425), ((50, 3.1571, -77.2803), (50, 0, -82.7485), 2.8615),
+    ((50, 2.8361, -74.02), (50, 0, -82.7485), 3.4412), ((50, -1.3802, -84.2814), (50, 0, -82.7485), 1.0),
+    ((50, -1.1848, -84.8006), (50, 0, -82.7485), 1.0), ((50, -0.9009, -85.5211), (50, 0, -82.7485), 1.0),
+    ((50, 0, 0), (50, -1, 2), 2.3669), ((50, -1, 2), (50, 0, 0), 2.3669),
+    ((50, 2.49, -0.001), (50, -2.49, 0.0009), 7.1792), ((50, 2.49, -0.001), (50, -2.49, 0.001), 7.1792),
+    ((50, 2.49, -0.001), (50, -2.49, 0.0011), 7.2195), ((50, 2.49, -0.001), (50, -2.49, 0.0012), 7.2195),
+    ((50, -0.001, 2.49), (50, 0.0009, -2.49), 4.8045), ((50, -0.001, 2.49), (50, 0.0011, -2.49), 4.7461),
+    ((50, 2.5, 0), (50, 0, -2.5), 4.3065), ((50, 2.5, 0), (73, 25, -18), 27.1492),
+    ((50, 2.5, 0), (61, -5, 29), 22.8977), ((50, 2.5, 0), (56, -27, -3), 31.903),
+    ((50, 2.5, 0), (58, 24, 15), 19.4535), ((50, 2.5, 0), (50, 3.1736, 0.5854), 1.0),
+    ((50, 2.5, 0), (50, 3.2972, 0), 1.0), ((50, 2.5, 0), (50, 1.8634, 0.5757), 1.0),
+    ((50, 2.5, 0), (50, 3.2592, 0.335), 1.0), ((60.2574, -34.0099, 36.2677), (60.4626, -34.1751, 39.4387), 1.2644),
+    ((63.0109, -31.0961, -5.8663), (62.8187, -29.7946, -4.0864), 1.263),
+    ((61.2901, 3.7196, -5.3901), (61.4292, 2.248, -4.962), 1.8731),
+    ((35.0831, -44.1164, 3.7933), (35.0232, -40.0716, 1.5901), 1.8645),
+    ((22.7233, 20.0904, -46.694), (23.0331, 14.973, -42.5619), 2.0373),
+    ((36.4612, 47.858, 18.3852), (36.2715, 50.5065, 21.2231), 1.4146),
+    ((90.8027, -2.0831, 1.441), (91.1528, -1.6435, 0.0447), 1.4441),
+    ((90.9257, -0.5406, -0.9208), (88.6381, -0.8985, -0.7239), 1.5381),
+    ((6.7747, -0.2908, -2.4247), (5.8714, -0.0985, -2.2286), 0.6377),
+    ((2.0776, 0.0795, -1.135), (0.9033, -0.0636, -0.5514), 0.9082),
+]
+
+
+def check(ok, what):
+    print(f"{'ok  ' if ok else 'FAIL'} {what}")
+    return ok
+
+
+def synthetic_capture(directory, crosstalk, sensitivity, order='RGGB', width=600, height=400, frames=4):
+    """A packed RAW10 capture of the chart: camera RGB = crosstalk x linear sRGB, times the channel sensitivities,
+    on a black level of 64, with a little deterministic noise. Returns the JSON path and the corners."""
+    corners = [(40, 30), (260, 30), (260, 170), (40, 170)]
+    h = homography([(0, 0), (5, 0), (5, 3), (0, 3)], corners)
+    centres = [project(h, i % 6, i // 6) for i in range(24)]
+    exposure = 800 / matvec(crosstalk, REF_LINEAR[18])[1]
+    colours = [[64 + exposure * sensitivity[c] * v for c, v in enumerate(matvec(crosstalk, rgb))]
+               for rgb in REF_LINEAR]
+    grey = [64 + exposure * sensitivity[c] * 0.2 for c in range(3)]
+    names = QUAD[order]
+    channel = {'R': 0, 'Gr': 1, 'Gb': 1, 'B': 2}
+    stride = width * 5 // 4 + 18
+    seed = [12345]
+
+    def noise():
+        seed[0] = (seed[0] * 1103515245 + 12345) & 0x7fffffff
+        return (seed[0] >> 16) % 5 - 2
+    data = bytearray()
+    for _ in range(frames):
+        for y in range(height):
+            row = []
+            for x in range(width):
+                qx, qy = x // 2, y // 2
+                colour = grey
+                for i, (cx, cy) in enumerate(centres):
+                    if abs(qx - cx) < 18 and abs(qy - cy) < 18:
+                        colour = colours[i]
+                v = colour[channel[names[2 * (y % 2) + x % 2]]] + noise()
+                row.append(max(0, min(1023, round(v))))
+            packed = bytearray()
+            for g in range(0, width, 4):
+                p = row[g:g + 4]
+                packed += bytes(v >> 2 for v in p) + bytes([sum((v & 3) << (2 * j) for j, v in enumerate(p))])
+            data += packed + bytes(stride - len(packed))
+    with open(os.path.join(directory, 'synthetic.raw'), 'wb') as f:
+        f.write(data)
+    meta = dict(camera='synthetic', width=width, height=height, order=order, stride=stride,
+                frame_size=stride * height, black=64, frames=frames, skip=1, file='synthetic.raw')
+    path = os.path.join(directory, 'synthetic.json')
+    with open(path, 'w') as f:
+        json.dump(meta, f)
+    return path, corners
+
+
+def cmd_selftest(_args):
+    ok = True
+    white = matvec(XYZ_TO_SRGB, WHITE_D65)
+    ok &= check(all(abs(v - 1) < 1e-9 for v in white), f'sRGB white point maps to 1, 1, 1: {white}')
+    adapted = matvec(D50_TO_D65, WHITE_D50)
+    ok &= check(all(abs(a - b) < 1e-9 for a, b in zip(adapted, WHITE_D65)), 'Bradford takes D50 white to D65 white')
+    worst = max(abs(ciede2000(a, b) - e) for a, b, e in SHARMA)
+    ok &= check(worst < 1e-4, f'CIEDE2000 matches Sharma et al.\'s {len(SHARMA)} pairs (worst {worst:.1e})')
+    sat = saturation_matrix(1.3)
+    ok &= check(all(abs(sum(r) - 1) < 1e-6 for r in sat), 'the saturation matrix leaves neutrals alone')
+    ok &= check(abs(REF_LAB[21][0] - 50.76) < 0.05, f'neutral 5 keeps L* 50.76 through D65: {REF_LAB[21][0]:.3f}')
+    crosstalk = [[0.70, 0.25, 0.05], [0.15, 0.70, 0.15], [0.05, 0.25, 0.70]]
+    ideal = inv3(crosstalk)
+    with tempfile.TemporaryDirectory(prefix='sp11-camera-calibrate-') as tmp:
+        for order in ('RGGB', 'GRBG'):
+            path, corners = synthetic_capture(tmp, crosstalk, [0.55, 1.0, 0.75], order)
+            cap = Capture(path)
+            means = cap.means(patch_squares(corners))
+            r = fit([m for m, _ in means], [c for _, c in means], [64] * 3, set())
+            # The chart's greys are not exactly neutral (a*, b* up to 0.75), so the balance they give differs from
+            # the inverse sensitivities by their tint, and the matrix from the inverse crosstalk by a little more.
+            cam = [[s * v for s, v in zip([0.55, 1.0, 0.75], matvec(crosstalk, REF_LINEAR[i]))] for i in BALANCE]
+            want = [sum(c[1] for c in cam) / sum(c[i] for c in cam) for i in (0, 2)]
+            ok &= check(abs(r['gains'][0] / want[0] - 1) < 0.002 and abs(r['gains'][2] / want[1] - 1) < 0.002,
+                        f"{order}: white balance {r['gains'][0]:.4f}, {r['gains'][2]:.4f} "
+                        f"(model {want[0]:.4f}, {want[1]:.4f})")
+            dev = max(abs(r['ls'][i][j] - ideal[i][j]) for i in range(3) for j in range(3))
+            ok &= check(dev < 0.03, f'{order}: least squares recovers the inverse crosstalk (worst {dev:.4f})')
+            e = mean(errors(r['best'], r['cam'], r['k'], r['used']))
+            ok &= check(e < 0.8, f'{order}: fitted mean dE00 {e:.3f}')
+        # The synthetic noise is uniform over -2..2 (a deviation of sqrt(2)); noise reads it back.
+        buf = io.StringIO()
+        stdout, sys.stdout = sys.stdout, buf
+        try:
+            cmd_noise([path])
+        finally:
+            sys.stdout = stdout
+        out = buf.getvalue().splitlines()
+        sds = [float(x) for x in out[1].split()[5::3]] if len(out) > 1 else []
+        ok &= check(len(sds) == 3 and all(1.2 < v < 1.65 for v in sds), f'noise reads the synthetic noise: {sds}')
+        # A processed frame of the chart as libcamera would render it with the ideal matrix: evaluate must agree.
+        w, h = 300, 200
+        corners = [(40, 30), (260, 30), (260, 170), (40, 170)]
+        hm = homography([(0, 0), (5, 0), (5, 3), (0, 3)], corners)
+        centres = [project(hm, i % 6, i // 6) for i in range(24)]
+        enc = [[round(255 * min(1.0, max(0.0, 0.8 * v)) ** (1 / 2.2)) for v in rgb] for rgb in REF_LINEAR]
+        pixels = bytearray()
+        for y in range(h):
+            for x in range(w):
+                colour = (60, 60, 60)
+                for i, (cx, cy) in enumerate(centres):
+                    if abs(x - cx) < 18 and abs(y - cy) < 18:
+                        colour = enc[i]
+                pixels += bytes(colour)
+        ppm = os.path.join(tmp, 'frame.ppm')
+        with open(ppm, 'wb') as f:
+            f.write(b'P6\n# synthetic\n%d %d\n255\n' % (w, h) + pixels)
+        lin = [[(v / 255) ** 2.2 for v in rgb] for rgb in ppm_means(*read_ppm(ppm), patch_squares(corners))]
+        k = sum(lin[i][1] for i in BALANCE) / sum(REF_LINEAR[i][1] for i in BALANCE)
+        e = mean([ciede2000(REF_LAB[i], linear_srgb_to_lab([v / k for v in lin[i]])) for i in range(24)])
+        ok &= check(e < 1.0, f'a frame rendered from the chart reads back with mean dE00 {e:.3f} (8 bits, '
+                             'cyan clipped)')
+        png = os.path.join(tmp, 'preview.png')
+        stdout, sys.stdout = sys.stdout, io.StringIO()
+        try:
+            cmd_preview([path, png, '--corners', ','.join(f'{c}' for p in corners for c in p)])
+        finally:
+            sys.stdout = stdout
+        with open(png, 'rb') as f:
+            data = f.read()
+        length = struct.unpack('>I', data[33:37])[0]
+        size = len(zlib.decompress(data[41:41 + length]))
+        ok &= check(data[:8] == b'\x89PNG\r\n\x1a\n' and size == 200 * (1 + 3 * 300), 'preview writes a PNG')
+    print('self-test passed' if ok else 'self-test FAILED')
+    return 0 if ok else 1
+
+
+def main():
+    commands = dict(preview=cmd_preview, ccm=cmd_ccm, evaluate=cmd_evaluate, noise=cmd_noise, selftest=cmd_selftest)
+    if len(sys.argv) < 2 or sys.argv[1] not in commands:
+        sys.exit(__doc__.split('\n\n')[1])
+    sys.exit(commands[sys.argv[1]](sys.argv[2:]) or 0)
+
+
+if __name__ == '__main__':
+    main()

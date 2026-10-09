@@ -1,7 +1,8 @@
 #!/usr/bin/bash
 # Step 4: build the sp11-surface-support RPM: device firmware from this machine's Windows installation,
 # ooaklee FullIO v19c audio files, Wi-Fi board data, Bluetooth address service, kernel-install boot
-# policy plugin, dracut policy, the stock-kernel repository override and the first-boot finalizer.
+# policy plugin, dracut policy, the stock-kernel repository override, the first-boot finalizer and the
+# cameras' libcamera tuning files.
 . "$(dirname "$0")/lib.sh"
 require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
@@ -9,12 +10,12 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.4"
+VERSION="3.5"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
-# file directly under payload/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
-# values that reach sp11.env, the UCM matcher and microphone gain, the board data and the font. Recorded in the
-# RPM's description.
+# file directly under payload/ except the ISO templates and the kernel config fragment, the cameras' tuning files in
+# payload/camera/, the spec, and the sp11.conf values that reach sp11.env, the UCM matcher and microphone gain, the
+# board data and the font. Recorded in the RPM's description.
 support_inputs() {
   printf '%s\n' "SP11_DTB=$SP11_DTB" "SP11_ARGS_INSTALLED=$SP11_ARGS_INSTALLED" \
     "SP11_ARGS_LIVE_ONLY=$SP11_ARGS_LIVE_ONLY" "GRUB_GFXMODE_VALUE=$GRUB_GFXMODE_VALUE" \
@@ -22,7 +23,8 @@ support_inputs() {
     "GRUB_FONT_NAME=$GRUB_FONT_NAME" "UCM_SP11_REGEX=$UCM_SP11_REGEX" "WIFI_BOARD_ENTRY=$WIFI_BOARD_ENTRY" \
     "AUDIO_RELEASE_TAG=$AUDIO_RELEASE_TAG" "UCM_MIC_GAIN=$UCM_MIC_GAIN" "BT_HELPER_SHA256=$BT_HELPER_SHA256" \
     | inputs_sha256 "$SPEC_DIR/sp11-surface-support.spec.in" \
-        $(find "$PAYLOAD_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort)
+        $(find "$PAYLOAD_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort) \
+        $(find "$PAYLOAD_DIR/camera" -maxdepth 1 -type f -name '*.yaml' | sort)
 }
 INPUTS=$(support_inputs)
 
@@ -178,14 +180,27 @@ for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
 done
 sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"
 
-## 7. RPM
+## 7. Camera tuning: libcamera's simple IPA looks for /etc/libcamera/ipa/simple/<sensor>.yaml before its own
+##    uncalibrated.yaml, so Fedora's libcamera takes the calibrated colour matrices and black levels as it is
+##    (docs/camera.md). Its Adjust algorithm folds the saturation control into the matrix the Ccm algorithm starts,
+##    so Ccm has to come first.
+for s in imx681 ov13858; do
+  f="$PAYLOAD_DIR/camera/$s.yaml"
+  [ -s "$f" ] || die "missing $f: the cameras' tuning files come from the colour calibration on the device (docs/camera.md)"
+  grep -qx 'version: 1' "$f" || die "$f is not a version 1 tuning file"
+  [ "$(grep -oE '^  - (BlackLevel|Awb|Ccm|Adjust|Agc):' "$f" | tr -d ' -:' | paste -sd,)" = BlackLevel,Awb,Ccm,Adjust,Agc ] \
+    || die "$f must list BlackLevel, Awb, Ccm, Adjust and Agc in that order"
+  install -D -m 0644 "$f" "$STAGE/etc/libcamera/ipa/simple/$s.yaml"
+done
+
+## 8. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
   STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG" INPUTS="$INPUTS")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"
 
-## 8. Prove the package applies the policy on both paths it reaches a machine by (dnf upgrade over the
+## 9. Prove the package applies the policy on both paths it reaches a machine by (dnf upgrade over the
 ##    previous version with its scriptlets, and the live-root install 50-build-iso.sh does). A policy value
 ##    that installs but never applies is otherwise invisible until the hardware boots.
 if as_root test -d "$WORK_DIR/iso/rootfs/usr/lib/modules"; then

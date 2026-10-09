@@ -19,7 +19,9 @@ The repository's files, the pipeline and verification steps, the WSL build host,
   the patch set is the kernel fork's, pinned by `KERNEL_PATCH_*`.
 - `payload/sensors/`: `sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the patches of libssc
   (`libssc/`) and iio-sensor-proxy (`iio-sensor-proxy/`), the unpackaged `sp11-sam-posture` probe.
-- `payload/camera/`: the unpackaged `sp11-camera-probe` (`docs/camera.md`).
+- `payload/camera/`: the unpackaged `sp11-camera-probe` and `sp11-camera-calibrate`, and the cameras' tuning files
+  `imx681.yaml` and `ov13858.yaml`, which step 30 installs into `/etc/libcamera/ipa/simple/` from support 3.5 on;
+  they come from a colour calibration on the device and step 30 refuses to build without them (`docs/camera.md`).
 - `build/`, git-ignored: `cache/` (downloads, source RPMs, checkouts, `rpm-deps/`, the fork's partial clone
   `kernel-patches.git`, its series `kernel-patches/<commit>/`), `kernel/` (step 20's tree and logs; the build runs
   in `/var/lib/mock/<MOCK_CONFIG>-sp11-kernel`), `work/iso/` (the live root, root-owned), `rpms/`, `out/` (the
@@ -36,7 +38,7 @@ The repository's files, the pipeline and verification steps, the WSL build host,
 - The update path first stages a wrong GRUB policy (`GRUB_GFXMODE=640x480`, an empty `GRUB_FONT`,
   `GRUB_TIMEOUT=99`, no font in `/boot`), so a package that installs without applying the `sp11.conf` policy to
   `/etc/default/grub` and the menu fails; both paths also check the 3.x payload (dnf override,
-  `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover).
+  `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover, from 3.5 the two tuning files with a `Ccm`).
 
 ### Step 36: the kernel install
 
