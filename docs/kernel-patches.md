@@ -153,6 +153,21 @@ Nothing here drives hardware the feature table depends on; in parentheses, what 
 - Other laptops' device trees, panels, EC and QSEECOM entries, EL2, X1P, Denali's ThinkPad T14s compatible and
   PMK8550 ADC (no driver in v23.2).
 
+## Planned: revision 12, the cameras' gain steps
+
+Prepared on 2026-10-09, not on the fork yet: three commits for the top of `sp11/7.2.9` (`0fdddb4d`), as patch files
+in `build/handoff/camera-quality-2026-10-09/kernel/`. They apply cleanly, `checkpatch --strict` reports only the
+missing `Signed-off-by` (as for the fork's other own commits) and both drivers compile without warnings (W=1) with
+Fedora's configuration plus `kernel-local`. Why and what libcamera makes of them: `docs/camera.md` (Revision 12).
+
+| Patches | What | Origin | Needed for |
+|---|---|---|---|
+| 0075 | OV13858: the analogue gain control limited to 1x-15.5x (codes 0x80 to 0x7c0) | this repository | the rear camera's gain steps in libcamera |
+| 0076 | IMX681: the digital gain written to all four channel registers (`Fixes: 7b8953ecbac1`) | this repository | a digital gain without a colour tint |
+| 0077 | IMX681: the analogue gain offered in linear units, 256 to 4096 (module parameter `linear_gain`) | this repository | the front camera's gain steps in libcamera |
+
+After the device round: `git am` onto `sp11/7.2.9`, the push, the re-pin (the revision stays 12).
+
 ## Planned: drop the power key's waking press
 
 Not started. The workaround in use is KDE's power button set to Lock screen (`docs/guide/troubleshooting.md`).
@@ -188,8 +203,9 @@ Not started. The workaround in use is KDE's power button set to Lock screen (`do
 
 ### In this project
 
-1. A commit on top of the pinned `sp11/<version>` branch of the fork (0075 after revision 11), with a `[sp11: ...]`
-   note for anything adapted; a pushed branch is never rewritten.
+1. A commit on top of the pinned `sp11/<version>` branch of the fork (numbered after the pinned series: 0078 once
+   revision 12's camera commits are in), with a `[sp11: ...]` note for anything adapted; a pushed branch is never
+   rewritten.
 2. A compile check of `drivers/input/misc` and the DTBs on the host with Fedora's configuration plus
    `kernel-local` (`docs/kernel.md`, Rebase, step 4), then the new pins: `KERNEL_PATCH_COMMIT`, `KERNEL_SP11_REV`
    and the `KERNEL_SP11_REV_SHA256` step 20 prints.

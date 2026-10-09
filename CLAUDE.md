@@ -28,9 +28,9 @@ a guide says only what concretely works.
 - `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors), tablet
   mode and auto-rotation; its dated history is at the end. Read before touching steps 45, 46 and 75,
   `payload/sensors/` or the hexagonrpc fork.
-- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), Fedora's libcamera,
-  the raw-capture probe, what the device has shown. Read before
-  touching `payload/camera/` or the kernel fork's camera commits.
+- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9, revision 12's
+  prepared gain patches), Fedora's libcamera and its tuning files, the raw-capture probe, the colour calibration,
+  what the device has shown. Read before touching `payload/camera/` or the kernel fork's camera commits.
 - `docs/verified.md`: what has been confirmed on the device, by date and package version. Read before stating
   that something works; add to it after a device round.
 - `docs/guide/*.md`: the user guides (`build`, `install`, `update`, `support-rpm-history`, `bluetooth-pairings`,
@@ -45,8 +45,8 @@ a guide says only what concretely works.
 - `payload/`: payload of the support RPM (`payload/15-sp11-surface.install` is the kernel-install plugin), the
   kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files, the libssc and
   iio-sensor-proxy patches and the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture
-  probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in
-  `sp11.conf`.
+  probe and calibration tool, and the cameras' tuning files that the support RPM installs). The kernel patches are
+  commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in `sp11.conf`.
 - `docs/`: the working notes; `docs/guide/`: the user guides. `build/` (git-ignored): caches, work trees, RPMs and
   output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
@@ -68,7 +68,8 @@ a guide says only what concretely works.
 
 Rationale and the enforcement (content pins and input hashes since 2026-09-22) in `docs/pipeline.md`.
 
-- Support payload: `VERSION=` in `scripts/30-build-support-rpm.sh`.
+- Support payload (`payload/` and the tuning files in `payload/camera/`): `VERSION=` in
+  `scripts/30-build-support-rpm.sh`.
 - `payload/kernel-local` or `KERNEL_PATCH_COMMIT` (new commits on the kernel fork): `KERNEL_SP11_REV` and
   `KERNEL_SP11_REV_SHA256` in `sp11.conf` (step 20 prints the value to set). A new Fedora kernel:
   `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and its lines in the `KERNEL_SRPM_SHA256` and

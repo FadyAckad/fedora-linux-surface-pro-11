@@ -25,6 +25,28 @@ the device can show.
   sysfs control (a write returns `EBUSY`) and lights it while the sensor streams; step 20 checks the link in the
   built device tree.
 
+### The IMX681's modes
+
+- Sony's datasheet (IMX681-AAQH5-C, 0.0.5): 4032x3024 active pixels of 1 um (Type 1/3.6), RGGB, analog and digital
+  gain up to 24 dB each, static defect correction from the sensor's OTP, and four video modes besides the full
+  4032x3024 at 30 fps: 2x2 analog binning at 2016x1512 and, cropped to 16:9, 2016x1134, and 4x4 binning at
+  1008x756, each at 60 fps; the register settings are in application notes that are not public.
+- The driver's one mode, recorded from Windows, reads a 3840x2640 crop (x 104 to 3943, y 256 to 2895) without
+  binning: it programs the CCS crop and output-size registers (`0x0344` to `0x034f`, `0x0408` to `0x040f`) but none
+  of the binning registers (`0x0900` to `0x0902`).
+
+### The image processing Windows has
+
+- Windows runs the cameras through the SoC's Spectra ISP ("Qualcomm Spectra 695 ISP Camera AVStream Device"), tuned
+  per camera module by files in the DriverStore (`SCFG_{FRONT,REAR,AUX}_MSHW049x.bin` and sensor-module `.bin`,
+  `.pb` and `.json` files, an undocumented format; rjindael/fedora-surface-pro-11 `CAMERA.md`).
+- Linux has no path to that processing (2026-10-09): CAMSS on the X1E80100 captures raw frames only
+  (`camss-vfe-680.c` programs the RDI write masters, "RDI is all we support right now"; the `msm_vfe0_pix` and
+  `msm_vfe1_pix` entities have nothing behind them) and the device tree has no ICP, IPE or BPS node. Bryan
+  O'Donoghue's ICP/BPS/IPE driver for the X1E80100 (posted 2026-07-03) is an early RFC that needs Qualcomm's
+  closed ICP firmware, and Hans de Goede's libcamera `camss` pipeline handler (v2, 2026-07-21) still uses the
+  software ISP, so every processing step happens in libcamera's software ISP.
+
 ## Kernel
 
 ### What mainline lacks and the patch set carries
@@ -62,6 +84,20 @@ the device can show.
 - The IMX681 control lock (0074): the controls are applied at stream start under the control handler's lock, which
   `__v4l2_ctrl_handler_setup()` expects and `.s_stream` does not hold.
 
+### Revision 12: the gain steps (prepared, not built)
+
+- Three commits for the top of `sp11/7.2.9` (`docs/kernel-patches.md`, Planned): 0075 limits the OV13858's analogue
+  gain control to codes 0x80 to 0x7c0 (1x to 15.5x, smallest libcamera step 0.145x instead of 0.64x), 0076 writes
+  the IMX681's digital gain to all four channel registers, 0077 offers the IMX681's analogue gain as linear gain in
+  1/256 steps (256 to 4096) and writes the nearest code (module parameter `linear_gain`, default on; `0` restores
+  the register code for a libcamera with an IMX681 sensor helper).
+- Without a sensor helper libcamera 0.7.2 moves the gain by at least one control unit per update
+  (`againMinStep` 1), so linear units give the same proportional steps as on the rear camera; libcamera logs the
+  range at stream start: `gain 256-4096 (1)` for the IMX681 and `gain 1-15.5 (0.145)` for the OV13858 (revision 11:
+  `gain 0-960 (1)` and `gain 0-63.9922 (0.639922)`).
+- State (2026-10-09): the patches apply to `0fdddb4d` and compile without warnings (W=1); the build and the device
+  round wait (`build/handoff/camera-quality-2026-10-09/`).
+
 ## libcamera
 
 ### Fedora's libcamera as it is
@@ -79,6 +115,67 @@ the device can show.
   2026-10-02 and dropped as unsustainable: every libcamera release would need its patches rebased (they are in the
   git history). A system that still carries it (`rpm -q libcamera` shows `.sp11.`) goes back with
   `sudo dnf distro-sync 'libcamera*'` and `systemctl --user restart wireplumber pipewire` as the desktop user.
+
+### What the software ISP does (0.7.2)
+
+- One GPU pass per frame (`bayer_1x_packed.frag` for the sensors' packed RAW10): a bilinear demosaic of the 3x3
+  neighbourhood around one input pixel, then black level, white-balance gains (the result clipped at 1), the colour
+  matrix, the contrast curve and gamma. It reads only the 8 high bits of each sample (the CPU path too), and neither
+  path has lens-shading correction, noise reduction, sharpening or defect correction (`software_isp/TODO.md`).
+- A stream smaller than the frame is decimated: each output pixel is one demosaic sample (`GL_NEAREST`), so
+  1280x720 of the IMX681's frame keeps one neighbourhood in nine and averages nothing (noise, aliasing; the squares
+  below).
+- Statistics come every fourth frame. The exposure control (`agc.cpp`) aims at a mean sample value of 2.5 of five
+  bins with a dead band of 0.2, steps by 0.04 of the error (at most +6 % and -10 % per update), exposure first and
+  then gain; white balance is grey world with R and B gains capped at 4; the black level starts at 16 of 255 and is
+  only ever lowered, towards the histogram's 2 % point, unless a tuning file sets it.
+
+### Tuning files
+
+- libcamera searches `/etc/libcamera/ipa:/usr/share/libcamera/ipa` (compiled into `libcamera.so`) for
+  `simple/<sensor>.yaml` (`imx681.yaml`, `ov13858.yaml`) before it falls back to `uncalibrated.yaml`, and `cam -l`
+  logs the fallback ("Configuration file 'imx681.yaml' not found for IPA module 'simple', falling back to ..."). A
+  file in `/etc` needs no libcamera rebuild, and `LIBCAMERA_IPA_CONFIG_PATH=<dir>` (looking in `<dir>/simple/`)
+  tries one without installing it.
+- 0.7.2 reads two keys (`blc.cpp`, `ccm.cpp`): `BlackLevel.blackLevel` (int16 on a 16-bit scale, shifted to 8 bits:
+  4096 is 64 at 10 bits) and `Ccm.ccms`, a list of `ct` and a row-major 3x3 `ccm`; Awb, Adjust and Agc read none.
+  Ccm interpolates linearly between the two nearest `ct`, clamps outside them, and changes matrix only after the
+  colour temperature moves 100 K; that temperature is `estimateCCT()` (libipa `colours.cpp`: a generic RGB-to-XYZ
+  matrix and McCamy's formula) of the inverse white-balance gains, so a matrix's `ct` has to be that estimate for
+  its light, not the lamp's rating.
+- The algorithms rebuild one matrix per frame from the identity, in the file's order: Ccm multiplies its matrix in,
+  then Adjust its saturation (BT.601 chroma scaling), whose `Saturation` control exists only when a Ccm is
+  configured; the white-balance gains apply before the matrix. The GPU shader multiplies every pixel by the matrix
+  anyway, so a configured Ccm costs nothing there.
+- The project's files therefore list `version: 1`, then `BlackLevel` (`blackLevel: 4096`), `Awb`, `Ccm`, `Adjust`
+  and `Agc`, in that order: step 30 refuses another order or a missing algorithm, step 35 a file without `Ccm`.
+- Upstream master (2026-10-06, no release since 0.7.2) renames the IPA `softisp` (tuning files under
+  `ipa/softisp/`) and moves Awb, Ccm and the exposure control into libipa with new keys; a pending series adds
+  lens-shading correction (17x17 grids per colour temperature, GPU only).
+
+### Colour calibration
+
+- `sp11-camera-probe front|rear --save PATH` keeps ten raw frames of a ColorChecker Classic at 1x in `PATH.raw` and
+  describes them in `PATH.json` (exposure halved from the maximum until the brightest green stays below 900, or a
+  higher gain in a dim scene); `--dark --save` keeps frames with the lens covered.
+- `sp11-camera-calibrate` (standard library only): `preview` draws a capture at one pixel per Bayer quad with a
+  100-pixel grid and, given the centres of the corner patches 1, 6, 24 and 19, the squares it samples; `ccm`
+  averages the frames over the inner 40 % of each patch, balances on the neutral patches 20 to 22, takes the
+  colour temperature as libcamera estimates it, and fits a matrix with rows summing to 1 to the chart's linear
+  sRGB with the least mean CIEDE2000 (reference: X-Rite's L*a*b* for charts made after November 2014, through
+  Bradford D50 to D65); `evaluate` measures the CIEDE2000 of the chart in a frame `cam -F` wrote. `selftest` checks
+  the conversions, CIEDE2000 against Sharma et al.'s data and a synthetic capture through the whole fit.
+- What a calibration needs: a ColorChecker Classic (full size or Mini) made after November 2014, daylight without
+  sun on the chart, the chart filling a third to half of the picture and no window or lamp in it (the capture's
+  exposure follows the brightest green of the whole frame), and a `--dark` capture per camera; a second capture
+  under a warm lamp gives a second `ct`. `ccm` prints the `Ccm` block, which goes between `Awb` and `Adjust` of the
+  layout above; the black level stays 4096 while the dark capture reads 62 to 66 at 10 bits.
+- Trying files before packaging them: `LIBCAMERA_IPA_CONFIG_PATH=<dir> cam ...`; for the desktop applications
+  `systemctl --user set-environment LIBCAMERA_IPA_CONFIG_PATH=<dir>` and a restart of `wireplumber` and `pipewire`,
+  undone with `unset-environment`, since the variable is searched before `/etc`.
+- State (2026-10-09): no capture made yet. `payload/camera/imx681.yaml` and `ov13858.yaml` come from it; until they
+  exist step 30 stops every support RPM build on this branch (`missing .../imx681.yaml`), so it can reach `main`
+  only with them. The device steps: `build/handoff/camera-quality-2026-10-09/camera-quality-steps.md`.
 
 ### The GPU debayering: squares in dark pictures, the metering area
 
@@ -145,7 +242,8 @@ the device can show.
 - The simple pipeline keeps the sensor's 30 fps timing and has no frame-duration control, so the exposure ends at
   33 ms, and the software ISP has no noise reduction; at the control's 6 % steps the gain takes about 6 s from 1x to
   16x where libcamera knows the sensor's gain (the rear camera), while the front camera's raw gain code moves one
-  code per update; colours stay muted without a colour-correction matrix.
+  code per update (revision 12 changes both gains, Kernel above); colours stay muted without a colour-correction
+  matrix (Colour calibration).
 - The rear camera's gain ceiling: the OV13858 applies no analogue gain above 15.5x
   (`sp11-camera-probe rear --gain-range`) while its driver offers codes up to 0x1fff (64x in libcamera's helper),
   so in the dark the exposure control steps through codes that do nothing.
@@ -182,3 +280,5 @@ the device can show.
 - 2026-09-28: revisions 8 and 9 confirmed.
 - 2026-10-03: Fedora's libcamera checked with revision 10.
 - 2026-10-07: the cameras stopping until PipeWire is restarted reported (open); the capture handed over.
+- 2026-10-09: the colour calibration prepared (tools, support 3.5's packaging) and revision 12's gain patches; both
+  wait for the device.

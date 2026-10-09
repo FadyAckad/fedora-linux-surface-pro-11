@@ -8,7 +8,7 @@
 Name:           sp11-surface-support
 Version:        @VERSION@
 Release:        1%{?dist}
-Summary:        Surface Pro 11 device support: firmware, audio, Bluetooth, boot policy
+Summary:        Surface Pro 11 device support: firmware, audio, Bluetooth, boot policy, camera tuning
 License:        GPL-3.0-or-later AND LicenseRef-Proprietary-Firmware AND Bitstream-Vera
 ExclusiveArch:  aarch64
 AutoReqProv:    no
@@ -34,7 +34,8 @@ data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, scmi-cpufreq loading,
 a GRUB menu entry that chainloads the Windows Boot Manager, a dnf repository override
 that keeps Fedora's stock kernel packages (which lack the SP11 patch set) off the
-system, and the first-boot finalizer.
+system, the first-boot finalizer, and libcamera tuning files (black level, colour
+matrices) for the front (IMX681) and rear (OV13858) cameras.
 The firmware is proprietary and must not be redistributed.
 Inputs: @INPUTS@
 
@@ -83,6 +84,12 @@ fi
 %dir /etc/sp11
 %config(noreplace) /etc/sp11/bluetooth-address
 /etc/sp11/sp11.env
+# A new calibration replaces a locally edited file, which rpm keeps as .rpmsave.
+%dir /etc/libcamera
+%dir /etc/libcamera/ipa
+%dir /etc/libcamera/ipa/simple
+%config /etc/libcamera/ipa/simple/imx681.yaml
+%config /etc/libcamera/ipa/simple/ov13858.yaml
 
 %changelog
 * Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1

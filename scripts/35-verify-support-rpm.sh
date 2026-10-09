@@ -121,6 +121,10 @@ assert_payload() {
   # 3.4: only the media device nodes, not the /dev/media directory udev creates next to them.
   check as_root grep -qF 'for m in /dev/media[0-9]*;' "$M/usr/libexec/sp11/sp11-diag"
   check as_root sh -c "! grep -v '^#' '$M/usr/libexec/sp11/sp11-diag' | grep -qF '/dev/media*'"
+  # 3.5: the cameras' tuning files where Fedora's libcamera looks first, each with a colour matrix.
+  for s in imx681 ov13858; do
+    check as_root grep -qx '  - Ccm:' "$M/etc/libcamera/ipa/simple/$s.yaml"
+  done
 }
 
 # dnf5 with the override in place: a stock kernel offered by a configured repository is hidden, the same package as a
