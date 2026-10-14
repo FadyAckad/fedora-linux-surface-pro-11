@@ -155,10 +155,11 @@ Nothing here drives hardware the feature table depends on; in parentheses, what 
 
 ## Planned: revision 12, the cameras' gain steps
 
-Prepared on 2026-10-09, not on the fork yet: three commits for the top of `sp11/7.2.9` (`0fdddb4d`), as patch files
-in `build/handoff/camera-quality-2026-10-09/kernel/`. They apply cleanly, `checkpatch --strict` reports only the
-missing `Signed-off-by` (as for the fork's other own commits) and both drivers compile without warnings (W=1) with
-Fedora's configuration plus `kernel-local`. Why and what libcamera makes of them: `docs/camera.md` (Revision 12).
+Built on 2026-10-09 from a scratch clone, not on the fork yet: three commits for the top of `sp11/7.2.9`
+(`0fdddb4d`), as patch files in `build/handoff/camera-quality-2026-10-09/kernel/`. They apply cleanly,
+`checkpatch --strict` reports only the missing `Signed-off-by` (as for the fork's other own commits) and both
+drivers compile without warnings (W=1) with Fedora's configuration plus `kernel-local`. Why and what libcamera makes
+of them: `docs/camera.md` (Revision 12).
 
 | Patches | What | Origin | Needed for |
 |---|---|---|---|

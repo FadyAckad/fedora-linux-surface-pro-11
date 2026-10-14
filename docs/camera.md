@@ -84,7 +84,7 @@ the device can show.
 - The IMX681 control lock (0074): the controls are applied at stream start under the control handler's lock, which
   `__v4l2_ctrl_handler_setup()` expects and `.s_stream` does not hold.
 
-### Revision 12: the gain steps (prepared, not built)
+### Revision 12: the gain steps (built, not tested on the device)
 
 - Three commits for the top of `sp11/7.2.9` (`docs/kernel-patches.md`, Planned): 0075 limits the OV13858's analogue
   gain control to codes 0x80 to 0x7c0 (1x to 15.5x, smallest libcamera step 0.145x instead of 0.64x), 0076 writes
@@ -95,8 +95,8 @@ the device can show.
   (`againMinStep` 1), so linear units give the same proportional steps as on the rear camera; libcamera logs the
   range at stream start: `gain 256-4096 (1)` for the IMX681 and `gain 1-15.5 (0.145)` for the OV13858 (revision 11:
   `gain 0-960 (1)` and `gain 0-63.9922 (0.639922)`).
-- State (2026-10-09): the patches apply to `0fdddb4d` and compile without warnings (W=1); the build and the device
-  round wait (`build/handoff/camera-quality-2026-10-09/`).
+- State (2026-10-09): built from a scratch clone (step 36 passed; the same modules and Denali device tree as
+  revision 11); the device round waits (`build/handoff/camera-quality-2026-10-09/`).
 
 ## libcamera
 
