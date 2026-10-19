@@ -9,9 +9,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 - The result: Fedora's package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
-- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8 and 7.2.9 checked). Fedora's
-  own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in 7.2.9) shares only the media
-  `Kconfig`, `Makefile` and `MAINTAINERS` with the patch set, applied after it.
+- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9 and 7.2.11 checked).
+  Fedora's own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in 7.2.9, 91 in 7.2.11)
+  shares only the media `Kconfig`, `Makefile` and `MAINTAINERS` with the patch set, applied after it.
 
 ### The builds, by revision
 
@@ -27,6 +27,9 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 | 9 | 2026-09-28 | `kernel-7.2.7-300.fc45` | OV13858 pixel rate, IMX681 control lock |
 | 10 | 2026-10-02 | `kernel-7.2.8-300.fc45` | Rebased onto `v7.2.8` |
 | 11 | 2026-10-08 | `kernel-7.2.9-300.fc45` | Rebased onto `v7.2.9` |
+| 7.2.11 revision 1 | 2026-10-19 | `kernel-7.2.11-300.fc45` | Rebased onto `v7.2.11` |
+
+Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 
 ## kernel.spec slots and the build
 
@@ -60,8 +63,10 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 - The pins: `KERNEL_SP11_REV` (in the buildid) and `KERNEL_SP11_REV_SHA256` (`kernel_rev_sha256` in `lib.sh`, over
   the revision number, the effective `kernel-local` lines and the two pinned commits); step 20 refuses a patch set
   or fragment that differs and prints the value to set.
-- Bump the revision with every change, a new Fedora kernel included: `kernel-core` is install-only, and a rebuilt
-  uname with other content would own the installed kernel's `/boot` and module paths.
+- Bump the revision with every change: `kernel-core` is install-only, and a rebuilt uname with other content would
+  own the installed kernel's `/boot` and module paths. A new `KERNEL_FEDORA_VERSION` restarts it at 1 (the
+  maintainer's rule since 2026-10-09; the version keeps the uname apart, and `7.2.11-300.sp11.1` sorts after
+  `7.2.9-300.sp11.11`); a Fedora rebuild of the same version (`KERNEL_FEDORA_RELEASE`) takes the next number.
 - The buildid must not contain `rt|auto|uki|64k|debug`, or `20-grub.install` does not make the kernel the saved
   default.
 
@@ -131,6 +136,15 @@ Every command with its expected output: `.claude/skills/sp11-kernel-update/`.
   file of the series, and Fedora's configuration differs only in `BUILD_SALT`. `i2c-qcom-geni` now selects the
   serial engine's clock-table entry for 32 or 19.2 MHz (it wrote index 0) and refuses to probe without one; X1E's
   QUP tables carry both. Its four buses carry the two PS8830 USB-C retimers.
+- 7.2.9 to 7.2.11 (7.2.11 revision 1, straight past 7.2.10): the 74 commits rebased unchanged, without a conflict.
+  Four 7.2.11 commits touch files of the series, none its code: `lpass-wsa-macro.c` writes the interpolator's
+  digital volume again once its clock runs (upstream `b2047b8cadad`; on the Dell XPS 13 9345, also X1E, a change
+  made while the path was idle had no effect), so the UCM's `WSA_RX0/RX1 Digital Volume` 81 (-3 dB, also the
+  machine driver's cap), set while the path is idle, now applies at playback start; on the device both read 81 and
+  the speakers' level and balance passed. UCSI matches connectors by `reg` (Denali lists 0 and 1 in order);
+  ath12k's panic handler is reverted;
+  dwc3's gadget clears an invalid event count. Fedora's configuration adds the Cortex-A725 erratum 3821522, the
+  Raspberry Pi 5 IOMMU and PWM drivers and `CC_OPT_INLINE_MEMSET`; Fedora's patch adds those drivers.
 
 ### Procedure
 
@@ -144,7 +158,8 @@ Every command with its expected output: `.claude/skills/sp11-kernel-update/`.
    - 7.2.6's SoundWire check `pn >= maxport` merged cleanly but refused the CPS feedback port 13 (patch 0058).
 4. Compile on the host before the mock build: the directories the series touches and the DTBs, with Fedora's
    configuration plus `kernel-local` (under two minutes).
-5. Pin the patch set (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) and bump `KERNEL_SP11_REV`.
+5. Pin the patch set (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) and set `KERNEL_SP11_REV`: 1 for a new
+   Fedora kernel version, the next number otherwise.
 6. Build from the clone before the push: `KERNEL_PATCH_REPO=<clone>` for step 10 (a local clone takes 280 MB, not
    5 MB); step 20's sync-state check then covers Fedora's new configuration.
 7. Push after the device test and never rewrite the branch (`sp11.conf` pins its commits); a re-signed copy with
@@ -187,3 +202,5 @@ Every command with its expected output: `.claude/skills/sp11-kernel-update/`.
   (`c9a90d97`).
 - 2026-10-08: rebased onto `kernel-7.2.9-300.fc45` (revision 11, `sp11/7.2.9`); passed the same day and pushed
   (`0fdddb4d`).
+- 2026-10-19: rebased onto `kernel-7.2.11-300.fc45` (7.2.11 revision 1, the first after the revision restart);
+  passed the same day on a fresh Workstation installation and pushed (`56b04f67`).

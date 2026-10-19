@@ -8,8 +8,8 @@ pipeline:
 2. Step 10 writes the pinned commits out as a series; step 20 checks it against the pinned tree and feeds it to
    `kernel.spec`'s `linux-kernel-test.patch` slot (`docs/kernel.md`).
 3. `payload/kernel-local` sets the patch set's three new symbols and enables two drivers Fedora leaves out.
-4. Every change needs a new `KERNEL_SP11_REV`; a pushed branch is never rewritten: fixes go on top, a new base on a
-   new branch.
+4. Every change needs a new `KERNEL_SP11_REV`, which restarts at 1 with a new Fedora kernel version; a pushed
+   branch is never rewritten: fixes go on top, a new base on a new branch.
 
 License: GPL-2.0 like the kernel files they modify; `mshw0485_touch.c` and its headers carry SPDX lines.
 
@@ -22,7 +22,7 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
 - Source: the v23.2 kernel described in `docs/kernel.md`, ooaklee's linux_ms_dev_kit-sp11 release
   `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (`ce78e6ebc3d7`) with the 7.2.5 stable update.
 - Result: 61 patches reproducing 70 of the 80 files they touch byte for byte from v23.2; the other 10 differ only by
-  the parts left out (below). In the numbering of the current branch `sp11/7.2.9`:
+  the parts left out (below). In the numbering of the current branch `sp11/7.2.11`:
   - 0001–0041: jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses (selection:
     `docs/kernel.md`); 0014 lacks a jglathe-only X1P file, 0030 keeps only its Denali hunk.
   - 0042–0047: ooaklee's branch commits as they are (OLED link-rate quirk, dwc3 PHY re-init, platform profile).
@@ -89,6 +89,11 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
 
 - `sp11/7.2.9`: the 74 commits of `sp11/7.2.8` rebased onto `v7.2.9` unchanged (`docs/kernel.md`), so every number
   stays. Pushed 2026-10-08 (head `0fdddb4d`, tree `c94f9d28`).
+
+### 7.2.11 revision 1: the rebase onto 7.2.11
+
+- `sp11/7.2.11`: the 74 commits of `sp11/7.2.9` rebased onto `v7.2.11` unchanged (`docs/kernel.md`), so every
+  number stays. Pushed 2026-10-19 (head `56b04f67`, tree `a7a10207`).
 
 ## Contents
 
@@ -165,7 +170,7 @@ Not started. The workaround in use is KDE's power button set to Lock screen (`do
 - ACPI's `drivers/acpi/button.c` sets `button->suspended` in `.suspend`, clears it in `.resume`, and while it is set
   reports no key, only `acpi_pm_wakeup_event()`.
 
-### The driver in 7.2.9
+### The driver in 7.2.11 (unchanged since 7.2.9)
 
 - A threaded handler, `devm_request_threaded_irq(..., NULL, pm8941_pwrkey_irq, IRQF_ONESHOT, ...)`, reads
   `PON_RT_STS` and reports press and release with `input_report_key()`; for a release without a press it reports a

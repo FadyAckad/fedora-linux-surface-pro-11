@@ -244,3 +244,20 @@ What has been confirmed on the tested unit, by date and package version. "The ke
   the proxy's orientation and compass; the whole feature table under Plasma (owner).
 - Found: the CDSP's known `sleep_statsi.c:537` assert once while `sp11-diag` ran, in a boot without a sleep,
   recovered by remoteproc (`docs/sensors.md`, Known issues).
+
+## Fresh installation from the 7.2.11 revision 1 ISO (2026-10-19)
+
+- Installed: fresh install from `Fedora-Workstation-Live-45_Beta-1.3` remastered with kernel `7.2.11-300.sp11.1`
+  (revision 11's 74 patches on Fedora's 7.2.11, the first revision of the restarted count), support RPM 3.4, iptsd
+  3.1.0-3, hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.12 and Fedora's
+  libcamera `0.7.2-3.fc45` (sha256 `1c11373e…`); the media check passed and the installer opened in Firefox (owner).
+- Confirmed: the SP11 arguments, `Enforcing`; the speaker stage with VI+CPS feedback at every playback, also after
+  wakes, with both WSA digital volumes at 81 (-3 dB, the machine driver's cap), which 7.2.11 applies at playback
+  start; both UCSI connectors and PS8830 retimers; the QSPI touch path; both DSPs over FastRPC (the CDSP again in a
+  second boot); the crypto engine's two hashes; the three cameras and the front camera's light; no provider
+  waiting for sync_state; four deep sleeps, each resumed, without an ADSP or CDSP crash; the five sensors' readings
+  and the proxy's orientation, light and compass; the same bound devices as revision 11; the whole feature table
+  under GNOME, the speakers' level and balance included (owner).
+- Found: no new kind of kernel warning but those that boots with sleeps showed in revisions 5 to 10
+  (`IRQ: set affinity failed`, a PHY's hwmon PM ordering warning, the Surface hub's unhandled event); the ADSP's
+  known `Handover signaled` lines while `sp11-diag` reads the sensors.

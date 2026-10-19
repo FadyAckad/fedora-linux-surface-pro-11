@@ -15,7 +15,7 @@ mkdir -p "$KDIR"
 # rebuilt with another patch set or fragment would collide with the installed package instead of replacing it.
 REV_SHA=$(kernel_rev_sha256)
 [ "$REV_SHA" = "${KERNEL_SP11_REV_SHA256:-}" ] \
-  || die "payload/$KERNEL_CONFIG_FRAGMENT and KERNEL_PATCH_COMMIT do not match SP11 revision $KERNEL_SP11_REV (KERNEL_SP11_REV_SHA256 in sp11.conf); a changed patch set or fragment needs a new revision: bump KERNEL_SP11_REV and set KERNEL_SP11_REV_SHA256=$REV_SHA"
+  || die "payload/$KERNEL_CONFIG_FRAGMENT and KERNEL_PATCH_COMMIT do not match SP11 revision $KERNEL_SP11_REV (KERNEL_SP11_REV_SHA256 in sp11.conf); a changed patch set or fragment needs a new revision: set KERNEL_SP11_REV (1 for a new KERNEL_FEDORA_VERSION, the next number otherwise) and KERNEL_SP11_REV_SHA256=$REV_SHA"
 
 [ -s "$SRPM_IN" ] || die "missing $SRPM_IN (run scripts/10-fetch-sources.sh)"
 verify_sha256 "$SRPM_IN" "$KERNEL_SRPM_SHA256"

@@ -15,7 +15,7 @@ kernel log), because a line the code prints under some condition may never appea
 `<abi>` the new uname (`7.2.7-300.sp11.5.fc45.aarch64`), `<prev-abi>` the installed revision's, `<new>`, `<rev>`,
 `<date>`, `<tree>`, `<n>` the series' commit count, `<folder>` the hand-off folder's Windows path in WSL.
 
-## `sp11-rev<rev>-steps.md` (on Fedora)
+## `sp11-<new>-rev<rev>-steps.md` (on Fedora)
 
 Cover, in this order, and keep the commands exactly as below:
 
@@ -52,8 +52,9 @@ Cover, in this order, and keep the commands exactly as below:
     rotation with the keyboard folded back, power modes; optional: an external display on USB-C.
 13. Suspend from the Power menu, one minute, wake: display, touch, pen, keyboard, Wi-Fi, sound and both cameras in
     GNOME Snapshot as before.
-14. `sudo /usr/libexec/sp11/sp11-diag ./sp11-diag-sp11.<rev>.txt` and
-    `grep -A2 'state_synced' ./sp11-diag-sp11.<rev>.txt` — the file written; `no provider waits for sync_state`.
+14. `sudo /usr/libexec/sp11/sp11-diag ./sp11-diag-<new>-sp11.<rev>.txt` and
+    `grep -A2 'state_synced' ./sp11-diag-<new>-sp11.<rev>.txt` — the file written; `no provider waits for
+    sync_state`.
 15. Second boot, 3 minutes: `ls -l /dev/fastrpc-cdsp`, `sudo timeout 20 python3 ./sp11-dsp-ping.py 10 1` —
     the node; `answered`.
 16. Only if the revision misbehaves: boot `<prev-abi>` from the GRUB menu, then
@@ -62,8 +63,8 @@ Cover, in this order, and keep the commands exactly as below:
     removed; `/boot/vmlinuz-<prev-abi>`.
 
 Add a check for every patch the rebase adapted or added (for 7.2.7, step 6 covers the SoundWire fix and step 8 the
-adapted SPI patch). Send back: the terminal output of the steps, `sp11-diag-sp11.<rev>.txt`, one line per by-hand
-check. Compare its `recent journal errors` section with the previous round's.
+adapted SPI patch). Send back: the terminal output of the steps, `sp11-diag-<new>-sp11.<rev>.txt`, one line per
+by-hand check. Compare its `recent journal errors` section with the previous round's.
 
 ## `sp11-fork-<new>-steps.md` (in WSL, after the device test)
 

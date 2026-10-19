@@ -73,8 +73,8 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   `KERNEL_SP11_REV_SHA256` in `sp11.conf` (step 20 prints the value to set). A new Fedora kernel:
   `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and its lines in the `KERNEL_SRPM_SHA256` and
   `KERNEL_STOCK_CORE_SHA256` case tables, plus the patch set rebased on a new fork branch
-  (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) under a new revision (`docs/kernel.md`). A pushed fork branch
-  is never rewritten.
+  (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) under revision 1: the revision restarts with every Fedora
+  kernel version (`docs/kernel.md`). A pushed fork branch is never rewritten.
 - In `sp11.conf`: `IPTSD_RPM_RELEASE` (the iptsd spec), `HEXAGONRPC_RPM_RELEASE` (the number, for the spec, its
   payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec or its patches in `payload/sensors/libssc/`),
   `IIO_SENSOR_PROXY_RPM_SUFFIX` (its template or its patches in `payload/sensors/iio-sensor-proxy/`; for a new SRPM

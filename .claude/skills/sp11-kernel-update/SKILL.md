@@ -76,8 +76,8 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 
 1. `sp11.conf`: `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE`, a line in the `KERNEL_SRPM_SHA256` case table
    (and its `known:` list) and one in `KERNEL_STOCK_CORE_SHA256`'s, `KERNEL_PATCH_BASE_COMMIT` (the tag's commit),
-   `KERNEL_PATCH_COMMIT` (the rehearsal head for now, `# sp11/<new>, <n> commits`), `KERNEL_SP11_REV` plus one, and
-   `KERNEL_SP11_REV_SHA256` as `kernel_rev_sha256` prints it.
+   `KERNEL_PATCH_COMMIT` (the rehearsal head for now, `# sp11/<new>, <n> commits`), `KERNEL_SP11_REV` 1 (it
+   restarts with every Fedora kernel version), and `KERNEL_SP11_REV_SHA256` as `kernel_rev_sha256` prints it.
 2. In a worktree `build/` starts empty: hard-link the main checkout's caches, copy its git pins, link the support
    RPM and hard-link its live root (`sudo cp -al`) for step 36. The kernel's mock root is shared by all checkouts:
    no other kernel build may run.

@@ -1,12 +1,13 @@
 # Kernel update: commands
 
 The commands of [SKILL.md](SKILL.md), step by step, run from the checkout's root in bash. Set the values first, in
-every new shell; the examples are those of the 7.2.5 to 7.2.7 update (revision 5).
+every new shell; the examples are those of the 7.2.5 to 7.2.7 update, but for the revision, which restarts at 1
+with every kernel version since 7.2.11.
 
 ```bash
 OLD=7.2.5 OLDREL=300    # KERNEL_FEDORA_VERSION and KERNEL_FEDORA_RELEASE as pinned before the update
 NEW=7.2.7 REL=300       # the new Fedora kernel and its release
-FR=45 REV=5             # FEDORA_RELEASE; the new KERNEL_SP11_REV
+FR=45 REV=1             # FEDORA_RELEASE; the new KERNEL_SP11_REV (1 for a new kernel version)
 FORK=""                 # the path of the maintainer's full clone of the kernel fork; ask for it
 R=build/rebase          # scratch area inside the git-ignored build/
 KOJI=https://kojipkgs.fedoraproject.org/packages/kernel/$NEW/$REL.fc$FR
@@ -229,19 +230,19 @@ Expected: the live root's kernel (the previous revision) and support RPM; no moc
 ## 5. Build and verify
 
 ```bash
-KERNEL_PATCH_REPO="$PWD/$R/linux" scripts/10-fetch-sources.sh > "build/logs/step10-rev$REV.log" 2>&1; echo "step 10 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step10-rev$REV.log" | grep -E 'SP11 patch set|all sources present|ERROR' 
+KERNEL_PATCH_REPO="$PWD/$R/linux" scripts/10-fetch-sources.sh > "build/logs/step10-$NEW-rev$REV.log" 2>&1; echo "step 10 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step10-$NEW-rev$REV.log" | grep -E 'SP11 patch set|all sources present|ERROR' 
 ```
 
 Expected: `step 10 rc=0`, `SP11 patch set: <n> commits, v<new>..<head>` and `all sources present`.
 
 ```bash
-setsid nohup bash -c './scripts/20-build-kernel.sh; echo "STEP20-DONE rc=$?"' > "build/logs/step20-rev$REV.log" 2>&1 < /dev/null & disown
+setsid nohup bash -c './scripts/20-build-kernel.sh; echo "STEP20-DONE rc=$?"' > "build/logs/step20-$NEW-rev$REV.log" 2>&1 < /dev/null & disown
 ```
 
 Wait in the background for the marker, or for the build's shell to be gone:
 
 ```bash
-until grep -q STEP20-DONE "build/logs/step20-rev$REV.log" || ! pgrep -f '^bash -c ./scripts/20-build-kernel.sh' > /dev/null; do sleep 30; done; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step20-rev$REV.log" | tail -4
+until grep -q STEP20-DONE "build/logs/step20-$NEW-rev$REV.log" || ! pgrep -f '^bash -c ./scripts/20-build-kernel.sh' > /dev/null; do sleep 30; done; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step20-$NEW-rev$REV.log" | tail -4
 ```
 
 Expected: `kernel <abi>: configuration = Fedora's kernel-core-<new>-<rel>.fc<n> + kernel-local; DTB compatible:
@@ -251,7 +252,7 @@ Step 36 as an installed system with the current support RPM sees it: that RPM re
 `%posttrans` writes the menu such a system has (the live root's own menu is Fedora's):
 
 ```bash
-SUPPORT_PREVIOUS_RPM=$(ls -t "$PWD"/build/rpms/sp11-surface-support-*.rpm | head -1) scripts/36-verify-kernel-install.sh > "build/logs/step36-rev$REV.log" 2>&1; echo "step 36 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-rev$REV.log" | grep -cE '^\[sp11\] +ok:'; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-rev$REV.log" | grep -E 'FAIL|ERROR|/boot use|verified on an installed system'
+SUPPORT_PREVIOUS_RPM=$(ls -t "$PWD"/build/rpms/sp11-surface-support-*.rpm | head -1) scripts/36-verify-kernel-install.sh > "build/logs/step36-$NEW-rev$REV.log" 2>&1; echo "step 36 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-$NEW-rev$REV.log" | grep -cE '^\[sp11\] +ok:'; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-$NEW-rev$REV.log" | grep -E 'FAIL|ERROR|/boot use|verified on an installed system'
 ```
 
 Expected: `step 36 rc=0`; 42 checks (revision 5); the `/boot` use of the new kernel (195M) and
