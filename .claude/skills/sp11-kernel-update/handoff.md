@@ -7,13 +7,15 @@ three files below. Before handing over, apply the tarball with `git am` onto `v<
 (`git clone --shared --no-checkout <fork clone>`, detached at the tag, signing off): 58 commits and one whitespace
 warning for 7.2.7 (74 commits since revision 9), and the rehearsal's tree.
 
-Steps files follow the maintainer's format: a `#` title with topic, version and date; a short intro (what changed,
-what was verified off-hardware, what can break, the way back); numbered steps with one command per fenced `bash`
-block and an `Expected:` after it; a closing line naming what to send back. Commands are the ones earlier rounds
-ran on the device; expected lines come from the previous round's returned output (its `sp11-diag` file has the
-kernel log), because a line the code prints under some condition may never appear on the device. Placeholders:
-`<abi>` the new uname (`7.2.7-300.sp11.5.fc45.aarch64`), `<prev-abi>` the installed revision's, `<new>`, `<rev>`,
-`<date>`, `<tree>`, `<n>` the series' commit count, `<folder>` the hand-off folder's Windows path in WSL.
+The folder, `README.txt` and the steps files follow the hand-off standard
+([sp11-handoff](../sp11-handoff/SKILL.md)): a `#` title with topic, version and date; an intro (what changed, what
+was verified off-hardware, what can break, the way back); numbered steps with one command per fenced `bash` block
+and an `Expected:` after it; a closing line naming what to send back. The kernel's own conventions follow. Commands
+are the ones earlier rounds ran on the device; expected lines come from the previous round's returned output (its
+`sp11-diag` file has the kernel log), because a line the code prints under some condition may never appear on the
+device. Placeholders: `<abi>` the new uname (`7.2.7-300.sp11.5.fc45.aarch64`), `<prev-abi>` the installed
+revision's, `<new>`, `<rev>`, `<date>`, `<tree>`, `<n>` the series' commit count, `<folder>` the hand-off folder's
+Windows path in WSL.
 
 ## `sp11-<new>-rev<rev>-steps.md` (on Fedora)
 

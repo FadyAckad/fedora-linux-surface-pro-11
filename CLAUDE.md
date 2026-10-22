@@ -51,6 +51,8 @@ a guide says only what concretely works.
   output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
   command with its expected output in `reference.md`, hand-off templates, the DSP ping tool).
+- `.claude/skills/sp11-handoff/`: the standard for hand-offs to the maintainer (folder, `README.txt`, steps file,
+  validation, the way back, device sessions and their review) as a Claude Code skill.
 
 ## Rules
 

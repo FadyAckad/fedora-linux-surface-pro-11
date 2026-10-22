@@ -109,10 +109,11 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 
 ## 7. Hand-off
 
-A folder as `CLAUDE.local.md` describes: the five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the
-fork steps, the series as a tarball, [sp11-dsp-ping.py](sp11-dsp-ping.py), `README.txt`. Templates, and what each
-device check covers, in [handoff.md](handoff.md). Expected log lines come from the previous device round (the
-maintainer's returned `sp11-diag` output), not from reading the code.
+A folder in the hand-off standard ([sp11-handoff](../sp11-handoff/SKILL.md); location in `CLAUDE.local.md`): the
+five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the fork steps, the series as a tarball,
+[sp11-dsp-ping.py](sp11-dsp-ping.py), `README.txt`. Templates, and what each device check covers, in
+[handoff.md](handoff.md). Expected log lines come from the previous device round (the maintainer's returned
+`sp11-diag` output), not from reading the code.
 
 ## 8. After the device test and the push
 
