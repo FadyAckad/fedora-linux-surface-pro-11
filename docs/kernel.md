@@ -28,6 +28,7 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 | 10 | 2026-10-02 | `kernel-7.2.8-300.fc45` | Rebased onto `v7.2.8` |
 | 11 | 2026-10-08 | `kernel-7.2.9-300.fc45` | Rebased onto `v7.2.9` |
 | 7.2.11 revision 1 | 2026-10-19 | `kernel-7.2.11-300.fc45` | Rebased onto `v7.2.11` |
+| 7.2.11 revision 2 | 2026-10-22 | `kernel-7.2.11-300.fc45` | Three battery-driver fixes |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 
@@ -204,3 +205,4 @@ Every command with its expected output: `.claude/skills/sp11-kernel-update/`.
   (`0fdddb4d`).
 - 2026-10-19: rebased onto `kernel-7.2.11-300.fc45` (7.2.11 revision 1, the first after the revision restart);
   passed the same day on a fresh Workstation installation and pushed (`56b04f67`).
+- 2026-10-22: 7.2.11 revision 2, three battery-driver fixes; passed the same day and pushed (`e1de27e3`).

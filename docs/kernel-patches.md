@@ -95,6 +95,13 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
 - `sp11/7.2.11`: the 74 commits of `sp11/7.2.9` rebased onto `v7.2.11` unchanged (`docs/kernel.md`), so every
   number stays. Pushed 2026-10-19 (head `56b04f67`, tree `a7a10207`).
 
+### 7.2.11 revision 2: three battery-driver fixes
+
+- Three commits on top of `sp11/7.2.11` (0075–0077), carried unchanged from lkarlslund/linux-x1e-t14s (branch
+  `t14s/jens-7.3`, which carries them as pending upstream fixes), each with a `[sp11: ...]` note naming its commit;
+  found by a comparison with lkarlslund/linux-x1e-jglathe on 2026-10-22. Pushed 2026-10-22 (head `e1de27e3`, tree
+  `0977cb32`).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -137,6 +144,9 @@ The patches by number, with their origin and what each is needed for.
 | 0072 | IMX681: the frame length at `0x033d`, the sensor's line time, an exposure margin of 8 lines | this repository | a third more exposure at 30 fps; the vertical blanking sets the frame rate |
 | 0073 | OV13858: the lowest pixel rate from the lowest link frequency | this repository | the rear camera's line and exposure times in libcamera |
 | 0074 | IMX681: the controls applied at stream start under the control handler's lock | this repository | no race with control changes at stream start |
+| 0075 | qcom_battmgr: the `capacity` property on X1E80100, lost when the variant got its own property table | Liviu Nicoara | the battery percentage from the kernel |
+| 0076 | qcom_battmgr: `Full` instead of `Not charging` for a full battery on external power | Bjorn Andersson | the battery state on the charger |
+| 0077 | qcom_battmgr: a change notice from the AC, USB and wireless supplies when the charging source changes | Brandon Williams (turbineBMW) | UPower's on-battery state after the charger is plugged in or out |
 
 ## Left out of v23.2, and the device check for each
 
@@ -193,8 +203,8 @@ Not started. The workaround in use is KDE's power button set to Lock screen (`do
 
 ### In this project
 
-1. A commit on top of the pinned `sp11/<version>` branch of the fork (0075 after revision 11), with a `[sp11: ...]`
-   note for anything adapted; a pushed branch is never rewritten.
+1. A commit on top of the pinned `sp11/<version>` branch of the fork (0078 after 7.2.11 revision 2), with a
+   `[sp11: ...]` note for anything adapted; a pushed branch is never rewritten.
 2. A compile check of `drivers/input/misc` and the DTBs on the host with Fedora's configuration plus
    `kernel-local` (`docs/kernel.md`, Rebase, step 4), then the new pins: `KERNEL_PATCH_COMMIT`, `KERNEL_SP11_REV`
    and the `KERNEL_SP11_REV_SHA256` step 20 prints.

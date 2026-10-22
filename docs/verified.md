@@ -261,3 +261,22 @@ What has been confirmed on the tested unit, by date and package version. "The ke
 - Found: no new kind of kernel warning but those that boots with sleeps showed in revisions 5 to 10
   (`IRQ: set affinity failed`, a PHY's hwmon PM ordering warning, the Surface hub's unhandled event); the ADSP's
   known `Handover signaled` lines while `sp11-diag` reads the sensors.
+
+## Kernel 7.2.11 revision 2 (7.2.11-300.sp11.2) (2026-10-22)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.2.fc45` (revision 1's 74 patches and the battery-driver fixes 0075
+  to 0077) with `dnf install` next to revision 1, on the Workstation installation of 2026-10-19.
+- Confirmed: the SP11 arguments, `Enforcing`; the speaker stage with VI+CPS feedback; the QSPI touch path; both
+  DSPs over FastRPC (the CDSP again in a second boot); the crypto engine's two hashes; the three cameras listed; no
+  provider waiting for sync_state; a 36-minute deep sleep, resumed; the journal's error kinds those of revision 1.
+  The battery's `capacity` present, UPower's percentage taken from it; with a USB-C charger, unplugging and
+  plugging in each sent a uevent for `qcom-battmgr-usb`, and UPower's `on-battery` followed at once.
+- Before, on revision 1 the same day with the Surface charger: no uevent for `qcom-battmgr-ac` and
+  `on-battery: no` after unplugging until the next resume; at 100 % on the charger `status=Not charging`
+  (`docs/hardware.md`).
+- Confirmed by hand (owner): the voice from the matching speaker and the microphone; touch, two-finger scrolling
+  and pen inking; the front and the rear camera in Firefox; Wi-Fi, the Bluetooth keyboard, pen and audio,
+  brightness, volume keys, keyboard and touchpad, rotation with the keyboard folded back, power profiles, a USB
+  device on each USB-C port; GNOME's battery icon on battery and charging after unplugging and plugging in; all of
+  them again after the sleep.
+- Not covered: the Surface charger and a full battery on revision 2.

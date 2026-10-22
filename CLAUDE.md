@@ -99,4 +99,6 @@ set was extracted from) and ooaklee/linux-surface-pro-11-oe (audio, iptsd releas
 ooaklee/lexr.sh `internal/image/fedora/*.go` (remaster design reference);
 denisix/ubuntu-surface-pro-11 (`SENSORS.md`: the SSC sensor stack on an SP11 under Ubuntu); linux-msm/hexagonrpc;
 DylanVanAssche/libssc (codeberg); Fedora wiki "Snapdragon WoA Laptop Install"; Arch wiki "Bluetooth" (dual-boot
-pairing).
+pairing); lkarlslund/linux-x1e-jglathe and its kernel branches lkarlslund/linux-x1e-t14s (ThinkPad T14s; the
+battery-driver fixes of 7.2.11 revision 2, X1E sleep work from justririll/x1e-sleep and
+ramonjesusmiranda-debug/sp11-el2).

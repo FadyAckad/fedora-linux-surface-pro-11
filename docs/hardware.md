@@ -42,6 +42,22 @@ Windows.
   meson to find Microsoft.GSL. It runs on the HIDRAW bridge of `mshw0485_touch` (patch 0050), `hidraw` parent
   `001C:045E:0C83.*`, as `sp11-iptsd@dev-hidrawN.service` started by udev; the kernel's "Microsoft Surface G6 Pen"
   input device is silent by design.
+- Power supplies (`sp11-diag` of 2026-10-19): `ADP1` (Mains, the Surface Aggregator's `surface_charger`),
+  `qcom-battmgr-ac`, `-bat`, `-usb` and `-wls` (pmic_glink's battery manager) and per USB-C connector
+  `ucsi-source-psy-pmic_glink.ucsi.0N` (USB); `surface_battery` loads but patch 0055 keeps it from binding.
+- Charger and battery on 7.2.11 revision 1 (2026-10-22): the mains charger shows as `qcom-battmgr-ac` online (the
+  `ucsi` supplies stay offline). Unplugging or plugging it in sends a `change` uevent for `ADP1` and three for
+  `qcom-battmgr-bat`, none for `qcom-battmgr-ac`, so UPower keeps that supply online from its last read and reports
+  `on-battery: no` after unplugging until the next resume rereads every supply; plugging in is right through
+  `ADP1`. The battery has no `capacity` (UPower computes the percentage) and at 100 % on the charger reads
+  `Not charging`, which UPower shows as `fully-charged`. On revision 2 (patches 0075 to 0077) the battery has
+  `capacity` and UPower takes its percentage from it; with a USB-C charger unplugging and plugging in each sent a
+  `change` uevent for `qcom-battmgr-usb`, and UPower's `on-battery` followed at once (2026-10-22).
+- TPM: none under Linux (the kernel arguments carry `systemd.tpm2_wait=0`). Windows reports Microsoft Pluton
+  (`tpmtool getdeviceinformation`: manufacturer `MSFT`, vendor `Pluton.TPM.Q`) behind the ACPI `TPM2` table's start
+  method 14 (OEM `QCOM`), which Linux's `include/acpi/actbl3.h` does not define (13 is Pluton's CRB) (2026-10-22).
+  TrustZone runs no `qcom.tz.tpm`, the application the X1E QSEE TPM driver uses (a lookup through
+  `qcom_scm_qseecom_app_get_id()`, which finds `qcom.tz.uefisecapp`, 2026-10-22).
 - Live-only DSP blacklist: an ADSP restart resets USB-C while rooted on USB, so the live media boots with
   `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (no audio or battery live). The installed
   system drops both via the kernel-install plugin and `sp11-first-boot.service`; the plugin also removes Anaconda's
@@ -65,6 +81,12 @@ Windows.
   sensor streams (`docs/sensors.md`, Known issues) and charger or battery notices wake the tablet this way.
 - `cat /sys/power/pm_wakeup_irq` names the wake-armed interrupt of the last wake; after an ADSP wake it answers
   `No data available`.
+- What sleeps (`/sys/kernel/debug/qcom_stats`, 7.2.11 revision 1, 2026-10-22): the CPU subsystem collapses once per
+  deep sleep (`apss` counts the suspends), but over 5 hours with 2 hours suspended `aosd`, `cxsd` and `ddr` stayed
+  at 0 and `ddr_stats` counted no low-power mode. The ADSP enters its sleep about 100 times a second, awake or
+  suspended alike (101/s across the suspends). It offers `APPS_ADSP_PWR_LMTS_GLINK_PORT`, the channel on which
+  Windows' PEP (`qcpep8380.sys`) announces Modern Standby so that the ADSP stops its power-limits timer; on a
+  ThinkPad T14s that brought its wakes in sleep from 100 to 160 a second down to 2 or 3 (justririll/x1e-sleep).
 - PowerDevil 6.7 sleeps again 10 s after a wake if the lid is closed, no external monitor counts and the lid action
   is Sleep (`checkWakeup`); after a wake by network, telephony or timer, after 30 s idle instead.
 - The power key's driver (`pm8941-pwrkey`) reports the press that woke the system, about 0.2 s before
