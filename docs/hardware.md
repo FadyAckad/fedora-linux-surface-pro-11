@@ -87,6 +87,11 @@ Windows.
   suspended alike (101/s across the suspends). It offers `APPS_ADSP_PWR_LMTS_GLINK_PORT`, the channel on which
   Windows' PEP (`qcpep8380.sys`) announces Modern Standby so that the ADSP stops its power-limits timer; on a
   ThinkPad T14s that brought its wakes in sleep from 100 to 160 a second down to 2 or 3 (justririll/x1e-sleep).
+- With that message sent (justririll's `qcom_adsp_pwr_lmts`, loaded by hand on 7.2.11 revision 2, 2026-10-23) the
+  ADSP entered its sleep 0.24 times a second while suspended instead of 103 (10-minute sleeps, power-key wakes);
+  one `state 1` before each sleep and one `state 0` after, no reply on the channel, the ADSP answered afterwards;
+  going to sleep and waking took no longer, and sound, the battery percentage and rotation worked afterwards.
+  `cxsd`, `ddr` and `aosd` still stayed at 0, so something else keeps the SoC out of its deepest states.
 - PowerDevil 6.7 sleeps again 10 s after a wake if the lid is closed, no external monitor counts and the lid action
   is Sleep (`checkWakeup`); after a wake by network, telephony or timer, after 30 s idle instead.
 - The power key's driver (`pm8941-pwrkey`) reports the press that woke the system, about 0.2 s before

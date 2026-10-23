@@ -15,11 +15,11 @@ that built it with files from its Windows installation. Secure Boot has to be of
 Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). The KDE Plasma Desktop column was confirmed on the
 installation of 2026-09-30 (`FEDORA_EDITION=KDE-Desktop`), running kernel revision 11
 (`7.2.9-300.sp11.11.fc45.aarch64`) and support RPM 3.4; the Workstation column on an installation from the ISO
-built on 2026-10-19, with 7.2.11 revision 1 (`7.2.11-300.sp11.1.fc45.aarch64`) and support RPM 3.4; revision 2
-(`7.2.11-300.sp11.2`, three battery-driver fixes) passed its checks there on 2026-10-22, the by-hand ones included.
+built on 2026-10-19 (7.2.11 revision 1, support RPM 3.4), updated on 2026-10-22 to 7.2.11 revision 2
+(`7.2.11-300.sp11.2.fc45.aarch64`, three battery-driver fixes), every row confirmed again with it.
 [`docs/verified.md`](docs/verified.md) has the details and the results with earlier kernels.
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.1) | Fedora 45 Beta KDE Plasma Desktop, Fedora's 7.2.9-300 (sp11.11) |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.2) | Fedora 45 Beta KDE Plasma Desktop, Fedora's 7.2.9-300 (sp11.11) |
 |---|:-:|:-:|
 | Boot from the internal NVMe drive | yes | yes |
 | Display with GPU acceleration | yes | yes |

@@ -279,4 +279,7 @@ What has been confirmed on the tested unit, by date and package version. "The ke
   brightness, volume keys, keyboard and touchpad, rotation with the keyboard folded back, power profiles, a USB
   device on each USB-C port; GNOME's battery icon on battery and charging after unplugging and plugging in; all of
   them again after the sleep.
+- Confirmed by hand on 2026-10-23 (owner), the feature table's remaining rows: GPU acceleration, Flatpak, the
+  Windows entry in GRUB, the keyboard and pen pairings shared with Windows, the sensors' readings, tablet mode,
+  automatic screen brightness, the front camera's light.
 - Not covered: the Surface charger and a full battery on revision 2.
