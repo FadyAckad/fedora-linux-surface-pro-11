@@ -30,7 +30,9 @@ sudo dnf install ./kernel{,-core,-modules-core,-modules,-modules-extra}-<version
 ```
 
 The new kernel gets its own boot entry with the Denali DTB and the kernel arguments, and becomes the default; the
-previous kernel stays in the GRUB menu. dnf keeps at most three kernels per package name (`installonly_limit`) and
+previous kernel stays in the GRUB menu. On the 5G SKU install support RPM 3.5 or later before a kernel of 7.2.11
+revision 3 or later: its GRUB setting gives the new entry the 5G device tree with the modem, while existing entries
+keep theirs. dnf keeps at most three kernels per package name (`installonly_limit`) and
 removes the oldest one, never the running one, in the transaction that installs a fourth. Check `df -h /boot`
 before installing another kernel; each SP11 kernel takes about 195 MB there. A dracut failure inside the install
 leaves the new kernel without a boot entry, and only the transaction's output says so.

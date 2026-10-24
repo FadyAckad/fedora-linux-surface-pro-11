@@ -38,28 +38,38 @@ check_kernel_rpms() {
   for p in $KERNEL_PKGS; do ( cd "$CHK" && rpm2cpio "$(rpm_of "$p")" | cpio -idm --quiet ) || die "cannot unpack $p"; done
   MOD="$CHK/lib/modules/$KERNEL_ABI"; [ -d "$MOD" ] || MOD="$CHK/usr/lib/modules/$KERNEL_ABI"
   [ -s "$MOD/vmlinuz" ] || die "kernel-core lacks lib/modules/$KERNEL_ABI/vmlinuz"
-  [ -s "$MOD/dtb/$SP11_DTB" ] || die "kernel-core lacks the device tree $SP11_DTB"
-  dtb_compat=$(fdtget -t s "$MOD/dtb/$SP11_DTB" / compatible 2>/dev/null || true)
-  [[ $dtb_compat == *microsoft,denali-oled* ]] || die "DTB compatible check failed: '$dtb_compat'"
-  # By compatible: the node's path depends on the SoC dtsi (spi10 sits under the QUP wrapper, /soc@0/geniqup@ac0000).
-  dtc -q -I dtb -O dts "$MOD/dtb/$SP11_DTB" | grep -F 'compatible = "microsoft,mshw0485";' >/dev/null \
-    || die "the SP11 device tree lacks the touch controller (patch set not applied?)"
-  # The three camera sensors (revision 6), under the CCI buses the camera nodes enable.
-  for c in sony,imx681 ovti,ov13858 st,vd55g0; do
-    dtc -q -I dtb -O dts "$MOD/dtb/$SP11_DTB" | grep -F "compatible = \"$c\";" >/dev/null \
-      || die "the SP11 device tree lacks the $c camera sensor (patch set not applied?)"
-  done
-  # The front camera's privacy LED (revision 7): the V4L2 core lights it while the IMX681 streams.
-  dtc -q -I dtb -O dts "$MOD/dtb/$SP11_DTB" | grep -F 'led-names = "privacy";' >/dev/null \
-    || die "the SP11 device tree gives the front camera no privacy LED"
-  # Every enabled user of the RPMh power domains and of the interconnect in that tree has a driver in the packages:
-  # otherwise those providers never reach sync_state and Linux keeps its boot-time maximum rail and bus votes for
-  # good, and the CDSP never wakes from its first sleep (kernel-local enables the drivers Fedora leaves out).
+  # Both SP11 trees (sp11.conf): the OLED one every SKU without a modem boots, and the 5G SKU's, the OLED tree plus
+  # the modem on PCIe 5 (revision 3).
   local moddir=${MOD#"$CHK"}; moddir=${moddir%/"$KERNEL_ABI"}
   depmod -b "$CHK" -m "$moddir" -o "$CHK/depmod" "$KERNEL_ABI" || die "depmod failed on the kernel packages"
-  missing=$(python3 "$SP11_ROOT/scripts/sync-state-drivers.py" "$MOD/dtb/$SP11_DTB" "$MOD/vmlinuz" \
-            "$CHK/depmod$moddir/$KERNEL_ABI/modules.alias" "$MOD/modules.builtin.modinfo") \
-    || die "no driver for these users of the RPMh power domains or the interconnect; add it to kernel-local: $(printf '%s\n' "$missing" | tr '\n' ';')"
+  for dtb in "$SP11_DTB_OLED" "$SP11_DTB_5G"; do
+    [ -s "$MOD/dtb/$dtb" ] || die "kernel-core lacks the device tree $dtb"
+    dtb_compat=$(fdtget -t s "$MOD/dtb/$dtb" / compatible 2>/dev/null || true)
+    [[ $dtb_compat == *microsoft,denali-oled* ]] || die "DTB compatible check failed for $dtb: '$dtb_compat'"
+    dts=$(dtc -q -I dtb -O dts "$MOD/dtb/$dtb")
+    # By compatible: the node's path depends on the SoC dtsi (spi10 sits under the QUP wrapper, /soc@0/geniqup@ac0000).
+    grep -F 'compatible = "microsoft,mshw0485";' <<<"$dts" >/dev/null \
+      || die "$dtb lacks the touch controller (patch set not applied?)"
+    # The three camera sensors (revision 6), under the CCI buses the camera nodes enable.
+    for c in sony,imx681 ovti,ov13858 st,vd55g0; do
+      grep -F "compatible = \"$c\";" <<<"$dts" >/dev/null || die "$dtb lacks the $c camera sensor (patch set not applied?)"
+    done
+    # The front camera's privacy LED (revision 7): the V4L2 core lights it while the IMX681 streams.
+    grep -F 'led-names = "privacy";' <<<"$dts" >/dev/null || die "$dtb gives the front camera no privacy LED"
+    # PCIe 5, the modem's, is enabled in the 5G tree only.
+    pcie5=$(fdtget -t s "$MOD/dtb/$dtb" /soc@0/pci@1c00000 status 2>/dev/null || true)
+    if [ "$dtb" = "$SP11_DTB_5G" ]; then
+      [ "$pcie5" = okay ] || die "$dtb does not enable PCIe 5 (the modem)"
+    else
+      [ "$pcie5" = disabled ] || die "$dtb enables PCIe 5 ($pcie5); only the 5G tree may"
+    fi
+    # Every enabled user of the RPMh power domains and of the interconnect in that tree has a driver in the packages:
+    # otherwise those providers never reach sync_state and Linux keeps its boot-time maximum rail and bus votes for
+    # good, and the CDSP never wakes from its first sleep (kernel-local enables the drivers Fedora leaves out).
+    missing=$(python3 "$SP11_ROOT/scripts/sync-state-drivers.py" "$MOD/dtb/$dtb" "$MOD/vmlinuz" \
+              "$CHK/depmod$moddir/$KERNEL_ABI/modules.alias" "$MOD/modules.builtin.modinfo") \
+      || die "no driver for these users of the RPMh power domains or the interconnect in $dtb; add it to kernel-local: $(printf '%s\n' "$missing" | tr '\n' ';')"
+  done
   # The configuration is the one Fedora shipped in the same build, plus exactly the kernel-local lines; only the build's
   # identity and the values Kconfig derives from the toolchain of the buildroot may differ.
   config_fragment_holds "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" "$MOD/config" || die "kernel-local did not survive Fedora's configuration processing"
@@ -80,7 +90,7 @@ check_kernel_rpms() {
     || die "mshw0485_touch has no ipts_hid_bridge parameter"
   modinfo -F parm "$(find "$MOD" -name 'soundwire-qcom.ko*' | head -1)" | grep '^sp11_feedback_active_offset2_zero:' >/dev/null \
     || die "soundwire-qcom has no sp11_feedback_active_offset2_zero parameter"
-  log "kernel $KERNEL_ABI: configuration = Fedora's ${KERNEL_STOCK_CORE_RPM%.rpm} + kernel-local; DTB compatible: $dtb_compat"
+  log "kernel $KERNEL_ABI: configuration = Fedora's ${KERNEL_STOCK_CORE_RPM%.rpm} + kernel-local; DTBs ${SP11_DTB_OLED##*/} and ${SP11_DTB_5G##*/}, compatible: $dtb_compat"
   rm -rf "$CHK"
 }
 

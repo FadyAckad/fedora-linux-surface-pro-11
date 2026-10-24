@@ -1,0 +1,18 @@
+#!/usr/bin/bash
+# systemd-sleep hook: pause the GNSS feed's fix session before the system sleeps, so the modem's receiver does not
+# run while the tablet is asleep, and resume it afterwards. The feed keeps GeoClue's connection (GeoClue 2.8 does
+# not reconnect once it closes); this waits up to 5 s for the feed to report the session stopped.
+case $1 in
+pre)
+	systemctl -q is-active sp11-gnss.service || exit 0
+	systemctl kill -s USR1 sp11-gnss.service || exit 0
+	for _ in {1..20}; do
+		[ "$(systemctl show -P StatusText sp11-gnss.service)" = paused ] && exit 0
+		sleep 0.25
+	done
+	;;
+post)
+	systemctl -q is-active sp11-gnss.service && systemctl kill -s USR2 sp11-gnss.service
+	;;
+esac
+exit 0

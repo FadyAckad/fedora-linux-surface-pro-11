@@ -28,6 +28,10 @@ a guide says only what concretely works.
 - `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors), tablet
   mode and auto-rotation; its dated history is at the end. Read before touching steps 45, 46 and 75,
   `payload/sensors/` or the hexagonrpc fork.
+- `docs/modem.md`: the 5G SKU's modem and its GNSS: the wiring from Windows' ACPI, the 5G device tree and its
+  choice by SKU, the QMI port that blocks suspend and ModemManager, the location service's event registration, the
+  GNSS feed for GeoClue and its SELinux module. Read before touching the 5G tree, `77-sp11-modem.rules` or
+  `payload/sp11-gnss*`.
 - `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), Fedora's libcamera,
   the raw-capture probe, what the device has shown. Read before
   touching `payload/camera/` or the kernel fork's camera commits.

@@ -41,9 +41,10 @@ the registry the framework wrote on this unit's Windows installation (per-sensor
 platform data and calibration) and the platform identity files, under
 @PAYLOAD_DIR@. It adds the udev and systemd glue that starts the file server when
 the ADSP comes up and hands the sensors to iio-sensor-proxy (auto-rotation,
-ambient light, compass), a SELinux module for iio-sensor-proxy's QRTR sockets and
-its logind sleep lock, a dnf exclusion that keeps the SSC-enabled iio-sensor-proxy,
-and sp11-sensors-check.
+ambient light, compass), a SELinux module for iio-sensor-proxy's QRTR sockets, its
+logind sleep lock and GeoClue's use of the compass, a polkit rule that lets GeoClue
+claim the compass, a dnf exclusion that keeps the SSC-enabled iio-sensor-proxy, and
+sp11-sensors-check.
 The configuration and registry files are Microsoft/Qualcomm proprietary and must
 not be redistributed. Reboot after installing: the framework reads the registry
 only when the ADSP boots.
@@ -94,6 +95,8 @@ fi
 /usr/lib/udev/rules.d/81-sp11-sensors.rules
 %dir /usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d
 /usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-sp11.conf
+%dir /usr/lib/systemd/system/iio-sensor-proxy.service.d
+/usr/lib/systemd/system/iio-sensor-proxy.service.d/10-sp11.conf
 /usr/lib/systemd/system/sp11-sensors-online.service
 /usr/lib/systemd/system/sp11-sensors-resume.service
 /usr/lib/systemd/system/suspend.target.wants/sp11-sensors-resume.service
@@ -104,10 +107,24 @@ fi
 /usr/libexec/sp11/sp11-sensors-reset
 /usr/lib/tmpfiles.d/sp11-sensors.conf
 /usr/share/selinux/packages/sp11-sensors.cil
+/usr/share/polkit-1/rules.d/80-sp11-sensors-geoclue.rules
 /etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf
 
 %changelog
-* Thu Oct 08 2026 SP11 build <sp11@localhost> - @VERSION@-1
+* Sat Oct 24 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- iio-sensor-proxy loads no GIO module (GIO_MODULE_DIR in a drop-in): gvfs's client module, loaded when libqmi
+  builds a GFile, read /etc/passwd and tried /root/.cache at every start, five SELinux denials
+
+* Fri Oct 23 2026 SP11 build <sp11@localhost> - 1.14-1
+- sp11-sensors-check searches the whole journal for SELinux denials: with auditd running they come through audit,
+  so the search of the kernel's messages found none
+
+* Fri Oct 23 2026 SP11 build <sp11@localhost> - 1.13-1
+- GeoClue's compass source reaches iio-sensor-proxy: the SELinux module allows the D-Bus messages between geoclue_t
+  and iiosensorproxy_t (dbus-broker refused them at every GeoClue start), and a polkit rule lets the geoclue user
+  claim the compass (net.hadess.SensorProxy.claim-sensor is granted to active sessions only)
+
+* Thu Oct 08 2026 SP11 build <sp11@localhost> - 1.12-1
 - The re-attach of hexagonrpcd after a wake no longer counts against the guard's cap of 12 attaches per boot
   (counted in /run/sp11-sensors/resume-attaches instead), and sp11-sensors-resume resets the daemon's start limit
   before it: with lasting sleeps, a day's wakes left the unit refused and failed (start-limit-hit); the sensors kept

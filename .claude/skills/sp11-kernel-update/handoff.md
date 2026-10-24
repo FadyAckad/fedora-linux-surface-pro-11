@@ -26,8 +26,9 @@ Cover, in this order, and keep the commands exactly as below:
 3. `sudo dnf install ./kernel{,-core,-modules-core,-modules,-modules-extra}-<abi>.rpm` — five packages next to
    `<prev-abi>`, dracut runs, no error line.
 4. `sudo sh -c 'grep -hE "^(title|devicetree|options)" /boot/loader/entries/*-<abi>.conf'` and
-   `sudo grub2-editenv list` — `devicetree /dtb-<abi>/qcom/x1e80100-microsoft-denali-oled.dtb`, the SP11 arguments
-   (possibly followed by `$tuned_params`), `saved_entry` ending in `<abi>`.
+   `sudo grub2-editenv list` — `devicetree /dtb-<abi>/qcom/x1e80100-microsoft-denali-oled-5g.dtb` on the 5G SKU
+   (`x1e80100-microsoft-denali-oled.dtb` on the others), the SP11 arguments (possibly followed by `$tuned_params`),
+   `saved_entry` ending in `<abi>`.
 5. After a reboot and 3 minutes: `uname -r`, `cat /proc/cmdline`, `getenforce` — `<abi>`, the SP11 arguments,
    `Enforcing`.
 6. Speakers, with Bluetooth audio disconnected:

@@ -102,6 +102,13 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
   found by a comparison with lkarlslund/linux-x1e-jglathe on 2026-10-22. Pushed 2026-10-22 (head `e1de27e3`, tree
   `0977cb32`).
 
+### 7.2.11 revision 3: the 5G SKU's device tree
+
+- One commit on top of `sp11/7.2.11` (0078, this repository): `x1e80100-microsoft-denali-oled-5g.dts`, the OLED tree
+  plus the Snapdragon X65 modem on PCIe 5, wired as on Qualcomm's CRD (`docs/modem.md`). The OLED tree itself is
+  unchanged (its DTB is revision 2's byte for byte), and the build gives it to the SKUs without a modem. Pushed
+  2026-10-23 (head `a4c9a6c7`, tree `870d479a`).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -147,6 +154,7 @@ The patches by number, with their origin and what each is needed for.
 | 0075 | qcom_battmgr: the `capacity` property on X1E80100, lost when the variant got its own property table | Liviu Nicoara | the battery percentage from the kernel |
 | 0076 | qcom_battmgr: `Full` instead of `Not charging` for a full battery on external power | Bjorn Andersson | the battery state on the charger |
 | 0077 | qcom_battmgr: a change notice from the AC, USB and wireless supplies when the charging source changes | Brandon Williams (turbineBMW) | UPower's on-battery state after the charger is plugged in or out |
+| 0078 | Device tree of the 5G SKU: the OLED tree plus the Snapdragon X65 modem on PCIe 5 (supply switch on TLMM 221, reset 149, CLKREQ# 150), as on the CRD | this repository | the 5G modem and its GNSS receiver (`docs/modem.md`) |
 
 ## Left out of v23.2, and the device check for each
 

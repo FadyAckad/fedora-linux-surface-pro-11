@@ -1,7 +1,8 @@
 #!/usr/bin/bash
 # Step 4: build the sp11-surface-support RPM: device firmware from this machine's Windows installation,
 # ooaklee FullIO v19c audio files, Wi-Fi board data, Bluetooth address service, kernel-install boot
-# policy plugin, dracut policy, the stock-kernel repository override and the first-boot finalizer.
+# policy plugin, dracut policy, the stock-kernel repository override, the first-boot finalizer and, for the 5G
+# SKU's modem, the ModemManager rule and the GNSS feed for GeoClue.
 . "$(dirname "$0")/lib.sh"
 require_cmd gcc python3 xz rpm2cpio cpio rpmbuild file grub2-mkfont
 load_hardware
@@ -9,7 +10,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.4"
+VERSION="3.7"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
@@ -178,14 +179,35 @@ for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
 done
 sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"
 
-## 7. RPM
+## 7. The 5G SKU's modem (docs/modem.md): ModemManager kept off its QMI port, which never answers (a request queued
+##    there blocks suspend; ModemManager's probe of it costs 45 s at start and at shutdown), and the GNSS feed for
+##    GeoClue: the service, its socket (started by the rule when the modem appears), the sleep hook, GeoClue's
+##    drop-in and the policy module that lets GeoClue connect. Only for the 5G SKU (the 5G device tree).
+MODEM=0
+if [ "$SP11_DTB" = "$SP11_DTB_5G" ]; then
+  MODEM=1
+  install -D -m 0644 "$PAYLOAD_DIR/77-sp11-modem.rules" "$STAGE/usr/lib/udev/rules.d/77-sp11-modem.rules"
+  install -m 0755 "$PAYLOAD_DIR/sp11-gnss" "$STAGE/usr/libexec/sp11/sp11-gnss"
+  install -m 0644 "$PAYLOAD_DIR/sp11-gnss.socket" "$PAYLOAD_DIR/sp11-gnss.service" "$STAGE/usr/lib/systemd/system/"
+  install -D -m 0755 "$PAYLOAD_DIR/sp11-gnss-sleep" "$STAGE/usr/lib/systemd/system-sleep/sp11-gnss"
+  install -D -m 0644 "$PAYLOAD_DIR/sp11-gnss-geoclue.conf" "$STAGE/etc/geoclue/conf.d/90-sp11-gnss.conf"
+  install -D -m 0644 "$PAYLOAD_DIR/sp11-gnss.cil" "$STAGE/usr/share/selinux/packages/sp11-gnss.cil"
+  bash -n "$STAGE/usr/lib/systemd/system-sleep/sp11-gnss" || die "shell syntax error in the sp11-gnss sleep hook"
+  python3 -I -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' "$STAGE/usr/libexec/sp11/sp11-gnss" \
+    || die "Python syntax error in sp11-gnss"
+  log "5G SKU: the modem's rule and GNSS feed included"
+else
+  log "SKU $SP11_SKU has no modem: no modem files"
+fi
+
+## 8. RPM
 log "building sp11-surface-support RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-surface-support.spec.in" sp11-surface-support "$SDIR" \
-  STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG" INPUTS="$INPUTS")
+  STAGE="$STAGE" VERSION="$VERSION" SKU="$SP11_SKU" AUDIO_TAG="$AUDIO_RELEASE_TAG" INPUTS="$INPUTS" MODEM="$MODEM")
 rpm -qpl "$RPM" | grep -x "/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" >/dev/null || die "RPM lacks GPU zap firmware"
 log "support RPM: $RPM ($(du -h "$RPM" | cut -f1))"
 
-## 8. Prove the package applies the policy on both paths it reaches a machine by (dnf upgrade over the
+## 9. Prove the package applies the policy on both paths it reaches a machine by (dnf upgrade over the
 ##    previous version with its scriptlets, and the live-root install 50-build-iso.sh does). A policy value
 ##    that installs but never applies is otherwise invisible until the hardware boots.
 if as_root test -d "$WORK_DIR/iso/rootfs/usr/lib/modules"; then

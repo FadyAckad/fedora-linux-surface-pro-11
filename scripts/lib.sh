@@ -93,10 +93,24 @@ git_pin() {
   [ "$(git -C "$dir" rev-parse HEAD)" = "$commit" ] || die "checkout of $repo@$commit failed"
 }
 
+# The device tree for a SKU: the 5G SKU's carries its modem, the others keep the OLED tree (sp11.conf).
+dtb_for_sku() {
+  if [[ $1 =~ $SP11_SKU_5G_REGEX ]]; then echo "$SP11_DTB_5G"; else echo "$SP11_DTB_OLED"; fi
+}
+
 load_hardware() {
   [ -f "$HARDWARE_ENV" ] || die "missing $HARDWARE_ENV (run scripts/05-detect-hardware.sh)"
   # shellcheck source=/dev/null
   . "$HARDWARE_ENV"
+  # The device tree follows the SKU (dtb_for_sku). A hardware.env written before that choice recorded the OLED
+  # tree for every SKU.
+  local dtb
+  dtb=$(dtb_for_sku "$SP11_SKU")
+  if [ "${SP11_DTB_SELECTED:-}" != "$dtb" ]; then
+    log "$HARDWARE_ENV selects ${SP11_DTB_SELECTED:-no device tree}; SKU $SP11_SKU takes $dtb"
+    SP11_DTB_SELECTED="$dtb"
+  fi
+  SP11_DTB="$dtb"
 }
 
 # render TEMPLATE DEST KEY=VALUE... — substitutes @KEY@ tokens, fails on leftovers.

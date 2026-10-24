@@ -11,10 +11,11 @@ The repository's files, the pipeline and verification steps, the WSL build host,
   (steps 30 and 45 run them when it exists).
 - `70-export-bt-pairings.sh`: the pairing export (`docs/hardware.md`); `75-export-sensor-registry.sh`: the sensor
   registry export from Windows into `build/sensors/` (`docs/sensors.md`).
-- `sync-state-drivers.py`: step 20's check that the Denali device tree's rail and interconnect users all have a
+- `sync-state-drivers.py`: step 20's check that the Denali device trees' rail and interconnect users all have a
   driver (`docs/kernel.md`).
 - `payload/`: `sp11-surface-support`'s payload, installed under `/usr/libexec/sp11`, `/etc/grub.d` and
-  `/usr/lib/...`; `payload/README-iso.txt.in` is the note inside the ISO.
+  `/usr/lib/...`, with the 5G SKU's modem rule and GNSS feed (`77-sp11-modem.rules`, `sp11-gnss*`) in 5G builds
+  only (`docs/modem.md`); `payload/README-iso.txt.in` is the note inside the ISO.
 - `payload/kernel-local`: kernel configuration additions, a build input of step 20 and part of `KERNEL_SP11_REV`;
   the patch set is the kernel fork's, pinned by `KERNEL_PATCH_*`.
 - `payload/sensors/`: `sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the patches of libssc
@@ -36,7 +37,10 @@ The repository's files, the pipeline and verification steps, the WSL build host,
 - The update path first stages a wrong GRUB policy (`GRUB_GFXMODE=640x480`, an empty `GRUB_FONT`,
   `GRUB_TIMEOUT=99`, no font in `/boot`), so a package that installs without applying the `sp11.conf` policy to
   `/etc/default/grub` and the menu fails; both paths also check the 3.x payload (dnf override,
-  `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover).
+  `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover) and, from 3.5, the modem's files and the policy module
+  of the GNSS feed on a 5G unit (loaded by hand on the live path, as step 50 does) and their absence on the others,
+  from 3.6 the sleep hook's pause instead of a stop (`docs/modem.md`), from 3.7 `sp11-diag`'s denial search of the
+  whole journal.
 
 ### Step 36: the kernel install
 
@@ -47,6 +51,8 @@ The repository's files, the pipeline and verification steps, the WSL build host,
 - After an ISO build, pass the support RPM the live root carries as `SUPPORT_PREVIOUS_RPM`: its reinstall's
   `%posttrans` writes the menu an installed system has; `20-grub.install` regenerates it only when
   `/etc/kernel/cmdline` is older than `/etc/default/grub`, and the SP11 plugin rewrites that file first.
+- The entry's device tree is the one the unit's SKU takes (`load_hardware`), so the support RPM it installs must be
+  one built for the unit (from 7.2.11 revision 3 the 5G SKU's tree differs).
 - `kernel-install` exits non-zero in the chroot (`95-set-boot-entry.install` wants an initramfs the previous
   kernel's entry lacks), so the script judges by the entry, as the RPM's `%posttrans` does with `|| :`; that
   plugin turns `tmp_saved_entry` into `saved_entry`, so a kernel without an initramfs never becomes the default.
@@ -68,7 +74,8 @@ The repository's files, the pipeline and verification steps, the WSL build host,
 
 `60-verify-rootfs.sh`, optional and not in `build-all.sh`, checks the remastered root step 50 leaves and the Denali
 firmware directory, and simulates the installed system's kernel-install hand-off in a chroot: the BLS entry
-must get the Denali DTB and the SP11 arguments.
+must get the unit's Denali DTB and the SP11 arguments; on a 5G unit the GNSS feed's policy module, which step 50
+loads, must be in the policy store.
 
 ### Cameras
 

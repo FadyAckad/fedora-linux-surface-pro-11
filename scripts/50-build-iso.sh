@@ -230,6 +230,12 @@ as_root chroot "$ROOTFS" /usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/
 [ "$(as_root chroot "$ROOTFS" /usr/bin/stat -c %U /var/lib/sp11/hexagonrpc/sensors/persist/registry/sns_reg_config 2>/dev/null)" = fastrpc ] \
   || die "the registry copy under /var/lib/sp11/hexagonrpc is missing or not owned by fastrpc"
 [ -e "$ROOTFS/usr/lib/dracut/modules.d/95sp11-sensors" ] && die "a sensors dracut module is in the live root (sp11-sensors older than 1.3?)"
+# The support RPM's %post, skipped by --noscripts: the policy module that lets GeoClue connect to the 5G modem's GNSS
+# feed (support 3.5 and later, built for the 5G SKU only).
+if [ -e "$ROOTFS/usr/share/selinux/packages/sp11-gnss.cil" ]; then
+  as_root chroot "$ROOTFS" /usr/sbin/semodule -i /usr/share/selinux/packages/sp11-gnss.cil || die "semodule -i sp11-gnss.cil failed in the live root"
+  as_root chroot "$ROOTFS" /usr/sbin/semodule -l | grep -x sp11-gnss >/dev/null || die "sp11-gnss is not in the live root's policy store"
+fi
 PROFILE_OPT=""; [ -f "$ROOTFS/.profile" ] && PROFILE_OPT="--install /.profile"
 [ -f "$DRACUT_DROPIN" ] || die "missing $DRACUT_DROPIN (support RPM payload changed?)"
 [ -s "$ROOTFS$ZAP_FW" ] || die "missing GPU zap shader $ZAP_FW in the live root"

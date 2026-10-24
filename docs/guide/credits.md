@@ -37,6 +37,11 @@ version 3 or later (`LICENSE`). Everything third-party is downloaded and package
   The approach follows [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The
   sensor configuration and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files
   copied from your own Windows installation at build time, like the firmware below.
+- GPS (5G SKU): the 5G device tree follows the PCIe 5 wiring of Qualcomm's reference design in the kernel
+  (`x1-crd.dtsi`), as Windows' ACPI tables describe it. `sp11-gnss` speaks the modem's location service from the
+  message layouts of Qualcomm's LOC interface, `location_service_v02.h` in the open `loc_api_v02` sources (The
+  Linux Foundation and Qualcomm Innovation Center, BSD-3-Clause); no code of it is copied. GeoClue is Fedora's
+  package, unmodified, with a configuration drop-in.
 - Cameras: the kernel's camera commits come from
   [turbineBMW/surface-pro-11-linux](https://github.com/turbineBMW/surface-pro-11-linux) (GPL-2.0 like the kernel),
   with Leon Silcott's IMX681 exposure fix. Its VD55G0 driver is STMicroelectronics' GPL driver. Its provenance

@@ -5,54 +5,56 @@
 Builds a Fedora 45 live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition with the
 Samsung OLED panel (Snapdragon X Elite X1E80100). The kernel is Fedora's own kernel package
 (`kernel-7.2.11-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
-Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.11-300.sp11.2.fc45.aarch64`). GRUB
-loads the Denali OLED device tree. The build runs on the Surface itself, in WSL, and tailors every ISO to the unit
-that built it with files from its Windows installation. Secure Boot has to be off and Windows stays on the device
-(see Status and scope).
+Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.11-300.sp11.3.fc45.aarch64`). GRUB
+loads the Denali OLED device tree, on the 5G SKU the same tree with its modem. The build runs on the Surface itself,
+in WSL, and tailors every ISO to the unit that built it with files from its Windows installation. Secure Boot has
+to be off and Windows stays on the device (see Status and scope).
 
 ## What works
 
-Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). The KDE Plasma Desktop column was confirmed on the
-installation of 2026-09-30 (`FEDORA_EDITION=KDE-Desktop`), running kernel revision 11
-(`7.2.9-300.sp11.11.fc45.aarch64`) and support RPM 3.4; the Workstation column on an installation from the ISO
-built on 2026-10-19 (7.2.11 revision 1, support RPM 3.4), updated on 2026-10-22 to 7.2.11 revision 2
-(`7.2.11-300.sp11.2.fc45.aarch64`, three battery-driver fixes), every row confirmed again with it.
-[`docs/verified.md`](docs/verified.md) has the details and the results with earlier kernels.
+Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`), on a Fedora 45 Beta Workstation installation from
+the ISO built on 2026-10-19 (7.2.11 revision 1, support RPM 3.4), updated on 2026-10-22 to 7.2.11 revision 2
+(three battery-driver fixes) and on 2026-10-23 and 24 to revision 3 (`7.2.11-300.sp11.3.fc45.aarch64`, the 5G
+SKU's modem) with support RPM 3.7 and sp11-sensors 1.15, which brought the GPS row; every row confirmed again with
+it. The KDE Plasma Desktop edition builds from the same RPMs; it was last checked on 2026-09-30 with kernel
+revision 11. [`docs/verified.md`](docs/verified.md) has the details and the results with earlier kernels.
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.2) | Fedora 45 Beta KDE Plasma Desktop, Fedora's 7.2.9-300 (sp11.11) |
-|---|:-:|:-:|
-| Boot from the internal NVMe drive | yes | yes |
-| Display with GPU acceleration | yes | yes |
-| Backlight (brightness slider) | yes | yes |
-| Wi-Fi | yes | yes |
-| Bluetooth | yes | yes |
-| Touchscreen | yes | yes |
-| Multi-touch (pinch, two-finger scroll) | yes | yes |
-| Pen | yes | yes |
-| Speakers | yes | yes |
-| Microphone | yes | yes |
-| Keyboard and touchpad | yes | yes |
-| Battery status | yes | yes |
-| Power profiles (GNOME: its Power Mode sets the Surface's platform profile) | yes | yes |
-| USB-C charging and data | yes | yes |
-| Suspend and resume | yes | yes |
-| Flatpak | yes | yes |
-| Windows in the GRUB menu | yes | yes |
-| Flex Keyboard and Slim Pen 2 pairings shared with Windows | yes | yes |
-| Sensors: readings from the accelerometer, gyroscope, magnetometer/compass and ambient light sensor (`ssccli`, `monitor-sensor`), with the sensors RPMs | yes | yes |
-| Sensors: auto-rotation on the desktop, with the sensors RPMs (GNOME: its auto-rotate button, with the keyboard folded back or detached) | yes | yes |
-| Tablet mode: keyboard and touchpad off while the keyboard is folded back | yes | yes |
-| Sensors: automatic screen brightness | yes | yes |
-| 5G modem | no | no |
-| Cameras: front and rear (GNOME Snapshot, Firefox) | yes | yes |
-| Front camera's light while the camera is in use | yes | yes |
-| IR camera (face login) | no | no |
-| NPU (AI acceleration) | no | no |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.3) |
+|---|:-:|
+| Boot from the internal NVMe drive | ✅ |
+| Display with GPU acceleration | ✅ |
+| Backlight (brightness slider) | ✅ |
+| Wi-Fi | ✅ |
+| Bluetooth | ✅ |
+| Touchscreen | ✅ |
+| Multi-touch (pinch, two-finger scroll) | ✅ |
+| Pen | ✅ |
+| Speakers | ✅ |
+| Microphone | ✅ |
+| Keyboard and touchpad | ✅ |
+| Battery status | ✅ |
+| Power profiles (GNOME: its Power Mode sets the Surface's platform profile) | ✅ |
+| USB-C charging and data | ✅ |
+| Suspend and resume | ✅ |
+| Flatpak | ✅ |
+| Windows in the GRUB menu | ✅ |
+| Flex Keyboard and Slim Pen 2 pairings shared with Windows | ✅ |
+| Sensors: readings from the accelerometer, gyroscope, magnetometer/compass and ambient light sensor (`ssccli`, `monitor-sensor`), with the sensors RPMs | ✅ |
+| Sensors: auto-rotation on the desktop, with the sensors RPMs (GNOME: its auto-rotate button, with the keyboard folded back or detached) | ✅ |
+| Tablet mode: keyboard and touchpad off while the keyboard is folded back | ✅ |
+| Sensors: automatic screen brightness | ✅ |
+| GPS on the 5G SKU: the location for applications through GeoClue (GNOME: Location on), with a view of the sky | ✅ |
+| 5G modem: mobile data | ❌ |
+| Cameras: front and rear (GNOME Snapshot, Firefox) | ✅ |
+| Front camera's light while the camera is in use | ✅ |
+| IR camera (face login) | ❌ |
+| NPU (AI acceleration) | ❌ |
 
-*yes*: confirmed on the tested unit. *no*: not covered by this project. Under KDE Plasma, auto-rotation could stop
-until iio-sensor-proxy was restarted, and with automatic brightness on the tablet did not stay asleep; the sensors
-RPMs fix these since 2026-10-07 (libssc 0.4.4-3) and 2026-10-08 (iio-sensor-proxy 3.9-3.sp11.2,
-[`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
+✅: confirmed on the tested unit. ❌: not covered by this project. GPS needs no SIM; near a window the first
+position came within about a minute, away from windows none in two minutes ([`docs/modem.md`](docs/modem.md)). Under
+KDE Plasma, auto-rotation could stop until iio-sensor-proxy was restarted, and with automatic brightness on the
+tablet did not stay asleep; the sensors RPMs fix these since 2026-10-07 (libssc 0.4.4-3) and 2026-10-08
+(iio-sensor-proxy 3.9-3.sp11.2, [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 
 In the live session, audio and battery status are unavailable because the audio DSP stays off while running from
 USB-C. Both work once installed.
@@ -61,9 +63,9 @@ USB-C. Both work once installed.
 
 - Unofficial community project, not affiliated with Microsoft, Qualcomm, or Fedora. No warranty.
 - Tested only on the 5G OLED SKU. The hardware checks also accept the non-5G OLED SKUs
-  (`Surface_Pro_11th_Edition_2076`, `Surface_Pro_11th_Edition_For_Business_2085`), which share the device tree
-  and firmware; no build from one has been reported. The X1P64100 LCD variant uses a different device tree and is
-  rejected.
+  (`Surface_Pro_11th_Edition_2076`, `Surface_Pro_11th_Edition_For_Business_2085`), which share the firmware; the
+  build gives them the OLED device tree without the modem and leaves the modem's files out of their support RPM.
+  No build from one has been reported. The X1P64100 LCD variant uses a different device tree and is rejected.
 - Secure Boot must be disabled: the kernel is a local build of Fedora's kernel package and is not signed.
 - Windows must stay on the device: the build reads the hardware identity, the built-in radio's Bluetooth address,
   the ADSP/CDSP/GPU firmware and the sensor configuration and registry from it. Without the firmware an installed
@@ -95,8 +97,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.2.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.2.fc45.aarch64.iso`, with a `.sha256` beside it.
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.3.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.3.fc45.aarch64.iso`, with a `.sha256` beside it.
 
 - Every option and step: [`docs/guide/build.md`](docs/guide/build.md).
 - Writing the media and installing: [`docs/guide/install.md`](docs/guide/install.md).
@@ -130,6 +132,7 @@ Working notes, the verified facts the guides rest on (indexed by `CLAUDE.md`):
 - [`docs/kernel-patches.md`](docs/kernel-patches.md): the patch manifest.
 - [`docs/fedora-media.md`](docs/fedora-media.md): the live media, GRUB and Anaconda.
 - [`docs/sensors.md`](docs/sensors.md): the sensors stack.
+- [`docs/modem.md`](docs/modem.md): the 5G SKU's modem and its GPS.
 - [`docs/camera.md`](docs/camera.md): the cameras.
 - [`docs/verified.md`](docs/verified.md): device results by date.
 

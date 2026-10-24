@@ -56,7 +56,8 @@ release.
 
 1. `scripts/00-setup-host.sh` installs the build dependencies and checks the host.
 2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, checks them
-   against the supported models and writes `build/hardware.env`.
+   against the supported models and writes `build/hardware.env`. The SKU decides the device tree (the 5G SKU's
+   carries its modem) and whether the support RPM carries the modem's files.
 3. `scripts/10-fetch-sources.sh` downloads and verifies the sources: the Fedora ISO, Fedora's kernel and
    iio-sensor-proxy source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11 patch set from the
    kernel fork's pinned commit, the pinned checkouts (iptsd, OE, hexagonrpc, libssc) and the Bluetooth helper
@@ -81,7 +82,7 @@ release.
    of the same packages, installs the support, iptsd and sensors RPMs, builds the live initramfs, adds the device
    tree, the kernel arguments and the console font to Fedora's own live GRUB menu, then assembles the ISO and
    implants the media-check checksum. The result is, for example,
-   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.2.fc45.aarch64.iso`, plus `.sha256`.
+   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.3.fc45.aarch64.iso`, plus `.sha256`.
 
 ## Checks
 

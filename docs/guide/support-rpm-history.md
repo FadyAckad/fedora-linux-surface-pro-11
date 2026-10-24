@@ -48,3 +48,11 @@ in [`docs/verified.md`](../verified.md).
 - 3.4: `sp11-diag` takes the media devices as `/dev/media[0-9]*`. Updated installations also have a `/dev/media`
   directory, which the camera section had counted as device nodes and passed to `media-ctl`
   (`Failed to enumerate /dev/media (-21)`).
+- 3.5: on the 5G SKU (the build decides by the unit's SKU): GRUB's device tree becomes the 5G tree with the modem
+  (in the kernel since 7.2.11 revision 3), ModemManager leaves the modem's QMI port alone (otherwise the shutdown
+  waits 45 s and every suspend fails), and a GNSS feed passes the modem's positions to GeoClue while an application
+  asks for the exact location, with its SELinux module. Builds for the other SKUs carry none of it.
+- 3.6: the GNSS feed pauses across a sleep instead of stopping: with 3.5, after a sleep, GeoClue never reconnected
+  to it and used a full CPU core until the application stopped asking.
+- 3.7: `sp11-diag` finds SELinux denials. It searched only the kernel's messages, where the audit daemon's denials
+  never appear.

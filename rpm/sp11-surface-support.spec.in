@@ -1,4 +1,6 @@
 %global stage @STAGE@
+# 1 on the 5G SKU: the modem's rule and GNSS feed (scripts/30-build-support-rpm.sh, section 7).
+%global sp11_modem @MODEM@
 %global debug_package %{nil}
 %global __os_install_post %{nil}
 %global __strip /bin/true
@@ -25,6 +27,12 @@ Requires:       grub2-tools
 Requires:       grub2-efi-aa64-modules
 Requires:       util-linux
 Requires:       kmod
+%if %{sp11_modem}
+# The 5G modem's GNSS feed: the service is Python, GeoClue reads it, semodule loads its policy module.
+Requires:       python3
+Requires:       geoclue2
+Requires:       policycoreutils
+%endif
 
 %description
 Device-bound support for Microsoft Surface Pro 11 (X1E80100, OLED, SKU @SKU@):
@@ -34,7 +42,9 @@ data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, scmi-cpufreq loading,
 a GRUB menu entry that chainloads the Windows Boot Manager, a dnf repository override
 that keeps Fedora's stock kernel packages (which lack the SP11 patch set) off the
-system, and the first-boot finalizer.
+system, the first-boot finalizer and, built for the 5G SKU, a udev rule that keeps
+the modem's QMI port from ModemManager and a GNSS feed that passes the modem's
+positions to GeoClue.
 The firmware is proprietary and must not be redistributed.
 Inputs: @INPUTS@
 
@@ -43,6 +53,19 @@ Inputs: @INPUTS@
 
 %install
 cp -a %{stage}/. %{buildroot}/
+
+%if %{sp11_modem}
+# GeoClue may not connect to the GNSS feed's socket without this module (sp11-gnss.cil).
+%post
+if [ -d /etc/selinux/targeted ] && [ -x /usr/sbin/semodule ]; then
+  /usr/sbin/semodule -i /usr/share/selinux/packages/sp11-gnss.cil >/dev/null 2>&1 || :
+fi
+
+%postun
+if [ $1 -eq 0 ]; then
+  [ -x /usr/sbin/semodule ] && /usr/sbin/semodule -r sp11-gnss >/dev/null 2>&1 || :
+fi
+%endif
 
 # systemd's RPM file triggers reload units and udev rules; both triggers below also
 # run when this package is installed while their target is present.
@@ -83,6 +106,14 @@ fi
 %dir /etc/sp11
 %config(noreplace) /etc/sp11/bluetooth-address
 /etc/sp11/sp11.env
+%if %{sp11_modem}
+/usr/lib/udev/rules.d/77-sp11-modem.rules
+/usr/lib/systemd/system/sp11-gnss.socket
+/usr/lib/systemd/system/sp11-gnss.service
+/usr/lib/systemd/system-sleep/sp11-gnss
+/etc/geoclue/conf.d/90-sp11-gnss.conf
+/usr/share/selinux/packages/sp11-gnss.cil
+%endif
 
 %changelog
 * Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1

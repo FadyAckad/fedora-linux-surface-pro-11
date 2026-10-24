@@ -181,6 +181,7 @@ SD="$PAYLOAD_DIR/sensors"
 install -D -m 0644 "$SD/81-sp11-sensors.rules" "$STAGE/usr/lib/udev/rules.d/81-sp11-sensors.rules"
 install -d "$STAGE/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d"
 install -m 0644 "$SD/hexagonrpcd-sensorspd-sp11.conf" "$STAGE/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-sp11.conf"
+install -D -m 0644 "$SD/iio-sensor-proxy-sp11.conf" "$STAGE/usr/lib/systemd/system/iio-sensor-proxy.service.d/10-sp11.conf"
 install -D -m 0644 "$SD/sp11-sensors-online.service" "$STAGE/usr/lib/systemd/system/sp11-sensors-online.service"
 install -D -m 0644 "$SD/sp11-sensors-resume.service" "$STAGE/usr/lib/systemd/system/sp11-sensors-resume.service"
 for t in suspend.target suspend-then-hibernate.target; do
@@ -193,6 +194,7 @@ for s in sp11-sensors-wait sp11-sensors-check; do
   bash -n "$STAGE/usr/libexec/sp11/$s" || die "shell syntax error in $s"
 done
 install -D -m 0644 "$SD/sp11-sensors.cil" "$STAGE/usr/share/selinux/packages/sp11-sensors.cil"
+install -D -m 0644 "$SD/sp11-sensors-geoclue.rules" "$STAGE/usr/share/polkit-1/rules.d/80-sp11-sensors-geoclue.rules"
 # The directory the daemon serves: links into the package plus a writable copy of the registry (tmpfiles).
 install -d "$STAGE/usr/lib/tmpfiles.d"
 render "$SD/sp11-sensors.tmpfiles.conf" "$STAGE/usr/lib/tmpfiles.d/sp11-sensors.conf" PAYLOAD_DIR="$SENSORS_PAYLOAD_DIR"

@@ -14,6 +14,8 @@
 # kernel-core .sp11 build), so after a full pipeline run (step 50 installs the new kernel there) this step does not
 # apply; it is for a kernel built for an existing installation.
 . "$(dirname "$0")/lib.sh"
+# The entry's device tree is the one this unit's SKU takes (load_hardware: the 5G SKU's carries its modem).
+load_hardware
 require_cmd rpm losetup findmnt lsinitrd grub2-editenv
 
 KRPMS=()

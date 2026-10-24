@@ -245,8 +245,9 @@ Wait in the background for the marker, or for the build's shell to be gone:
 until grep -q STEP20-DONE "build/logs/step20-$NEW-rev$REV.log" || ! pgrep -f '^bash -c ./scripts/20-build-kernel.sh' > /dev/null; do sleep 30; done; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step20-$NEW-rev$REV.log" | tail -4
 ```
 
-Expected: `kernel <abi>: configuration = Fedora's kernel-core-<new>-<rel>.fc<n> + kernel-local; DTB compatible:
-...`, then `STEP20-DONE rc=0`.
+Expected: `kernel <abi>: configuration = Fedora's kernel-core-<new>-<rel>.fc<n> + kernel-local; DTBs
+x1e80100-microsoft-denali-oled.dtb and x1e80100-microsoft-denali-oled-5g.dtb, compatible: ...`, then
+`STEP20-DONE rc=0`.
 
 Step 36 as an installed system with the current support RPM sees it: that RPM reinstalled first, so its
 `%posttrans` writes the menu such a system has (the live root's own menu is Fedora's):

@@ -12,7 +12,8 @@ holding their boot-time votes, and the boot's kernel warnings and journal errors
 controller and every device BlueZ knows by address.
 
 `sudo /usr/libexec/sp11/sp11-sensors-check`, run from a terminal in the desktop, covers the sensors stack and
-tablet mode ([`docs/guide/sensors.md`](sensors.md)).
+tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials since support RPM 3.7 and
+`sp11-sensors` 1.14; earlier versions searched only the kernel's messages and showed none.
 
 ## Known limitations
 
@@ -29,6 +30,13 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)).
   messages ended the sleep. Fixed in `iio-sensor-proxy` 3.9-3.sp11.2 with `sp11-sensors` 1.11 (2026-10-08), part
   of the sensors RPMs since then; with an earlier build, switching automatic brightness off (System Settings,
   Display & Monitor) avoids it ([`docs/sensors.md`](../sensors.md), Known issues).
+- GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from
+  windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
+  ([`docs/modem.md`](../modem.md)).
+- Up to `sp11-sensors` 1.14, iio-sensor-proxy logged five SELinux denials at every start (`/etc/passwd`,
+  `dac_read_search`, `dac_override`): GIO loaded gvfs's module into it, which looked for a desktop session. The
+  sensors worked regardless. Fixed in 1.15 (2026-10-24); up to 1.12 GeoClue also got no heading from the compass
+  (1.13).
 - Plugging the charger in while the tablet sleeps wakes it, sometimes several times in the first minutes. Under
   KDE Plasma, with the cover closed, it goes back to sleep about 10 s after each wake.
 - Up to `sp11-sensors` 1.11, after many sleeps in one boot `hexagonrpcd-adsp-sensorspd.service` was listed as

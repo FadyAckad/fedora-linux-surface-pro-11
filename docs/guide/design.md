@@ -13,10 +13,12 @@ bullet is in the working note it names.
   - The patches are ooaklee's Surface Pro 11 work from linux_ms_dev_kit-sp11 v23 with the X1E fixes from jglathe's
     tree that act on this machine, turbineBMW's camera branch and this repository's own commits; that tree's
     Ubuntu packaging, SAUCE patches, camera stack and ADSP attach series are not carried.
-- Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb` from the kernel package, loaded explicitly everywhere:
-  GRUB `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry through the kernel-install plugin
-  `15-sp11-surface.install`, because Fedora's automatic selection (`kernel-uki-dtbloader`) matches none of this
-  SKU's SMBIOS hardware IDs. [`docs/hardware.md`](../hardware.md), [`docs/fedora-media.md`](../fedora-media.md).
+- Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb` from the kernel package, on the 5G SKU
+  `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree with the modem on PCIe 5 (chosen by the unit's SKU).
+  It is loaded explicitly everywhere: GRUB `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry
+  through the kernel-install plugin `15-sp11-surface.install`, because Fedora's automatic selection
+  (`kernel-uki-dtbloader`) matches none of this SKU's SMBIOS hardware IDs. [`docs/hardware.md`](../hardware.md),
+  [`docs/fedora-media.md`](../fedora-media.md).
 - Kernel arguments: `clk_ignore_unused pd_ignore_unused systemd.tpm2_wait=0`, which Fedora's "Snapdragon WoA
   Laptop Install" page prescribes for X1E laptops, and `soundwire_qcom.sp11_feedback_active_offset2_zero=1` (the
   SP11 audio patches). The live media adds `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas`,
@@ -63,6 +65,12 @@ bullet is in the working note it names.
   system starts them on its first boot. [`docs/sensors.md`](../sensors.md).
 - Cameras: the drivers and device-tree nodes are part of the SP11 patch set; libcamera is Fedora's own package,
   unmodified. [`docs/camera.md`](../camera.md).
+- GPS (5G SKU): the modem's location service answers over QRTR once a client registers the way Qualcomm's own
+  client does, which libqmi and ModemManager do not, and its firmware sends no NMEA. The support RPM's
+  `sp11-gnss` therefore speaks the service itself and writes each fix as NMEA to a socket GeoClue reads, only while
+  an application asks for the exact location; across a sleep it pauses rather than closes, since GeoClue does not
+  reconnect. A udev rule keeps ModemManager off the modem's QMI port, which never answers and would block every
+  suspend. Mobile data is not set up. [`docs/modem.md`](../modem.md).
 - Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth radio, so an
   external monitor or a USB Bluetooth dongle does not change the result. [`docs/hardware.md`](../hardware.md).
 - Tablet mode: mainline gives the Surface Pro 11 the Surface Aggregator's KIP cover switch, whose change event this

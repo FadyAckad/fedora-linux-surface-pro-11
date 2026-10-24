@@ -14,7 +14,8 @@ run sh -c "tr '\\0' ' ' < /sys/firmware/devicetree/base/compatible; echo"
 # Hardware IDs (from SMBIOS and the panel's EDID) that Fedora's automatic device-tree selection matches against.
 run systemd-analyze chid
 sec "security / secure boot"; run cat /sys/kernel/security/lsm; run getenforce
-run sh -c "journalctl -k -b --no-pager -g 'avc:  denied' | tail -n 60"
+# The whole journal: with auditd running, SELinux denials come through audit, not as kernel messages.
+run sh -c "journalctl -b --no-pager -g 'avc: +denied' | tail -n 60"
 run mokutil --sb-state
 
 # run() caps output at LINES_MAX lines, so filter inside the command and truncate last.

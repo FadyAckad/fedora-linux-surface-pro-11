@@ -283,3 +283,51 @@ What has been confirmed on the tested unit, by date and package version. "The ke
   Windows entry in GRUB, the keyboard and pen pairings shared with Windows, the sensors' readings, tablet mode,
   automatic screen brightness, the front camera's light.
 - Not covered: the Surface charger and a full battery on revision 2.
+
+## Kernel 7.2.11 revision 3 and support 3.5: the 5G modem and GPS (2026-10-23)
+
+- Installed: support RPM 3.5 over 3.4, then the kernel RPMs `7.2.11-300.sp11.3.fc45` (revision 2 and the 5G SKU's
+  device tree, 0078) with `dnf install` next to revision 2, on the Workstation installation of 2026-10-19.
+- Confirmed: `GRUB_DEVICETREE` the 5G tree, the new entry on `x1e80100-microsoft-denali-oled-5g.dtb` and revisions
+  1 and 2 still on the OLED tree; the model `(OLED, 5G)`, `Enforcing`; the speaker stage with VI+CPS feedback, the
+  QSPI touch path, both DSPs over FastRPC (the CDSP again after a reboot), the crypto engine's two hashes, the three
+  cameras listed, no provider waiting for sync_state.
+- Confirmed, the modem: `17cb:0308` on PCIe 5; ModemManager's modem at 27.7 s with `wwan0qmi0 (ignored)`;
+  `sp11-gnss.socket` active, its socket labelled `sp11_gnss_var_run_t`; near a window GeoClue reported
+  `GPS GGA+RMC` with 50 m, 50 of 59 locations in 120 s, the first after 71 s; deep sleeps without `failed to
+  suspend device`; a reboot without ModemManager's 45 s stop.
+- Found: away from windows no position in 120 s (one satellite with signal); with 3.5's sleep hook GeoClue did not
+  reconnect to the feed after a sleep (support 3.6); two SELinux denials of GeoClue's compass source at every
+  GeoClue start (sp11-sensors 1.13).
+
+## Support RPM 3.6: the GNSS feed across sleep (2026-10-23)
+
+- Installed: support RPM 3.6 over 3.5 with `dnf install`.
+- Confirmed: a deep sleep while an application asked for the location: the feed paused 28 ms after the sleep
+  hook's signal and 0.25 s before the suspend, resumed 60 ms after the wake on the same connection (134 fixes
+  after it), GPS locations again; GeoClue's CPU time under a second.
+
+## sp11-sensors 1.13: GeoClue's compass (2026-10-23)
+
+- Installed: `sp11-sensors-1.13-1` over 1.12, then a reboot.
+- Confirmed: 229 of 230 GeoClue locations in 60 s with a heading, which followed a quarter turn of the tablet; no
+  denial for GeoClue; no CDSP crash.
+- Found: five denials for iio-sensor-proxy at every start (`/etc/passwd`, `dac_read_search`, `dac_override`), in all
+  six boots checked, with 1.12 as well; `sp11-sensors-check` and `sp11-diag` had never shown a denial.
+
+## sp11-sensors 1.14 and 1.15, support RPM 3.7: the denials (2026-10-24)
+
+- Installed: 1.14 and 3.7 over 1.13 and 3.6; one boot with iio-sensor-proxy under `strace`, then the way back;
+  1.15 over 1.14 and a reboot.
+- Confirmed: both diagnostics list the boot's denials (1.14, 3.7); the strace boot traced the proxy's five to
+  gvfs's GIO module (`docs/sensors.md`), with the sensors and rotation working under strace; with 1.15 no denial
+  for the proxy, all three of its sensors found, GeoClue's locations with headings, GPS among them; rotation
+  before and after a sleep (owner).
+- Confirmed by hand (owner): GNOME Maps, an application behind GNOME's location prompt, shows the location with
+  its heading. Maps does not name the source; GPS and Wi-Fi both come to 50 m here.
+- Confirmed by hand on 2026-10-24 (owner), with revision 3, support RPM 3.7 and sp11-sensors 1.15: every row of the
+  feature table's Workstation column, among them GPU acceleration, the backlight, Wi-Fi, Bluetooth with the
+  keyboard, pen and audio, touch, multi-touch and the pen, the speakers by ear and the microphone, keyboard and
+  touchpad, battery status, power profiles, USB-C charging and data, Flatpak, the Windows entry in GRUB, the
+  pairings shared with Windows, the sensors' readings, tablet mode, automatic screen brightness, both cameras in an
+  application and the front camera's light.

@@ -9,3 +9,7 @@
 (allow systemd_logind_t iiosensorproxy_t (dbus (send_msg)))
 (allow iiosensorproxy_t systemd_logind_t (fd (use)))
 (allow iiosensorproxy_t systemd_logind_inhibit_var_run_t (fifo_file (write)))
+;; GeoClue's compass source reads the proxy's compass (net.hadess.SensorProxy.Compass) for a location's heading;
+;; Fedora's policy has no D-Bus rule between the two daemons, so dbus-broker refused the call and its reply.
+(allow geoclue_t iiosensorproxy_t (dbus (send_msg)))
+(allow iiosensorproxy_t geoclue_t (dbus (send_msg)))

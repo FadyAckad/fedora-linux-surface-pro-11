@@ -60,6 +60,9 @@ check r sh -c "rpm --root '$ROOTFS' -q --qf '%{RELEASE}\n' iio-sensor-proxy | gr
 check r chroot "$ROOTFS" /usr/bin/sh -c 'ldd /usr/libexec/iio-sensor-proxy | grep -q libssc.so.2'
 check r chroot "$ROOTFS" /usr/bin/getent passwd fastrpc
 check r sh -c "chroot '$ROOTFS' /usr/sbin/semodule -l | grep -qx sp11-sensors"
+if [ "$SP11_DTB" = "$SP11_DTB_5G" ]; then
+  check r sh -c "chroot '$ROOTFS' /usr/sbin/semodule -l | grep -qx sp11-gnss"
+fi
 check r test -s "$ROOTFS/var/lib/sp11/hexagonrpc/sensors/persist/registry/sns_reg_config"
 check test "$(r stat -c %Y "$ROOTFS/var/lib/sp11/hexagonrpc/sensors/persist/registry/tdm_uid.bin")" = "$(r stat -c %Y "$ROOTFS$SENSORS_PAYLOAD_DIR/sensors/registry/tdm_uid.bin")"
 check r grep -q 'iio-sensor-proxy' "$ROOTFS/etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf"

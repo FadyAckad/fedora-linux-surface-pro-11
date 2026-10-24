@@ -1,0 +1,12 @@
+# Surface Pro 11 5G: GeoClue's NMEA source connects here (/etc/geoclue/conf.d/90-sp11-gnss.conf) and starts
+# sp11-gnss.service. Started by 77-sp11-modem.rules when the modem appears; only GeoClue's group may connect.
+[Unit]
+Description=Surface Pro 11 GNSS feed for GeoClue (socket)
+
+[Socket]
+ListenStream=/run/sp11-gnss/nmea.sock
+SocketUser=root
+SocketGroup=geoclue
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=yes

@@ -7,9 +7,12 @@ Windows.
 - Product `Microsoft Surface Pro with 5G, 11th Edition`, SKU `Surface_Pro_with_5G_11th_Edition_2077`, X1E80100,
   Samsung (SDC) OLED 2880x1920. The Bluetooth and Wi-Fi addresses are per unit: `05-detect-hardware.sh` writes the
   Bluetooth address to `build/hardware.env`, the support RPM to `/etc/sp11/bluetooth-address`.
-- Device tree `qcom/x1e80100-microsoft-denali-oled.dtb`; the X1P LCD variant (`x1p64100-microsoft-denali.dtb`) is a
-  different machine. Upstream regexes match only the non-5G SKU (`Microsoft Surface Pro, 11th Edition`, `_2076`) and
-  need `( with 5G)?` / `(_with_5G)?`; `05-detect-hardware.sh` self-tests every regex against both SKUs.
+- Device tree `qcom/x1e80100-microsoft-denali-oled.dtb`; from 7.2.11 revision 3 the 5G SKU boots
+  `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree plus its modem (`docs/modem.md`). The build picks the
+  tree by the unit's SKU (`SP11_SKU_5G_REGEX`, `dtb_for_sku` in `scripts/lib.sh`), so the SKUs without a modem keep
+  the OLED tree. The X1P LCD variant (`x1p64100-microsoft-denali.dtb`) is a different machine. Upstream regexes
+  match only the non-5G SKU (`Microsoft Surface Pro, 11th Edition`, `_2076`) and need `( with 5G)?` /
+  `(_with_5G)?`; `05-detect-hardware.sh` self-tests every regex, and which SKU takes which tree, against both SKUs.
 - DTB loader: stubble's `x1e80100-microsoft-denali.json` (Fedora's `kernel-uki-dtbloader` hardware-ID table) matches
   this SKU only by its EDID-based `ext1` ID, `ca2ff828-b404-5253-9e0e-579c93bfb059` in `systemd-analyze chid`, which
   the SP11 build's `.hwids` section maps to `microsoft,denali-oled`. Not verified that the stub gets the panel's

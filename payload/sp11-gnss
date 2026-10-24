@@ -1,0 +1,354 @@
+#!/usr/bin/python3
+# Surface Pro 11 5G: the modem's GNSS positions for GeoClue. GeoClue's nmea-socket source
+# (/etc/geoclue/conf.d/90-sp11-gnss.conf) connects to the socket systemd passes in (sp11-gnss.socket, which udev
+# starts when the modem appears); while a client is connected this runs a fix session on the modem's location
+# service (QMI LOC over QRTR) and writes each fix as NMEA GGA and RMC sentences, since the modem's firmware delivers
+# no NMEA. With no client it stops the session and, IDLE_EXIT seconds later, exits; the socket starts it again.
+# Across system sleep the sleep hook pauses it (SIGUSR1: the session stops, the connections stay, status `paused`)
+# and resumes it (SIGUSR2), so the receiver does not run while the tablet is asleep. It never closes GeoClue's
+# connection itself: GeoClue 2.8 takes the end of a closed NMEA socket for an empty line and reads again at once,
+# for good, without reconnecting.
+# The location service refuses an event registration without client type and client string: a client without type is
+# a non-framework one, which must name itself. This registers as an application-framework client, as Qualcomm's own
+# LOC client does. Message layouts: location_service_v02.h/.c (Qualcomm's LOC IDL, revision 2.177).
+# Logs no position.
+import os
+import select
+import signal
+import socket
+import struct
+import sys
+import time
+
+AF_QIPCRTR = getattr(socket, 'AF_QIPCRTR', 42)
+QRTR_PORT_CTRL = 0xfffffffe
+QRTR_TYPE_NEW_SERVER, QRTR_TYPE_DEL_SERVER, QRTR_TYPE_NEW_LOOKUP = 4, 5, 10
+LOC_SERVICE = 16
+QMI_REQUEST, QMI_RESPONSE, QMI_INDICATION = 0x00, 0x02, 0x04
+REG_EVENTS, START, STOP, IND_POSITION = 0x21, 0x22, 0x23, 0x24
+EVENT_POSITION_REPORT = 0x01
+CLIENT_AFW, CLIENT_NFW = 1, 2
+CLIENT_ID = b'sp11'                                  # QMI_LOC_MAX_CLIENT_ID_STRING_LENGTH_V02: 4
+SESSION_ID = 0
+NODE = int(os.environ.get('SP11_GNSS_NODE', '3'))    # the modem's QRTR node; the tests use the local one
+IDLE_EXIT = int(os.environ.get('SP11_GNSS_IDLE_EXIT', '60'))
+TIMEOUT = 10                                         # seconds per QMI request
+RETRY = 10                                           # seconds between session attempts
+SILENCE = 120                                        # seconds without a report before the session is restarted
+MAX_UNCERTAINTY = 500.0                              # metres; fixes less certain than this are not passed on
+KNOT = 1852 / 3600                                   # m/s
+
+
+def log(text):
+    print(text, file=sys.stderr, flush=True)
+
+
+class QmiError(Exception):
+    pass
+
+
+def tlv(kind, value):
+    return struct.pack('<BH', kind, len(value)) + value
+
+
+def parse_tlvs(body):
+    tlvs, offset = {}, 0
+    while offset + 3 <= len(body):
+        kind, length = struct.unpack_from('<BH', body, offset)
+        tlvs[kind] = body[offset + 3:offset + 3 + length]
+        offset += 3 + length
+    return tlvs
+
+
+def unpack(tlvs, kind, fmt):
+    raw = tlvs.get(kind)
+    if raw is None or len(raw) < struct.calcsize(fmt):
+        return None
+    return struct.unpack_from(fmt, raw)[0]
+
+
+class Session:
+    # One LOC client: a QRTR socket of its own. The modem drops the client and its session when the socket closes.
+    def __init__(self):
+        self.sock = socket.socket(AF_QIPCRTR, socket.SOCK_DGRAM)
+        self.addr = None
+        self.txn = 0
+        self.reports = []
+
+    def fileno(self):
+        return self.sock.fileno()
+
+    def recv(self, timeout):
+        if not select.select([self.sock], [], [], max(timeout, 0))[0]:
+            return None, None
+        return self.sock.recvfrom(65536)
+
+    def lookup(self):
+        # The lookup stays registered: the name service later reports the service's removal on this socket.
+        ctrl = (self.sock.getsockname()[0], QRTR_PORT_CTRL)
+        self.sock.sendto(struct.pack('<5I', QRTR_TYPE_NEW_LOOKUP, LOC_SERVICE, 0, 0, 0), ctrl)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            data, _src = self.recv(deadline - time.monotonic())
+            if data is None or len(data) < 20:
+                continue
+            cmd, service, _instance, node, port = struct.unpack_from('<5I', data)
+            if cmd != QRTR_TYPE_NEW_SERVER:
+                continue
+            if not service:                          # the empty entry ends the list
+                break
+            if service == LOC_SERVICE and node == NODE:
+                self.addr = (node, port)
+        if self.addr is None:
+            raise QmiError(f'no location service on QRTR node {NODE}')
+
+    def request(self, msg_id, tlvs):
+        self.txn = self.txn % 0xffff + 1
+        body = b''.join(tlvs)
+        self.sock.sendto(struct.pack('<BHHH', QMI_REQUEST, self.txn, msg_id, len(body)) + body, self.addr)
+        deadline = time.monotonic() + TIMEOUT
+        while time.monotonic() < deadline:
+            data, src = self.recv(deadline - time.monotonic())
+            if data is None or src != self.addr or len(data) < 7:
+                continue
+            kind, txn, rid, length = struct.unpack_from('<BHHH', data)
+            tlv_map = parse_tlvs(data[7:7 + length])
+            if kind == QMI_INDICATION:
+                self.reports.append((rid, tlv_map))
+            elif kind == QMI_RESPONSE and txn == self.txn and rid == msg_id:
+                result, error = struct.unpack('<HH', tlv_map.get(0x02, b'\0\0\0\0')[:4])
+                if result:
+                    raise QmiError(f'request 0x{msg_id:02x}: QMI error 0x{error:02x}')
+                return
+        raise QmiError(f'request 0x{msg_id:02x}: no response')
+
+    def start(self):
+        self.lookup()
+        mask = tlv(0x01, struct.pack('<Q', EVENT_POSITION_REPORT))
+        for ctype in (CLIENT_AFW, CLIENT_NFW):
+            try:
+                self.request(REG_EVENTS, [mask, tlv(0x10, CLIENT_ID), tlv(0x11, struct.pack('<I', ctype)),
+                                          tlv(0x12, b'\0')])
+                break
+            except QmiError as err:
+                log(f'event registration as client type {ctype} refused: {err}')
+        else:
+            raise QmiError('no event registration accepted')
+        self.request(START, [tlv(0x01, struct.pack('<B', SESSION_ID)), tlv(0x10, struct.pack('<I', 1)),
+                             tlv(0x12, struct.pack('<I', 1)), tlv(0x13, struct.pack('<I', 1000))])
+
+    def read(self):
+        # One message: ('position', tlvs), ('gone', None) when the name service removes the service, or None.
+        data, src = self.recv(0)
+        if data is None:
+            return None
+        if src[1] == QRTR_PORT_CTRL and len(data) >= 20:
+            cmd, service, _instance, node, port = struct.unpack_from('<5I', data)
+            if cmd == QRTR_TYPE_DEL_SERVER and service == LOC_SERVICE and (node, port) == self.addr:
+                return 'gone', None
+            return None
+        if src != self.addr or len(data) < 7:
+            return None
+        kind, _txn, msg_id, length = struct.unpack_from('<BHHH', data)
+        if kind == QMI_INDICATION and msg_id == IND_POSITION:
+            return 'position', parse_tlvs(data[7:7 + length])
+        return None
+
+    def close(self, stop):
+        if stop:
+            try:
+                self.request(STOP, [tlv(0x01, struct.pack('<B', SESSION_ID))])
+            except (QmiError, OSError) as err:
+                log(f'stopping the session: {err}')
+        self.sock.close()
+
+
+# NMEA for GeoClue (gclue-location.c, gclue-nmea-source.c): it reads lines ending in CR LF, takes the GGA and RMC
+# sentences that arrive together, and derives the accuracy from GGA's HDOP alone (0, 1, 3, 50, 100 or 300 m for an
+# HDOP up to 1, 2, 5, 10, 20 or above). The HDOP field therefore carries the smallest value whose accuracy covers
+# the receiver's own horizontal uncertainty. Times come from the system clock, which GeoClue compares them with.
+def checksum(body):
+    value = 0
+    for byte in body.encode('ascii'):
+        value ^= byte
+    return f'${body}*{value:02X}\r\n'
+
+
+def coordinate(value, degree_digits, positive, negative):
+    micro_minutes = round(abs(value) * 60 * 1000000)
+    degrees, rest = divmod(micro_minutes, 60 * 1000000)
+    minutes, fraction = divmod(rest, 1000000)
+    return f'{degrees:0{degree_digits}d}{minutes:02d}.{fraction:06d}', positive if value >= 0 else negative
+
+
+def hdop_for(uncertainty):
+    for limit, hdop in ((1, 2.0), (3, 5.0), (50, 10.0), (100, 20.0)):
+        if uncertainty <= limit:
+            return hdop
+    return 99.9
+
+
+def nmea(tlvs, now=None):
+    # GGA and RMC for a successful position report; None for anything else.
+    if unpack(tlvs, 0x01, '<I') != 0:
+        return None
+    lat, lon = unpack(tlvs, 0x10, '<d'), unpack(tlvs, 0x11, '<d')
+    uncertainty = unpack(tlvs, 0x12, '<f')
+    if lat is None or lon is None or uncertainty is None or uncertainty > MAX_UNCERTAINTY:
+        return None
+    t = time.gmtime(now if now is not None else time.time())
+    clock = f'{t.tm_hour:02d}{t.tm_min:02d}{t.tm_sec:02d}.00'
+    lat_s, ns = coordinate(lat, 2, 'N', 'S')
+    lon_s, ew = coordinate(lon, 3, 'E', 'W')
+    used = tlvs.get(0x2c)
+    satellites = min(used[0], 99) if used else 0
+    msl, ellipsoid = unpack(tlvs, 0x1b, '<f'), unpack(tlvs, 0x1a, '<f')
+    altitude = f'{msl:.1f},M' if msl is not None else ','
+    separation = f'{ellipsoid - msl:.1f},M' if msl is not None and ellipsoid is not None else ','
+    speed, heading = unpack(tlvs, 0x18, '<f'), unpack(tlvs, 0x20, '<f')
+    gga = (f'GNGGA,{clock},{lat_s},{ns},{lon_s},{ew},1,{satellites:02d},{hdop_for(uncertainty):.1f},'
+           f'{altitude},{separation},,')
+    knots = f'{speed / KNOT:.1f}' if speed is not None else ''
+    course = f'{heading:.1f}' if heading is not None else ''
+    date = f'{t.tm_mday:02d}{t.tm_mon:02d}{t.tm_year % 100:02d}'
+    rmc = f'GNRMC,{clock},A,{lat_s},{ns},{lon_s},{ew},{knots},{course},{date},,,A'
+    return (checksum(gga) + checksum(rmc)).encode('ascii')
+
+
+def listening_socket():
+    if os.environ.get('LISTEN_PID') != str(os.getpid()) or os.environ.get('LISTEN_FDS') != '1':
+        log('start through sp11-gnss.socket')
+        sys.exit(1)
+    return socket.socket(fileno=3)
+
+
+def notify(state):
+    """sd_notify: READY=1 once the signal handlers are in place, and the status the sleep hook waits for."""
+    path = os.environ.get('NOTIFY_SOCKET')
+    if not path:
+        return
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+            sock.sendto(state.encode(), '\0' + path[1:] if path.startswith('@') else path)
+    except OSError as err:
+        log(f'sd_notify: {err}')
+
+
+class Stop(Exception):
+    pass
+
+
+def stop(_signum, _frame):
+    raise Stop()
+
+
+sleep_requests = []                                  # True: pause (SIGUSR1), False: resume (SIGUSR2)
+
+
+def sleep_request(signum, _frame):
+    sleep_requests.append(signum == signal.SIGUSR1)
+
+
+def main():
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGUSR1, sleep_request)
+    signal.signal(signal.SIGUSR2, sleep_request)
+    # The signals also write to this pipe, so that select() returns at once.
+    wake, wake_w = os.pipe()
+    os.set_blocking(wake, False)
+    os.set_blocking(wake_w, False)
+    signal.set_wakeup_fd(wake_w)
+    clients, session = [], None
+    fixes, paused = 0, False
+    try:
+        listen = listening_socket()
+        notify('READY=1')
+        next_try = 0.0
+        idle_since = last_report = time.monotonic()
+        while True:
+            now = time.monotonic()
+            while sleep_requests:
+                paused = sleep_requests.pop(0)
+                if paused:
+                    if session:
+                        session.close(True)
+                        session = None
+                        log(f'fix session paused for system sleep ({fixes} fixes)')
+                    notify('STATUS=paused')
+                else:
+                    next_try = 0.0
+                    notify('STATUS=running')
+            if clients and session is None and now >= next_try and not paused:
+                session = Session()
+                try:
+                    session.start()
+                    last_report, fixes = now, 0
+                    log(f'fix session started ({len(clients)} client{"s" if len(clients) > 1 else ""})')
+                except (QmiError, OSError) as err:
+                    log(f'no fix session: {err}; next attempt in {RETRY} s')
+                    session.close(False)
+                    session, next_try = None, now + RETRY
+            if session and not clients:
+                session.close(True)
+                session, idle_since = None, now
+                log(f'fix session stopped: no client ({fixes} fixes)')
+            if session and now - last_report > SILENCE:
+                log(f'no report for {SILENCE} s; restarting the fix session')
+                session.close(True)
+                session, next_try = None, now
+            if not clients and session is None and now - idle_since >= IDLE_EXIT:
+                log(f'no client for {IDLE_EXIT} s; exiting')
+                return
+            watched = [wake, listen] + clients + ([session] if session else [])
+            for ready in select.select(watched, [], [], 1.0)[0]:
+                if ready is wake:
+                    os.read(wake, 64)
+                elif ready is listen:
+                    conn, _ = listen.accept()
+                    conn.settimeout(2)
+                    clients.append(conn)
+                elif ready is session:
+                    reports, session.reports = session.reports, []
+                    item = session.read()
+                    if item and item[0] == 'gone':
+                        log('the location service went away; restarting the fix session')
+                        session.close(False)
+                        session, next_try = None, time.monotonic() + RETRY
+                        continue
+                    if item:
+                        reports.append((IND_POSITION, item[1]))
+                    for msg_id, tlvs in reports:
+                        last_report = time.monotonic()
+                        data = nmea(tlvs) if msg_id == IND_POSITION else None
+                        if data is None:
+                            continue
+                        fixes += 1
+                        for conn in list(clients):
+                            try:
+                                conn.sendall(data)
+                            except OSError:
+                                clients.remove(conn)
+                                conn.close()
+                else:
+                    try:
+                        gone = not ready.recv(4096)
+                    except OSError:
+                        gone = True
+                    if gone:
+                        clients.remove(ready)
+                        ready.close()
+                        if not clients:
+                            idle_since = time.monotonic()
+    except Stop:
+        pass
+    finally:
+        if session:
+            session.close(True)
+            log(f'fix session stopped ({fixes} fixes)')
+        for conn in clients:
+            conn.close()
+
+
+if __name__ == '__main__':
+    main()

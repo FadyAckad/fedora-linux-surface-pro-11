@@ -66,7 +66,8 @@ sec "sensors: sleep"; run systemd-inhibit --list --no-pager
 run sh -c "journalctl -b --no-pager -u iio-sensor-proxy -o short-monotonic -g 'sensor polling|sleep delay lock' | tail -n 40"
 run sleeps
 sec "sensors: SELinux"; run getenforce; run sh -c "semodule -l | grep -E '^sp11' || echo 'no sp11 module loaded'"
-run sh -c "journalctl -k -b --no-pager -g 'avc:  denied' | grep -E 'iiosensorproxy|hexagonrpc|fastrpc|qipcrtr' | tail -n 40"
+# The whole journal: with auditd running, SELinux denials come through audit, not as kernel messages.
+run sh -c "journalctl -b --no-pager -g 'avc: +denied' | grep -E 'iiosensorproxy|hexagonrpc|fastrpc|qipcrtr' | tail -n 40"
 # GNOME shows the auto-rotate toggle only while mutter's panel-orientation-managed is true: touch mode (a
 # touchscreen, and a tablet-mode switch that is on, or no switch and no pointer device such as the keyboard's
 # touchpad, attached or over Bluetooth) plus iio-sensor-proxy's accelerometer plus the built-in panel. Kernel SP11

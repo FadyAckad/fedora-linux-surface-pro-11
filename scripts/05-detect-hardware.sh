@@ -20,6 +20,12 @@ self_test() {
   for s in Surface_Pro_with_5G_11th_Edition_2077 Surface_Pro_11th_Edition_2076 Surface_Pro_11th_Edition_For_Business_2085; do
     [[ $s =~ $SP11_SKU_REGEX ]] || { warn "SP11_SKU_REGEX does not match '$s'"; ok=0; }
   done
+  # Only the 5G SKU gets the device tree with the modem.
+  [ "$(dtb_for_sku Surface_Pro_with_5G_11th_Edition_2077)" = "$SP11_DTB_5G" ] \
+    || { warn "SP11_SKU_5G_REGEX does not match the 5G SKU"; ok=0; }
+  for s in Surface_Pro_11th_Edition_2076 Surface_Pro_11th_Edition_For_Business_2085; do
+    [ "$(dtb_for_sku "$s")" = "$SP11_DTB_OLED" ] || { warn "SP11_SKU_5G_REGEX matches '$s'"; ok=0; }
+  done
   for s in "Microsoft Corporation-Surface-Microsoft Surface Pro with 5G, 11th Edition" \
            "Microsoft Corporation-Surface-Microsoft Surface Pro, 11th Edition"; do
     printf '%s\n' "$s" | grep -Eq "$UCM_SP11_REGEX" || { warn "UCM_SP11_REGEX does not match '$s'"; ok=0; }
@@ -75,7 +81,7 @@ if [ -z "$SP11_BT_MAC" ]; then
 fi
 SP11_BT_MAC=$(printf '%s' "$SP11_BT_MAC" | tr 'a-f-' 'A-F:')
 SP11_UCM_DMI_INFO="${SP11_BOARD_VENDOR}-${SP11_FAMILY}-${SP11_BOARD_NAME}"
-SP11_DTB_SELECTED="$SP11_DTB"
+SP11_DTB_SELECTED=$(dtb_for_sku "$SP11_SKU")
 
 validate
 

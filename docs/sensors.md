@@ -29,8 +29,21 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   `drv-ssc-{accel,light,compass,proximity}.c` (`-Dssc-support`, `disabled` in Fedora) read the sensors through it.
   The proxy's udev rule enables `ssc-light ssc-compass` on `fastrpc-adsp*`, `ssc-accel` is the opt-in, and its
   unit allows `AF_QIPCRTR`.
-- SELinux: Fedora's `iiosensorproxy_t` has no `qipcrtr_socket` rule, so `sp11-sensors` loads a CIL module. No AVC
-  for the stack's domains under enforcing.
+- SELinux: Fedora's `iiosensorproxy_t` has no `qipcrtr_socket` rule, so `sp11-sensors` loads a CIL module. The
+  module also carries the logind rules of the sleep pause and, since 1.13, the D-Bus rules GeoClue's compass source
+  needs (Compass).
+- Up to 1.14 iio-sensor-proxy was refused, at every start, a read of `/etc/passwd` and twice `dac_read_search` and
+  `dac_override` (five `AVC` lines; the sensors worked regardless). A debug boot under `strace -k` (2026-10-24)
+  showed the chain: the light sensor's discovery, libssc, libqmi's device property calls `g_file_new_for_uri`, GIO
+  loads its modules, gvfs's client module (`gvfs_have_session_bus`) asks for the user runtime directory, GLib looks
+  root up in `/etc/passwd` and tries `mkdir /root/.cache` and `stat /root/.cache/bus`, both behind the unit's
+  `ProtectHome`. Since 1.15 a drop-in (`iio-sensor-proxy.service.d/10-sp11.conf`) sets
+  `GIO_MODULE_DIR=/usr/share/empty`: no GIO module loads, and GIO keeps its built-in local VFS, as it did once gvfs
+  found no session bus (`GIO_USE_VFS=local` still loads the modules). On the device (2026-10-24): no denial for the
+  proxy after a reboot, all three sensors found, GeoClue's headings and rotation across a sleep as before.
+- `sp11-sensors-check` and `sp11-diag` searched only the kernel's messages (`journalctl -k`), where audit's denials
+  never appear, so the earlier "no AVC" was not a finding; since sp11-sensors 1.14 and support 3.7 they search the
+  whole journal.
 
 ## Inputs from Windows
 
@@ -253,6 +266,16 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   merges with its own job, so the helper sends it only while hexagonrpcd and the proxy are active, and starts a
   stopped proxy instead of restarting one; step 46 asserts that it restarts or stops no unit. Not yet exercised on
   the device.
+- GeoClue's compass source (heading for every location source, preferred over any other heading) asks the proxy
+  over D-Bus. Fedora 45's policy lets neither `geoclue_t` send D-Bus messages to `iiosensorproxy_t` nor the reverse
+  (GNOME's shell, `xdm_t`, may): dbus-broker logged two `USER_AVC ... denied { send_msg } ... scontext=...geoclue_t
+  ... tcontext=...iiosensorproxy_t` at every GeoClue start (device, 2026-10-23). Behind that, `ClaimCompass` needs
+  polkit's `net.hadess.SensorProxy.claim-sensor`, granted to active sessions only, and GeoClue runs as user
+  `geoclue` without one: polkitd in the F45 root refused it.
+- 1.13 allows both D-Bus directions in the module and adds `80-sp11-sensors-geoclue.rules`, which grants the claim
+  to user `geoclue` (polkitd in the F45 root: allowed for `geoclue`, still refused for another system user). On the
+  device (2026-10-23): 229 of 230 GeoClue locations in 60 s carried a heading (Wi-Fi and GNSS alike), changing as
+  the tablet turned; no GeoClue denial, no CDSP crash.
 
 ## Known issues
 
@@ -375,3 +398,6 @@ The Snapdragon Sensor Core stack, tablet mode and auto-rotation; the dated devic
   device the same evening: the re-attach after a wake no longer counts, the daemon ran through 15 quick wakes.
   The old proxy's 45 s stop at the upgrade traced to a pending accelerometer open; the new one stopped in under
   0.1 s at five reboots.
+- 2026-10-23: GeoClue's compass source refused by SELinux and, behind it, by polkit; 1.13 allows both.
+- 2026-10-24: the proxy's five denials at every start traced to gvfs's GIO module; 1.15 loads no GIO module, and
+  the proxy started without a denial on the device.

@@ -98,6 +98,15 @@ check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-sensors"
 check as_root grep -q PrepareForSleep "$M/usr/libexec/iio-sensor-proxy"
 check as_root grep -q systemd_logind_inhibit_var_run_t "$M/usr/share/selinux/packages/sp11-sensors.cil"
 check as_root sh -c "bzcat '$M/var/lib/selinux/targeted/active/modules/400/sp11-sensors/cil' | grep -q systemd_logind_inhibit_var_run_t"
+# GeoClue's compass source (1.13): the module's D-Bus rules are in the store, and the polkit rule is in place.
+check as_root sh -c "bzcat '$M/var/lib/selinux/targeted/active/modules/400/sp11-sensors/cil' | grep -q 'geoclue_t iiosensorproxy_t'"
+check as_root grep -q 'net.hadess.SensorProxy.claim-sensor' "$M/usr/share/polkit-1/rules.d/80-sp11-sensors-geoclue.rules"
+# The check's denial search reads the whole journal (1.14): audit's lines are no kernel messages.
+# The proxy loads no GIO module (1.15): gvfs's client module made it read /etc/passwd and try /root at every start.
+check as_root grep -qx 'Environment=GIO_MODULE_DIR=/usr/share/empty' "$M/usr/lib/systemd/system/iio-sensor-proxy.service.d/10-sp11.conf"
+check as_root test -d "$M/usr/share/empty"
+check as_root grep -qF "journalctl -b --no-pager -g 'avc: +denied'" "$M/usr/libexec/sp11/sp11-sensors-check"
+check as_root sh -c "! grep -q 'journalctl -k -b --no-pager -g .avc' '$M/usr/libexec/sp11/sp11-sensors-check'"
 # Both dnf exclusions have to stay in force: the support RPM's repository override keeps stock kernels out of every
 # repository (per repository, so it shows in the repository's configuration, not the main one), the sensors
 # drop-in keeps Fedora's iio-sensor-proxy out.
@@ -278,6 +287,8 @@ if [ -n "${SENSORS_PREVIOUS_RPMS:-}" ]; then
   check test "$(as_root chroot "$M" /usr/bin/stat -c %U /var/lib/sp11/hexagonrpc/sensors/persist/registry)" = fastrpc
   check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-sensors"
   check as_root sh -c "bzcat '$M/var/lib/selinux/targeted/active/modules/400/sp11-sensors/cil' | grep -q systemd_logind_inhibit_var_run_t"
+  check as_root sh -c "bzcat '$M/var/lib/selinux/targeted/active/modules/400/sp11-sensors/cil' | grep -q 'geoclue_t iiosensorproxy_t'"
+  check as_root test -f "$M/usr/share/polkit-1/rules.d/80-sp11-sensors-geoclue.rules"
   check as_root grep -q PrepareForSleep "$M/usr/libexec/iio-sensor-proxy"
   check as_root sh -c "grep -q 'Could not remove' '$M/usr/bin/hexagonrpcd'"
   check as_root sh -c "grep -q 'Could not fetch large input buffers' '$M/usr/bin/hexagonrpcd'"

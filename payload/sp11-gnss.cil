@@ -1,0 +1,12 @@
+;; Surface Pro 11 5G: GeoClue reads the modem's GNSS positions from sp11-gnss over the Unix socket that systemd
+;; creates for sp11-gnss.socket. systemd labels that socket for the service it starts, which runs unconfined
+;; (unconfined_service_t), and Fedora's geoclue_t may neither connect to it nor write a socket file under /run.
+;; The socket's directory gets its own type. Installed by sp11-surface-support (semodule -i); removed with it.
+(type sp11_gnss_var_run_t)
+(roletype object_r sp11_gnss_var_run_t)
+(typeattributeset file_type (sp11_gnss_var_run_t))
+(typeattributeset pidfile (sp11_gnss_var_run_t))
+(filecon "/run/sp11-gnss(/.*)?" any (system_u object_r sp11_gnss_var_run_t ((s0) (s0))))
+(allow geoclue_t sp11_gnss_var_run_t (dir (getattr open search)))
+(allow geoclue_t sp11_gnss_var_run_t (sock_file (getattr open write append)))
+(allow geoclue_t unconfined_service_t (unix_stream_socket (connectto)))

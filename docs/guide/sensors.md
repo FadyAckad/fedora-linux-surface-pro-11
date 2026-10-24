@@ -39,8 +39,9 @@ Run `sudo /usr/libexec/sp11/sp11-sensors-check` from a terminal in the desktop. 
 timeline to the desktop: one reading per sensor (`ssccli`), what iio-sensor-proxy sees (`monitor-sensor`) and the
 tablet-mode state. GNOME offers its auto-rotate button while the keyboard is folded back or detached, and its
 automatic screen brightness uses the same light sensor. Under KDE Plasma the check's query to GNOME's mutter ends in
-a D-Bus error, and the rest of its output applies. The gyroscope and magnetometer have no desktop consumer; read
-them with `ssccli --sensor gyroscope` / `--sensor magnetometer`.
+a D-Bus error, and the rest of its output applies. GeoClue takes a location's heading from the compass (since
+`sp11-sensors` 1.13). The gyroscope and magnetometer have no desktop consumer of their own; read them with
+`ssccli --sensor gyroscope` / `--sensor magnetometer`.
 
 Reference: denisix/ubuntu-surface-pro-11 (`SENSORS.md`) reports all 13 sensors of the framework working on a
 Surface Pro 11 with this approach.

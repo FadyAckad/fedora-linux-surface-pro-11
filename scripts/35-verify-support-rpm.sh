@@ -121,6 +121,33 @@ assert_payload() {
   # 3.4: only the media device nodes, not the /dev/media directory udev creates next to them.
   check as_root grep -qF 'for m in /dev/media[0-9]*;' "$M/usr/libexec/sp11/sp11-diag"
   check as_root sh -c "! grep -v '^#' '$M/usr/libexec/sp11/sp11-diag' | grep -qF '/dev/media*'"
+  # 3.7: sp11-diag searches the whole journal for SELinux denials (audit's lines are no kernel messages).
+  check as_root grep -qF "journalctl -b --no-pager -g 'avc: +denied'" "$M/usr/libexec/sp11/sp11-diag"
+  check as_root sh -c "! grep -q 'journalctl -k -b --no-pager -g .avc' '$M/usr/libexec/sp11/sp11-diag'"
+  # 3.5: on the 5G SKU the modem's rule and GNSS feed, the policy module loaded (%post on the update path, by hand on
+  # the live path, as step 50 does) with the file context of the feed's socket directory; on the others none of it.
+  if [ "$SP11_DTB" != "$SP11_DTB_5G" ]; then
+    check as_root test ! -e "$M/usr/lib/udev/rules.d/77-sp11-modem.rules"
+    check as_root test ! -e "$M/usr/libexec/sp11/sp11-gnss"
+    check as_root test ! -e "$M/etc/geoclue/conf.d/90-sp11-gnss.conf"
+    check as_root sh -c "! chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-gnss"
+    return 0
+  fi
+  check as_root grep -q 'ENV{ID_MM_PORT_IGNORE}="1"' "$M/usr/lib/udev/rules.d/77-sp11-modem.rules"
+  check as_root grep -q 'ENV{SYSTEMD_WANTS}+="sp11-gnss.socket"' "$M/usr/lib/udev/rules.d/77-sp11-modem.rules"
+  check as_root test -x "$M/usr/libexec/sp11/sp11-gnss"
+  check as_root test -x "$M/usr/lib/systemd/system-sleep/sp11-gnss"
+  check as_root grep -qx 'ListenStream=/run/sp11-gnss/nmea.sock' "$M/usr/lib/systemd/system/sp11-gnss.socket"
+  check as_root grep -qx 'nmea-socket=/run/sp11-gnss/nmea.sock' "$M/etc/geoclue/conf.d/90-sp11-gnss.conf"
+  check as_root chroot "$M" /usr/bin/systemd-analyze verify /usr/lib/systemd/system/sp11-gnss.socket \
+    /usr/lib/systemd/system/sp11-gnss.service
+  check as_root chroot "$M" /usr/bin/python3 -I -c 'import ast; ast.parse(open("/usr/libexec/sp11/sp11-gnss").read())'
+  check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-gnss"
+  check as_root grep -q 'sp11_gnss_var_run_t' "$M/etc/selinux/targeted/contexts/files/file_contexts"
+  # 3.6: across system sleep the hook pauses the feed, which keeps GeoClue's connection, instead of stopping it.
+  check as_root grep -qx 'Type=notify' "$M/usr/lib/systemd/system/sp11-gnss.service"
+  check as_root grep -qF 'systemctl kill -s USR1 sp11-gnss.service' "$M/usr/lib/systemd/system-sleep/sp11-gnss"
+  check as_root sh -c "! grep -q 'systemctl stop' '$M/usr/lib/systemd/system-sleep/sp11-gnss'"
 }
 
 # dnf5 with the override in place: a stock kernel offered by a configured repository is hidden, the same package as a
@@ -194,6 +221,10 @@ as_root chroot "$M" /usr/bin/rpm -U --noscripts --replacefiles --replacepkgs --d
 as_root chroot "$M" /usr/libexec/sp11/sp11-ucm-apply || die "sp11-ucm-apply failed in the live root"
 as_root chroot "$M" /usr/libexec/sp11/sp11-grub-defaults || die "sp11-grub-defaults failed in the live root"
 as_root chroot "$M" /usr/libexec/sp11/sp11-grub-modules || die "sp11-grub-modules failed in the live root"
+if [ -e "$M/usr/share/selinux/packages/sp11-gnss.cil" ]; then
+  as_root chroot "$M" /usr/sbin/semodule -i /usr/share/selinux/packages/sp11-gnss.cil \
+    || die "semodule -i sp11-gnss.cil failed in the live root"
+fi
 assert_policy live
 assert_ucm live
 assert_payload live

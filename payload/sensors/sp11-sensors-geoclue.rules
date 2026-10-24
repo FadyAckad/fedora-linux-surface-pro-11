@@ -1,0 +1,8 @@
+// Surface Pro 11 (sp11-sensors): GeoClue may claim iio-sensor-proxy's compass for a location's heading. The claim
+// needs net.hadess.SensorProxy.claim-sensor, which iio-sensor-proxy grants to active sessions only, and GeoClue
+// runs as its system user without one. GeoClue ships the same kind of rule for ModemManager.
+polkit.addRule(function(action, subject) {
+        if (action.id == "net.hadess.SensorProxy.claim-sensor" && subject.user == "geoclue") {
+                return polkit.Result.YES;
+        }
+});

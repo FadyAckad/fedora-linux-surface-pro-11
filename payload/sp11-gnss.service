@@ -1,0 +1,18 @@
+# Surface Pro 11 5G: the modem's GNSS positions as NMEA for GeoClue, while GeoClue is connected (sp11-gnss).
+[Unit]
+Description=Surface Pro 11 GNSS feed for GeoClue
+Requires=sp11-gnss.socket
+After=sp11-gnss.socket
+
+[Service]
+# Ready once its signal handlers are in place (the sleep hook signals only an active feed); its status tells the
+# hook when a pause is done (sd_notify).
+Type=notify
+ExecStart=/usr/libexec/sp11/sp11-gnss
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX AF_QIPCRTR
