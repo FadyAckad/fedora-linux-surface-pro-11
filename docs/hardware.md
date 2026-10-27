@@ -95,6 +95,13 @@ Windows.
   one `state 1` before each sleep and one `state 0` after, no reply on the channel, the ADSP answered afterwards;
   going to sleep and waking took no longer, and sound, the battery percentage and rotation worked afterwards.
   `cxsd`, `ddr` and `aosd` still stayed at 0, so something else keeps the SoC out of its deepest states.
+- The drain through a night in deep sleep (7.2.11 revision 3, support 3.7, sensors 1.15, the Performance profile,
+  on battery, 2026-10-24 to 2026-10-27; `sp11-power-snapshot.sh` in the evening and the morning): 0.86 W in the
+  normal boot (11 h), 0.85 W with the message above sent (9 h; the ADSP's entries while suspended about 0), 0.84 W
+  in a boot with the OLED tree, without the modem's PCIe link (8 h), 0.83 W with the modem's radio in `low-power`
+  (10 h; `docs/modem.md`). The battery reports its energy in steps of 1 % (0.52 Wh), so differences below about
+  0.06 W over a night do not show: none of the four changes the drain. `aosd`, `cxsd` and `ddr` stayed at 0 every
+  night; `apss` counted the one sleep.
 - PowerDevil 6.7 sleeps again 10 s after a wake if the lid is closed, no external monitor counts and the lid action
   is Sleep (`checkWakeup`); after a wake by network, telephony or timer, after 30 s idle instead.
 - The power key's driver (`pm8941-pwrkey`) reports the press that woke the system, about 0.2 s before

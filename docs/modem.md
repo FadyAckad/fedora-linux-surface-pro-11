@@ -41,6 +41,12 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
   network port).
 - The radio may go online (`--dms-set-operating-mode=online` accepted, `HW restricted: 'no'`): no FCC lock. Mobile
   data needs a SIM or an eSIM profile; not tested.
+- In the normal boot the operating mode reads `shutting-down` (`qmicli -d qrtr://3 --dms-get-operating-mode`, with
+  the rule below); `low-power`, set the same way, held through a night (2026-10-26).
+- Asleep, the modem changes nothing the battery can show (deep sleep, revision 3, 2026-10-24 to 2026-10-27): 0.86 W
+  through a night with the PCIe link, 0.84 W in a boot with the OLED tree (no link), 0.83 W with the radio in
+  `low-power`, within the battery's resolution of about 0.06 W (`docs/hardware.md`, Sleep). The firmware powers
+  the modem in every boot, so its own baseline is not measured.
 
 ### The QMI port: ModemManager and suspend
 
@@ -108,7 +114,6 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
 
 ## Open
 
-- Battery drain while asleep with the modem powered.
 - The wake pin; whether the modem needs to wake the tablet at all.
 
 ## History
@@ -119,3 +124,5 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
   the rule for ModemManager (round 4); the failed suspends traced to the QMI port and confirmed (round 5). 7.2.11
   revision 3 and support 3.5 built, the 5G device tree chosen by SKU; GeoClue's GNSS location confirmed on the
   device, its missing reconnection after sleep found and the feed paused across sleep instead (support 3.6).
+- 2026-10-27: the drain through a night measured with and without the PCIe link and with the radio in `low-power`:
+  no difference within the battery's resolution.
