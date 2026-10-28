@@ -331,3 +331,23 @@ What has been confirmed on the tested unit, by date and package version. "The ke
   touchpad, battery status, power profiles, USB-C charging and data, Flatpak, the Windows entry in GRUB, the
   pairings shared with Windows, the sensors' readings, tablet mode, automatic screen brightness, both cameras in an
   application and the front camera's light.
+
+## Kernel 7.2.11 revisions 4 and 5: deep sleep (2026-10-27 and 2026-10-28)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.4.fc45` (revision 3 and the mainline changes 0079 to 0081) with
+  `dnf install` next to revision 3, dnf removing revision 1; on 2026-10-28 `7.2.11-300.sp11.5.fc45` (revision 4 and
+  the modem fix 0082), dnf removing revision 2.
+- Confirmed with revision 4: the 5G tree, `Enforcing`; the speaker stage with VI+CPS feedback, the QSPI touch path,
+  both DSPs over FastRPC (the CDSP again in a second boot), the crypto engine's two hashes and the engine idle as
+  `suspended`, no provider waiting for sync_state; in a 10-minute sleep the six PCIe devices in D3hot and `ddr`
+  counting 591 of 630 s; GPS after the modem's restart.
+- Found with revision 4: a night at 1.40 W, in which the modem's driver refused a suspend 26 s after a wake and
+  systemd fell back to `s2idle` (`docs/hardware.md`, Sleep).
+- Confirmed with revision 5: both DSPs, the crypto engine idle; sleeps started within 15 s of a wake stayed deep,
+  the modem powered down for them, GPS afterwards; 8 hours asleep at 0.33 W, `ddr` 94 % of the time; no provider
+  waiting for sync_state, the CDSP again in a second boot.
+- Confirmed by hand with revision 5 (owner): the speakers, the microphone, touch and the pen, Wi-Fi, the keyboard
+  cover's keys and touchpad, Bluetooth, rotation with the keyboard folded back.
+- Confirmed by hand on 2026-10-28 (owner), with revision 5, the feature table's remaining rows: the backlight,
+  power profiles, USB-C charging and data, Flatpak, the Windows entry in GRUB, the pairings shared with Windows,
+  the sensors' readings, tablet mode, automatic screen brightness, both cameras and the front camera's light.

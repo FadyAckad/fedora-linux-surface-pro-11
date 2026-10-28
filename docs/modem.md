@@ -23,6 +23,9 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
 - `x1e80100-microsoft-denali-oled-5g.dts` (patch 0078, 7.2.11 revision 3): the OLED tree plus the CRD's PCIe 5
   block: `vreg_wwan` on TLMM 221 (on at boot), `pcie5` and `pcie5_phy` with `vreg_l3i_0p8` and `vreg_l3e_1p2`,
   reset on TLMM 149, CLKREQ# on 150; no wake pin; the OLED tree's compatibles, model "(OLED, 5G)".
+- `vreg_wwan` (`SDX_VPH_PWR`) is also PCIe 5's `vddpe-3v3` supply, and the qcom driver switches its supplies off
+  when a sleep takes the link down (host deinit). From revision 4 on the modem is therefore fully off in a deep
+  sleep and comes back through the MHI recovery on resume (`docs/hardware.md`, Sleep).
 - The build gives it to the 5G SKU only (`docs/hardware.md`): `SP11_DTB` follows the SKU in `load_hardware`, and
   step 20 checks that PCIe 5 is enabled in the 5G tree and disabled in the OLED tree. A `build/hardware.env` from
   before revision 3 records the OLED tree; `load_hardware` replaces it and says so.

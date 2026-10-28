@@ -109,6 +109,28 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
   unchanged (its DTB is revision 2's byte for byte), and the build gives it to the SKUs without a modem. Pushed
   2026-10-23 (head `a4c9a6c7`, tree `870d479a`).
 
+### 7.2.11 revision 4: deep sleep
+
+- Three commits on top of `sp11/7.2.11` (0079–0081), carried unchanged from mainline (all in `v7.3-rc1`), each with
+  a `[sp11: ...]` note naming its commit; chosen by the 2026-10-27 sleep rounds (`docs/hardware.md`, Sleep):
+  - 0079, `d4c79b63d82d`: native hot-plug root ports may enter D3 on non-x86, so a sleep takes the PCIe links down
+    (the effect of `pcie_port_pm=force`);
+  - 0080, `d0cd9c8d0fd5`: an open GENI UART (the Surface Aggregator's, Bluetooth's) releases its clocks, its
+    interconnect votes and its CX level in system sleep;
+  - 0081, `6f5569203bb6`: the crypto engine votes for memory bandwidth only while busy (runtime PM).
+- Left out: mainline's fix of 0080 (`3098c989bd38`), which concerns only serial consoles with `no_console_suspend`,
+  absent here; a change to the bandwidth monitors (`icc_bwmon`), whose votes are active-only and drop out of the
+  sleep set by themselves.
+
+### 7.2.11 revision 5: a busy modem in system suspend
+
+- One commit on top of revision 4 (0082, this repository): `mhi-pci-generic` no longer aborts a system suspend when
+  the modem refuses M3 (pending transfers, as while ModemManager probes the modem restarted by the last wake); it
+  powers MHI down as for hibernation and restarts the modem through its recovery on resume. Found by revision 4's
+  night (`docs/hardware.md`, Sleep), where the refused suspend let systemd fall back to `s2idle`. Mainline has no
+  such change (its `no_m3` support of 7.3 is for devices without M3).
+- Revisions 4 and 5 pushed together 2026-10-28 (head `f9f03105`, tree `bc657515`).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -155,6 +177,10 @@ The patches by number, with their origin and what each is needed for.
 | 0076 | qcom_battmgr: `Full` instead of `Not charging` for a full battery on external power | Bjorn Andersson | the battery state on the charger |
 | 0077 | qcom_battmgr: a change notice from the AC, USB and wireless supplies when the charging source changes | Brandon Williams (turbineBMW) | UPower's on-battery state after the charger is plugged in or out |
 | 0078 | Device tree of the 5G SKU: the OLED tree plus the Snapdragon X65 modem on PCIe 5 (supply switch on TLMM 221, reset 149, CLKREQ# 150), as on the CRD | this repository | the 5G modem and its GNSS receiver (`docs/modem.md`) |
+| 0079 | PCI: D3 for native hot-plug root ports on non-x86 | Manivannan Sadhasivam (mainline `d4c79b63d82d`) | the PCIe links down in sleep, so the memory reaches its low-power mode |
+| 0080 | GENI serial: force runtime suspend in system sleep | Praveen Talari (mainline `d0cd9c8d0fd5`) | the UARTs' QUP and CX votes released in sleep |
+| 0081 | Crypto engine: runtime PM, memory bandwidth only while busy | Udit Tiwari (mainline `6f5569203bb6`) | the crypto engine's 394 MB/s memory vote gone in sleep |
+| 0082 | MHI PCI: power a busy modem down for system suspend instead of aborting it | this repository | deep sleep shortly after a wake (no `s2idle` fallback) |
 
 ## Left out of v23.2, and the device check for each
 

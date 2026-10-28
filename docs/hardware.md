@@ -102,6 +102,70 @@ Windows.
   (10 h; `docs/modem.md`). The battery reports its energy in steps of 1 % (0.52 Wh), so differences below about
   0.06 W over a night do not show: none of the four changes the drain. `aosd`, `cxsd` and `ddr` stayed at 0 every
   night; `apss` counted the one sleep.
+- What keeps the memory awake (7.2.11 revision 3, 2026-10-27; `icc_set_bw` trace and interconnect and power-domain
+  summaries around 10- to 20-minute sleeps): at suspend `ebi` kept the crypto engine's 394 MB/s (`qcrypto` votes at
+  probe and never drops it), the CPU bandwidth monitors' 800 MB/s peak (`icc_bwmon`; tagged active-only, so RPMh
+  leaves it out of the sleep set) and 1 kB/s from each PCIe controller. A PCIe controller takes its link down in a
+  sleep only if every device below it, its root port included, is in D3hot (`dw_pcie_suspend_noirq()`). The qcom
+  driver advertises the root ports' hot-plug again since Linux 7.1 (33a76fc3c3e6; pciehp drives them), and 7.2 keeps
+  native hot-plug ports in D0 (`pci_bridge_d3_possible()`; 7.3 allows D3 for them on non-x86, d4c79b63d82d) unless
+  the kernel boots with `pcie_port_pm=force`. The NVMe drive is shut down in every sleep, ASPM or not
+  (`broken_l1ss_resume`).
+- With `qcrypto` and `icc_bwmon` unloaded, Wi-Fi (`ath12k`), Bluetooth (`hci_uart`) and the modem's driver taken
+  away and ASPM L1 off, the links stayed up and `ddr` stayed 0. In a boot with `pcie_port_pm=force` and the same
+  removals the three root ports and the NVMe drive went to D3hot, no memory vote was left, and `ddr` counted 1083 of
+  1153 s suspended (559 of 602 s also without the sound card and the rx, tx and wsa macros). The drive came back
+  from both sleeps; the Wi-Fi controller (`1c08000.pci`, its driver unloaded) logged
+  `Timeout waiting for L2 entry` in each. `cxsd` and `aosd` stayed 0: the one vote left at suspend was the Surface
+  Aggregator UART's (`b88000.serial`: QUP0 core 25 MB/s, configuration 4 MB/s, CX performance state 64), as
+  `qcom_geni_serial` keeps an open port's clocks and votes through a sleep on 7.2 (7.3 suspends it, d0cd9c8d0fd5).
+  The ADSP entered its sleep 12 to 17 times a second over those intervals, against about 100 before.
+- In normal use (2026-10-27; `pcie_port_pm=force`, only `qcrypto` and `icc_bwmon` unloaded, Wi-Fi, Bluetooth, the
+  modem and sound loaded) the Wi-Fi and the modem went to D3hot with their drivers too, all three links went down,
+  and `ddr` counted 650 of 694 s of a 10-minute sleep. Over 8 hours on battery after it (sleeps of 6 h 26 min and
+  1 h 21 min, 15 minutes awake between) the battery gave 0.45 W, the awake time included, against 0.83 to 0.86 W
+  in the four nights above; `ddr` counted 26388 of 28052 s suspended, the ADSP entered its sleep 10 times a second
+  while suspended, `cxsd` and `aosd` stayed 0. At suspend only the two UARTs still voted: the Surface Aggregator's
+  and Bluetooth's (`a98000.serial`), 25 MB/s on their QUP cores each. The tablet woke once unintended (18:21; no
+  power-key or lid event logged, the wake interrupt not recorded; a bump on the cover is the likely cause, as the
+  morning's wake by closing and opening the cover came from the lid's interrupt) and slept again after GNOME's
+  15 idle minutes.
+  Wi-Fi, Bluetooth and sound worked after the wakes. The modem does not resume from a sleep with its link down:
+  `mhi-pci-generic` logs `Resuming from non M3 state (RESET)` and `failed to resume device: -22`, then recovers it
+  (its WWAN ports return about 1.5 s later and ModemManager probes it again).
+- 7.2.11 revision 4 (2026-10-27, patches 0079 to 0081, nothing unloaded): the links went down without the boot
+  argument and `ddr` counted 591 of 630 s of a 10-minute sleep with the crypto engine (`runtime_status`
+  `suspended` when idle) and the bandwidth monitors loaded; GPS came back after the modem's restart; `cxsd` and
+  `aosd` stayed 0. With only the modem's link kept up (its `d3cold_allowed` 0) the modem resumed without a reset,
+  but `ddr` stayed 0 and the ADSP entered its sleep 102 times a second again. The night: a wake at 04:13 without a
+  wake interrupt (an ADSP message), then a deep suspend 26 s later that `mhi-pci-generic` refused
+  (`failed to suspend device`; the MHI core refuses while wake votes or packets are pending, as when ModemManager
+  probes the restarted modem); systemd then suspended to `s2idle`, which lasted 3 h 23 min (entering took 20 s).
+  The night averaged 1.40 W; its deep part (5 h 23 min) counted `ddr` 18266 of 19366 s. Wakes by the cover log
+  `gpio_keys` (TLMM GPIO 2), by the power key `pmic_pwrkey`, once `pm_debug_messages` is on.
+- With the modem's link kept up (revision 4, `icc_set_bw` trace up to the deepest point) the one vote left in the
+  RPMh sleep set was PCIe 5's 1 kB/s on its memory path (`1c00000.pci`, `pcie-mem`): `qcom_pcie_suspend_noirq()`
+  sets it for a link that stays up, to keep the data path working (ad9b9b6e36c9, 2023); the CPU-to-PCIe path is
+  active-only and stays enabled for `deep` (S2RAM). Tagging the memory path active-only before that vote and back
+  on resume (`icc_set_tag()`) compiled clean but was not tested: revision 5 powers the modem down instead.
+- 7.2.11 revision 5 (2026-10-28, patch 0082): a sleep started within 15 s of a wake found the modem busy
+  (`failed to suspend device: -16`), and `mhi-pci-generic` powered it down (`device busy, powering it down for
+  system suspend`); every sleep stayed deep, and GPS answered afterwards. 8 hours on battery: 0.33 W with 47 s
+  awake, `ddr` 27335 of 28988 s suspended, the ADSP 10 sleep entries a second; `cxsd` and `aosd` 0. The PM core
+  logged `parent mhi0 should not be sleeping` once for each of the modem's channel devices, re-created by its
+  restart while the next suspend was being prepared.
+- The wake without a wake interrupt is a notice from the ADSP's battery manager: the GLINK trace across that night
+  (`qcom_glink:qcom_glink_cmd_tx_data`, a kprobe on `pmic_glink_rpmsg_callback`) shows the first message after
+  that sleep on `PMIC_RTR_ADSP_APPS`: owner 32778, type 2, opcode 7, notification 0x81 (`NOTIF_BAT_INFO`), followed
+  by the driver's battery-info request; it was the only notice in 8 hours. Such wakes came 5 to 6.5 hours into
+  each of the three low-drain nights, none in the four nights at 0.85 W. With the cover closed GNOME suspends again
+  about 26 s later; with 0082 the modem's restart no longer turns that into `s2idle`.
+- Open: `cxsd` and `aosd` stayed 0 in every configuration above, so CX never collapses. Linux runs at EL1 here,
+  under the firmware's hypervisor (Gunyah). Another Surface Pro 11 (X1E80100, OLED), booted at EL2 with slbounce,
+  reaches `cxsd`, `aosd` and DDR low-power modes for 99.9 % of a 73-minute s2idle suspend at about 0.26 W, against
+  1.06 W on the same unit at EL1 (ramonjesusmiranda-debug/sp11-el2, October 2026). At EL2 the firmware takes the
+  wake time from the EL1 timers, which justririll/x1e-sleep's `x1e_el1tmr` module fills in. EL1 may be the limit;
+  not tried on this unit.
 - PowerDevil 6.7 sleeps again 10 s after a wake if the lid is closed, no external monitor counts and the lid action
   is Sleep (`checkWakeup`); after a wake by network, telephony or timer, after 30 s idle instead.
 - The power key's driver (`pm8941-pwrkey`) reports the press that woke the system, about 0.2 s before
