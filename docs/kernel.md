@@ -32,6 +32,8 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 | 7.2.11 revision 3 | 2026-10-23 | `kernel-7.2.11-300.fc45` | The 5G SKU's device tree with its modem |
 | 7.2.11 revision 4 | 2026-10-27 | `kernel-7.2.11-300.fc45` | Deep sleep: root ports, UARTs and crypto engine released |
 | 7.2.11 revision 5 | 2026-10-28 | `kernel-7.2.11-300.fc45` | A busy modem no longer aborts a system suspend |
+| 7.2.11 revision 6 | 2026-10-28 | `kernel-7.2.11-300.fc45` | Device test of revision 7 plus the clock `sync_state` series |
+| 7.2.11 revision 7 | 2026-10-29 | `kernel-7.2.11-300.fc45` | Type-C switch array, GPU fixes, video codec |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 

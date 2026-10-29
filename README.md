@@ -16,7 +16,9 @@ Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`), on a Fedora 45 B
 the ISO built on 2026-10-19 (7.2.11 revision 1, support RPM 3.4), updated on 2026-10-22 to 7.2.11 revision 2
 (three battery-driver fixes) and on 2026-10-23 and 24 to revision 3 (`7.2.11-300.sp11.3.fc45.aarch64`, the 5G
 SKU's modem) with support RPM 3.7 and sp11-sensors 1.15, which brought the GPS row, and on 2026-10-28 to revision
-5 (`7.2.11-300.sp11.5`, deep sleep's memory low-power mode); every row confirmed again with revision 5. The KDE
+5 (`7.2.11-300.sp11.5`, deep sleep's memory low-power mode); every row confirmed again with revision 5. On
+2026-10-29 it moved to revision 7 (`7.2.11-300.sp11.7`, GPU fixes and the video codec) with support RPM 3.8; with
+it the display, sleep, audio, touch, pen, Wi-Fi, Bluetooth, keyboard and rotation were confirmed again. The KDE
 Plasma Desktop edition builds from the same RPMs; it was last checked on 2026-09-30 with kernel revision 11.
 [`docs/verified.md`](docs/verified.md) has the details and the results with earlier kernels.
 
@@ -59,6 +61,9 @@ tablet did not stay asleep; the sensors RPMs fix these since 2026-10-07 (libssc 
 tablet drew 0.33 W through 8 hours with revision 5, against 0.83 to 0.86 W with earlier revisions; the modem is off
 while it sleeps and back about a minute after a wake ([`docs/hardware.md`](docs/hardware.md), Sleep).
 
+USB-C data works with the plug one way round; turned over, a USB 3 stick is not found on either port, while Windows
+finds it both ways ([`docs/hardware.md`](docs/hardware.md), USB-C data).
+
 In the live session, audio and battery status are unavailable because the audio DSP stays off while running from
 USB-C. Both work once installed.
 
@@ -71,8 +76,8 @@ USB-C. Both work once installed.
   No build from one has been reported. The X1P64100 LCD variant uses a different device tree and is rejected.
 - Secure Boot must be disabled: the kernel is a local build of Fedora's kernel package and is not signed.
 - Windows must stay on the device: the build reads the hardware identity, the built-in radio's Bluetooth address,
-  the ADSP/CDSP/GPU firmware and the sensor configuration and registry from it. Without the firmware an installed
-  system has no audio, battery reporting or GPU acceleration.
+  the ADSP/CDSP/GPU/video firmware and the sensor configuration and registry from it. Without the firmware an
+  installed system has no audio, battery reporting, GPU acceleration or hardware video decoding.
 - The support RPM and the ISO contain proprietary Qualcomm firmware copied from your own Windows installation. Do
   not redistribute them; point other people to this repository instead.
 

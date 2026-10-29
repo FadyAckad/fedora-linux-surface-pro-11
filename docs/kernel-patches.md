@@ -131,6 +131,23 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
   such change (its `no_m3` support of 7.3 is for devices without M3).
 - Revisions 4 and 5 pushed together 2026-10-28 (head `f9f03105`, tree `bc657515`).
 
+### 7.2.11 revision 7: Type-C switch array, GPU fixes, video codec
+
+- Seven commits on top of revision 5 (0083–0089), found by the 2026-10-26 comparison with jglathe's
+  linux_ms_dev_kit, which carries all of them but 0089. The six posted ones are carried from their postings, each
+  with a `[sp11: ...]` note giving its message-id; 0085's last hunk applies with less context (7.2 calls
+  `a6xx_gmu_rpmh_dep_votes_init()` above it), the change being the same as in jglathe's tree.
+  - 0083: the Type-C switch lookup initializes the array it checks for duplicates (a fix of 7.2.5's duplicate
+    check; it does not fix the reversed USB-C plug, `docs/hardware.md`);
+  - 0084–0088: five fixes of Qualcomm's "drm/msm: Assorted fixes - October" series (patches 2 to 6, posted
+    2026-10-24): GMU shutdown waits for the whole GPU, no stale boot-up bandwidth vote, the devfreq idle time,
+    the scheduler priority within a ring, preemption records reset across suspend;
+  - 0089 (this repository): the Denali tree enables Iris, the video codec, with the Surface's `qcvss8380.mbn`
+    (shipped by support 3.8). VP9, H.264 and H.265 decode in hardware (`docs/hardware.md`, Video codec).
+- Revision 6 (2026-10-28, a device test only) also carried Brian Masney's clock `sync_state` series between 0088
+  and the codec; it is left out (below).
+- Pushed 2026-10-29 (head `7f035fc3`, tree `d9bc0070`).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -181,6 +198,9 @@ The patches by number, with their origin and what each is needed for.
 | 0080 | GENI serial: force runtime suspend in system sleep | Praveen Talari (mainline `d0cd9c8d0fd5`) | the UARTs' QUP and CX votes released in sleep |
 | 0081 | Crypto engine: runtime PM, memory bandwidth only while busy | Udit Tiwari (mainline `6f5569203bb6`) | the crypto engine's 394 MB/s memory vote gone in sleep |
 | 0082 | MHI PCI: power a busy modem down for system suspend instead of aborting it | this repository | deep sleep shortly after a wake (no `s2idle` fallback) |
+| 0083 | Type-C mux: initialize the orientation switch array | Haobo Cheng (posted 2026-08-04) | the orientation switch chain (not the reversed plug) |
+| 0084–0088 | Adreno GMU shutdown idle check, boot-up bandwidth vote, devfreq idle time, scheduler priority, preemption records across suspend | Jie Zhang, Akhil P Oommen (posted 2026-10-24) | GPU stability around its idle power-downs, a little power while awake |
+| 0089 | Denali device tree: the video codec with the Surface's firmware | this repository | hardware video decoding and encoding |
 
 ## Left out of v23.2, and the device check for each
 
@@ -191,7 +211,11 @@ Nothing here drives hardware the feature table depends on; in parentheses, what 
 - The ADSP attach series (remoteproc, SMP2P, pmic_glink probe order): mainline's PAS driver restarts the ADSP itself
   (`docs/kernel.md`; audio, battery, sensors, USB-C after boot).
 - The clock `sync_state` series and a gcc UFS log change; the kernel arguments keep unused clocks and power domains
-  on (boot, suspend).
+  on (boot, suspend). Its v3 (Brian Masney, 2026-06-26) was tested in 7.2.11 revision 6: with `clk_ignore_unused`
+  it only left the AOSS clock provider waiting for `sync_state` (its consumer, the QDSS trace hub
+  `10004000.tpda`, has no driver loaded); a boot without that argument, and one without `pd_ignore_unused` too,
+  switched the unused clocks off and worked, but `cxsd` stayed at 0 in a 10-minute sleep, and the eDP pixel clock
+  logged twice "rcg didn't update its configuration" (`disp_cc_mdss_dptx3_pixel0_clk_src`) at the display's enable.
 - The PCIe ASPM API series and ath12k's MAC-from-device-tree hack (Wi-Fi and NVMe, also after resume).
 - v23.2's camera stack (far too dark): revision 6 carries turbineBMW's instead (0059–0070), revision 7 the privacy
   LED (0071).

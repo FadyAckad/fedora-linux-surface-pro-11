@@ -36,7 +36,7 @@ Requires:       policycoreutils
 
 %description
 Device-bound support for Microsoft Surface Pro 11 (X1E80100, OLED, SKU @SKU@):
-Qualcomm ADSP/CDSP/GPU firmware extracted from this device's Windows installation,
+Qualcomm ADSP/CDSP/GPU/video firmware extracted from this device's Windows installation,
 ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, WCN7850 Wi-Fi board
 data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, scmi-cpufreq loading,

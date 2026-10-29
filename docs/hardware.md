@@ -26,17 +26,27 @@ Windows.
 
 - Firmware: the ADSP, CDSP and GPU blobs come from Windows' DriverStore (`surfacepro_ext_adsp8380*`,
   `qcnspmcdm_ext_cdsp8380*`, `qcdx8380*`), Fedora's `qcom-firmware` having no Denali directory. The Denali DT
-  requests `qcadsp8380.mbn`, `adsp_dtb.mbn`, `qccdsp8380.mbn`, `cdsp_dtb.mbn` and the zap shader
-  `qcdxkmsuc8380.mbn`; Windows' `adsp_dtbs.elf`/`cdsp_dtbs.elf` get the DT names.
+  requests `qcadsp8380.mbn`, `adsp_dtb.mbn`, `qccdsp8380.mbn`, `cdsp_dtb.mbn`, the zap shader
+  `qcdxkmsuc8380.mbn` and, from 7.2.11 revision 6 on, the video codec's `qcvss8380.mbn` (in `qcdx8380*`, shipped
+  since support 3.8); Windows' `adsp_dtbs.elf`/`cdsp_dtbs.elf` get the DT names.
 - Not shipped since support 2.3: the `*_dtbs.elf` copies; `*.jsn` (the in-kernel pd-mapper,
-  `CONFIG_QCOM_PD_MAPPER=m`, needs none); `qcdxkmsucpurwa.mbn` (the X1P zap shader); `qcvss8380.mbn` (Denali leaves
-  the iris node disabled).
+  `CONFIG_QCOM_PD_MAPPER=m`, needs none); `qcdxkmsucpurwa.mbn` (the X1P zap shader); `qcvss8380_pa.mbn` (the X1P
+  video firmware).
 - Audio: ooaklee's `sp11-audio-v19c` topology and UCM, with its `x1e80100.conf` matcher patched for the 5G variant
   (`UCM_SP11_REGEX`) and the microphone gain v19c leaves at 0 dB inserted into the UCM Mic device (`UCM_MIC_GAIN`,
   +16 dB). The support RPM replaces `alsa-ucm`'s `conf.d/x1e80100/x1e80100.conf` symlink and re-applies on an
   `alsa-ucm` trigger.
 - Wi-Fi: WCN7850, PCI 17cb:1107, `qmi-board-id=255`; `disable-rfkill` is in the Denali DTS. Fedora's `board-2.bin`
   has no exact entry, so the 17cb:3378 entry is extracted with `ath12k-bdencoder` as `board.bin`.
+- PCIe L1.2 (7.2.11 revision 5, 2026-10-28): the Wi-Fi (`0004:01:00.0`) and NVMe (`0006:01:00.0`) functions report
+  maximum snoop and no-snoop latencies of 0 ns (nothing programs them on Qualcomm hosts), which is below the
+  links' `LTR1.2_Threshold` (76800 ns Wi-Fi, 136192 ns NVMe), so they never enter L1.2: since boot the Wi-Fi link
+  had entered L1.1 42408 times and L1.2 49 times (`/sys/kernel/debug/pci@1c08000/link_transition_count`). At
+  runtime, clearing `LTR_EN` on the Wi-Fi function (a proposed quirk) or setting the threshold to 0 on both ends
+  (as Windows does) turned every L1.1 entry of the Wi-Fi link into an L1.2 entry (about 11000 per 2 minutes); the
+  threshold of 0 also brought the NVMe link into L1.2 (3 to 6 entries per 2 minutes, its L1 entries being rare).
+  The battery's draw with the screen on stayed within 15 mW (6.95 to 6.97 W per 2-minute window), so neither is
+  carried. No kernel warning, the Wi-Fi stayed connected.
 - Bluetooth address: the controller enumerates without one; `sp11-bt-set-addr.c` (OE commit 69f40d5) sets it over
   raw HCI management before `bluetooth.service` (udev-triggered). Upstream's `parse_mac` fills the little-endian
   `bdaddr_t` in printed order, so `30-build-support-rpm.sh` patches `out[i]` to `out[5 - i]`; `sp11-bt-apply` only
@@ -56,6 +66,29 @@ Windows.
   `Not charging`, which UPower shows as `fully-charged`. On revision 2 (patches 0075 to 0077) the battery has
   `capacity` and UPower takes its percentage from it; with a USB-C charger unplugging and plugging in each sent a
   `change` uevent for `qcom-battmgr-usb`, and UPower's `on-battery` followed at once (2026-10-22).
+- Video codec (Iris, 7.2.11 revision 7, 2026-10-29): `qcom-iris-decoder` and `qcom-iris-encoder` appear as V4L2
+  devices, and GStreamer 1.28.7 registers `v4l2vp9dec`, `v4l2h264dec`, `v4l2h265dec`, `v4l2av1dec`, `v4l2h264enc`
+  and `v4l2h265enc`. A 720p VP9 clip (profile 0) decoded in hardware gave the same 120 frames as libvpx's decoder,
+  in 0.44 s. Clips made by the hardware H.264 and H.265 encoders are signalled with colorimetry `2:4:5:4` (the
+  H.264 one also with level 1 at 720p), which is not in the colorimetry list GStreamer probes for the decoder, so
+  `v4l2h264dec`/`v4l2h265dec` refuse them before decoding ("not-negotiated"). Relabelled `bt601` (`capssetter`),
+  the H.264 clip decoded to 120 frames in 0.43 s, among them all 60 that Cisco's `openh264dec` put out for the same
+  clip, and the H.265 clip to 120 distinct frames in 0.44 s. A VP9 clip without an explicit format comes out as
+  12-bit 4:4:4 (profile 3).
+- USB-C data on 7.2.11 revision 5 (2026-10-28, a USB 3 stick, SanDisk 3.2Gen1): plugged one way (`normal` in
+  `/sys/class/typec/portN/orientation`) it ran at 5000 Mb/s on both ports; turned over (`reverse`) no USB device
+  appeared within 10 s on either port, while the Type-C class saw the partner and its orientation. Windows finds
+  the stick both ways. Port 0 is `a600000.usb` behind the PS8830 on `i2c@b8c000`, port 1 `a800000.usb` behind the
+  one on `i2c@b9c000` (both at address 0x08). Revision 6 behaves the same. A kprobe trace
+  on both revisions shows the reversed orientation reaching the PS8830 retimer and the QMP PHY, and the PHY
+  rewriting its tables for it, so the switch lookup (patch 0083) is not the cause; the lane setup for the reversed
+  plug is the lead (the trace's timestamps run 13–29 ms ahead of the journal's: order events within one source).
+  Reversed on revision 7 (2026-10-29): the retimer's register 0x00 reads 0x23 (connected, reversed, USB 3) and the
+  USB 3 root port sits in `Polling` (the device's receivers detected, link training failing; `U0` with the plug
+  the usual way), the USB 2 port unconnected. A port power cycle (the port switches its power) ended in `Polling`
+  again; with the retimer's orientation bit cleared the port fell back to `RxDetect`, with and without a power
+  cycle. The retimer thus needs its reversed setting, and the link between the PHY, set to reversed by the same
+  orientation, and the retimer does not train.
 - TPM: none under Linux (the kernel arguments carry `systemd.tpm2_wait=0`). Windows reports Microsoft Pluton
   (`tpmtool getdeviceinformation`: manufacturer `MSFT`, vendor `Pluton.TPM.Q`) behind the ACPI `TPM2` table's start
   method 14 (OEM `QCOM`), which Linux's `include/acpi/actbl3.h` does not define (13 is Pluton's CRB) (2026-10-22).

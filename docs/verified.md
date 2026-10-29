@@ -351,3 +351,25 @@ What has been confirmed on the tested unit, by date and package version. "The ke
 - Confirmed by hand on 2026-10-28 (owner), with revision 5, the feature table's remaining rows: the backlight,
   power profiles, USB-C charging and data, Flatpak, the Windows entry in GRUB, the pairings shared with Windows,
   the sensors' readings, tablet mode, automatic screen brightness, both cameras and the front camera's light.
+
+## Kernel 7.2.11 revisions 6 and 7: GPU fixes, video codec (2026-10-28 and 2026-10-29)
+
+- Installed: on 2026-10-28 the kernel RPMs `7.2.11-300.sp11.6.fc45` (revision 5, the Type-C switch-array fix, five
+  Adreno fixes, the clock `sync_state` series and the video codec) with support RPM 3.8 (the codec's firmware),
+  `dnf install` next to revision 5, dnf removing revision 3; on 2026-10-29 `7.2.11-300.sp11.7.fc45` (revision 6
+  without the clock series) next to revision 5, revision 6 removed by the owner before.
+- Confirmed with revision 6: the 5G tree, `Enforcing`, both DSPs, the crypto engine idle as `suspended`; no GPU
+  hang, GMU or HFI line in the kernel log after a sleep; the codec's V4L2 devices. One boot without
+  `clk_ignore_unused` and one without `pd_ignore_unused` too came up with a working screen; in a 10-minute sleep
+  each, `cxsd` stayed at 0 and `ddr` counted 571 of 609 s and 560 of 599 s.
+- Found with revision 6: the clock series left the AOSS clock provider waiting for `sync_state` in the normal entry;
+  without `clk_ignore_unused` the eDP pixel clock warned twice at the display's enable; a USB 3 stick plugged in
+  reversed was still not found (`docs/hardware.md`, USB-C data).
+- Confirmed with revision 7: `Enforcing`, both DSPs, the crypto engine idle, no GPU hang, GMU or HFI line after a
+  sleep, no provider waiting for sync_state; a 720p VP9 clip decoded in hardware frame for frame as libvpx decodes
+  it (`docs/hardware.md`, Video codec); the USB 3 stick at 5000 Mb/s plugged the usual way on port A.
+- Confirmed by hand with revision 7 (owner): the speakers, the microphone, touch and the pen, Wi-Fi, the keyboard
+  cover's keys and touchpad, Bluetooth, rotation with the keyboard folded back, a sleep and wake.
+- Confirmed with revision 7 on 2026-10-29: 720p H.264 and H.265 clips decoded in hardware once relabelled `bt601`,
+  the H.264 frames matching Cisco's `openh264dec`; the reversed USB-C plug's port state and the retimer test
+  (`docs/hardware.md`, USB-C data).

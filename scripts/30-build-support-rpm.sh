@@ -10,7 +10,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.7"
+VERSION="3.8"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
@@ -53,7 +53,7 @@ FR="$WINDOWS_ROOT/Windows/System32/DriverStore/FileRepository"
 [ -d "$FR" ] || die "Windows DriverStore not found at $FR (is Windows mounted at $WINDOWS_ROOT?)"
 FWD="$STAGE/usr/lib/firmware/qcom/x1e80100/microsoft/Denali"; install -d "$FWD"
 for pair in qcadsp8380.mbn:qcadsp8380.mbn adsp_dtbs.elf:adsp_dtb.mbn qccdsp8380.mbn:qccdsp8380.mbn \
-            cdsp_dtbs.elf:cdsp_dtb.mbn qcdxkmsuc8380.mbn:qcdxkmsuc8380.mbn; do
+            cdsp_dtbs.elf:cdsp_dtb.mbn qcdxkmsuc8380.mbn:qcdxkmsuc8380.mbn qcvss8380.mbn:qcvss8380.mbn; do
   win=${pair%%:*}; dt=${pair#*:}
   src=$(find "$FR" -maxdepth 2 -type f -iname "$win" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
   [ -n "$src" ] || die "firmware $win not found in $FR"

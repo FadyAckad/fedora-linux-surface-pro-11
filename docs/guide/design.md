@@ -3,17 +3,17 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.2.11-300.fc45` source RPM with Fedora's configuration, rebuilt with the 82 patches of
+- Kernel: Fedora's `kernel-7.2.11-300.fc45` source RPM with Fedora's configuration, rebuilt with the 89 patches of
   the branch `sp11/7.2.11` of the project's kernel fork (on the stable tag `v7.2.11`, pinned by commit; SP11
-  revision 5 of 7.2.11) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md); each patch, its authors
+  revision 7 of 7.2.11) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md); each patch, its authors
   and what it is needed for: [`docs/kernel-patches.md`](../kernel-patches.md).
   - `kernel-local` enables the patch set's touch driver and two camera sensor drivers, and two drivers Fedora's
     configuration leaves out, the video clock controller and the crypto engine: without them Linux never lowers
     the power-rail and bus votes it takes at boot, and the compute DSP never wakes from sleep.
   - The patches are ooaklee's Surface Pro 11 work from linux_ms_dev_kit-sp11 v23 with the X1E fixes from jglathe's
-    tree that act on this machine, turbineBMW's camera branch, three changes from mainline 7.3 for deep sleep and
-    this repository's own commits; that tree's Ubuntu packaging, SAUCE patches, camera stack and ADSP attach series
-    are not carried.
+    tree that act on this machine, turbineBMW's camera branch, three changes from mainline 7.3 for deep sleep, five
+    Adreno fixes and a Type-C fix carried from their postings, and this repository's own commits; that tree's Ubuntu
+    packaging, SAUCE patches, camera stack and ADSP attach series are not carried.
   - Deep sleep takes the PCIe links down, so the memory reaches its low-power mode (about 0.33 W asleep instead of
     0.85 W). The modem loses power with its link and starts again after each wake; keeping it on would keep the
     memory awake ([`docs/hardware.md`](../hardware.md), Sleep).
@@ -56,8 +56,8 @@ bullet is in the working note it names.
   stock ones (`kernel`, `kernel-core`, `kernel-modules*`, `kernel-uki-*`) in every configured repository, while
   SP11 kernel RPMs install from local files as they are ([`docs/guide/update.md`](update.md)).
   [`docs/fedora-media.md`](../fedora-media.md).
-- Firmware: only the five files the Denali device tree requests (ADSP and CDSP images with their device-tree
-  blobs, GPU zap shader), under the names it requests them by. [`docs/hardware.md`](../hardware.md).
+- Firmware: only the six files the Denali device tree requests (ADSP and CDSP images with their device-tree
+  blobs, GPU zap shader, video codec), under the names it requests them by. [`docs/hardware.md`](../hardware.md).
 - Initramfs: the live one carries only the GPU zap shader; the ADSP/CDSP firmware (about 24 MiB) and the Adreno
   microcode go into the installed system's initramfs. No rescue image: Fedora's rescue entry would name a
   device-tree directory that does not exist. [`docs/fedora-media.md`](../fedora-media.md).
