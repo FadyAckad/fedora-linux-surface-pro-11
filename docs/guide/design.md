@@ -15,8 +15,8 @@ bullet is in the working note it names.
     Adreno fixes and a Type-C fix carried from their postings, and this repository's own commits; that tree's Ubuntu
     packaging, SAUCE patches, camera stack and ADSP attach series are not carried.
   - Deep sleep takes the PCIe links down, so the memory reaches its low-power mode (about 0.33 W asleep instead of
-    0.85 W). The modem loses power with its link and starts again after each wake; keeping it on would keep the
-    memory awake ([`docs/hardware.md`](../hardware.md), Sleep).
+    0.85 W). The modem loses power with its link and starts again after each wake; keeping its link up would keep
+    the memory awake ([`docs/hardware.md`](../hardware.md), Sleep).
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb` from the kernel package, on the 5G SKU
   `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree with the modem on PCIe 5 (chosen by the unit's SKU).
   It is loaded explicitly everywhere: GRUB `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry
@@ -74,7 +74,8 @@ bullet is in the working note it names.
   `sp11-gnss` therefore speaks the service itself and writes each fix as NMEA to a socket GeoClue reads, only while
   an application asks for the exact location; across a sleep it pauses rather than closes, since GeoClue does not
   reconnect. A udev rule keeps ModemManager off the modem's QMI port, which never answers and would block every
-  suspend. Mobile data is not set up. [`docs/modem.md`](../modem.md).
+  suspend. Mobile data: the modem frames its data as MBIM, so from kernel revision 8 its data channels go to the
+  kernel's MBIM driver; ModemManager and NetworkManager do the rest. [`docs/modem.md`](../modem.md).
 - Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth radio, so an
   external monitor or a USB Bluetooth dongle does not change the result. [`docs/hardware.md`](../hardware.md).
 - Tablet mode: mainline gives the Surface Pro 11 the Surface Aggregator's KIP cover switch, whose change event this

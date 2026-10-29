@@ -373,3 +373,22 @@ What has been confirmed on the tested unit, by date and package version. "The ke
 - Confirmed with revision 7 on 2026-10-29: 720p H.264 and H.265 clips decoded in hardware once relabelled `bt601`,
   the H.264 frames matching Cisco's `openh264dec`; the reversed USB-C plug's port state and the retimer test
   (`docs/hardware.md`, USB-C data).
+
+## Kernel 7.2.11 revision 8: mobile data (2026-10-29)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.8.fc45` (revision 7 and patch 0090, the modem's data channels for
+  `mhi_wwan_mbim`) with support RPM 3.8, `dnf install` next to revisions 5 and 7, dnf removing revision 4; a
+  nano-SIM (o2 Germany) in the slot behind the SSD door.
+- Confirmed with revision 8: `Enforcing`, both DSPs, the crypto engine idle, no provider waiting for sync_state;
+  `wwan0` from `mhi_wwan_mbim`, ModemManager's ports `wwan0 (net), wwan0mbim0 (mbim)`; over `wwan0` alone pings
+  over IPv4 and IPv6 and 5 MB in 0.38 s; GPS's QRTR path; no SELinux denial. Before it, a module build of the same
+  change on revision 7 had passed with pages in Firefox over mobile data (owner, 2026-10-29).
+- Measured after a 10-minute deep sleep (the mobile profile set to connect by itself): Wi-Fi online after 20.7 s,
+  the modem answering after 36.0 s, registered after 50.5 s, mobile data online after 52.3 s; `ddr` 579 of 619 s,
+  `cxsd` 0. With a test tree that keeps the modem powered through the sleep (`vreg_wwan` always on, not PCIe 5's
+  slot supply): the modem resumed without a restart, answering after 3.4 s, registered after 15.7 s, mobile data
+  after 16.7 s; `ddr` 569 of 608 s, `cxsd` 0; the battery's reading changed by the same 0.511 Wh in both runs.
+- Wi-Fi: country `DE` for the system and the chip, no channel limited to passive scanning, 102 channels; a full
+  scan took 8.5 s with the country known, the first scan after a wake 16 s (the chip restarts in world roaming and
+  finds `DE` 7 s into it).
+- Confirmed by hand with revision 8 (owner): every row of the feature table.

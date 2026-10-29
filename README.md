@@ -18,11 +18,13 @@ the ISO built on 2026-10-19 (7.2.11 revision 1, support RPM 3.4), updated on 202
 SKU's modem) with support RPM 3.7 and sp11-sensors 1.15, which brought the GPS row, and on 2026-10-28 to revision
 5 (`7.2.11-300.sp11.5`, deep sleep's memory low-power mode); every row confirmed again with revision 5. On
 2026-10-29 it moved to revision 7 (`7.2.11-300.sp11.7`, GPU fixes and the video codec) with support RPM 3.8; with
-it the display, sleep, audio, touch, pen, Wi-Fi, Bluetooth, keyboard and rotation were confirmed again. The KDE
+it the display, sleep, audio, touch, pen, Wi-Fi, Bluetooth, keyboard and rotation were confirmed again; the same day
+to revision 8 (`7.2.11-300.sp11.8`), which brought the mobile-data row (a nano-SIM of o2 Germany, LTE and 5G NSA);
+every row confirmed again with revision 8. The KDE
 Plasma Desktop edition builds from the same RPMs; it was last checked on 2026-09-30 with kernel revision 11.
 [`docs/verified.md`](docs/verified.md) has the details and the results with earlier kernels.
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.5) |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.8) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Display with GPU acceleration | ✅ |
@@ -47,7 +49,7 @@ Plasma Desktop edition builds from the same RPMs; it was last checked on 2026-09
 | Tablet mode: keyboard and touchpad off while the keyboard is folded back | ✅ |
 | Sensors: automatic screen brightness | ✅ |
 | GPS on the 5G SKU: the location for applications through GeoClue (GNOME: Location on), with a view of the sky | ✅ |
-| 5G modem: mobile data | ❌ |
+| 5G modem: mobile data with a nano-SIM (GNOME: Mobile Network), from kernel revision 8 | ✅ |
 | Cameras: front and rear (GNOME Snapshot, Firefox) | ✅ |
 | Front camera's light while the camera is in use | ✅ |
 | IR camera (face login) | ❌ |

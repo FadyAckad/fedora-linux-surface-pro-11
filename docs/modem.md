@@ -1,7 +1,8 @@
 # 5G modem and GNSS
-The 5G SKU's Snapdragon X65 modem: its wiring, the device tree that brings it up, what Linux makes of it, and its
-GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Established on the tested unit on
-2026-10-23 with a test device tree booted once per round; without a SIM (the eSIM holds no profile).
+The 5G SKU's Snapdragon X65 modem: its wiring, the device tree that brings it up, what Linux makes of it, mobile
+data, and its GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Established on the tested
+unit on 2026-10-23 with a test device tree booted once per round, without a SIM (the eSIM holds no profile); mobile
+data on 2026-10-29 with a nano-SIM.
 
 ## Hardware
 
@@ -33,17 +34,15 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
 
 ## Linux
 
-- `mhi-pci-generic` binds the modem through its generic entry (`qcom-sdx65m`): the ports `wwan0mbim0`,
-  `wwan0qcdm0` and `wwan0qmi0`, the network devices `mhi_hwip0` and `mhi_swip0`, and QRTR over the `IPCR` channel:
-  node 2 (IPA control, TFTP, DIAG) and node 3, the modem's QMI services (DMS, NAS, WDS, UIM, the location service
-  16 and more).
+- `mhi-pci-generic` binds the modem (`qcom-sdx65m`): the ports `wwan0mbim0`, `wwan0qcdm0` and `wwan0qmi0`, the
+  data channels (below), and QRTR over the `IPCR` channel: node 2 (IPA control, TFTP, DIAG) and node 3, the
+  modem's QMI services (DMS, NAS, WDS, WDA, UIM, the location service 16 and more).
 - The QMI port never answers (`qmicli -d /dev/wwan0qmi0`: `Transaction timed out`). The same services answer over
   QRTR (`qmicli -d qrtr://3`) and as QMI over MBIM (`qmicli -p -d /dev/wwan0mbim0 --device-open-mbim`).
 - ModemManager 1.24.2 makes a modem of it with the `generic` plugin and the MBIM port; without a SIM it stays
   `failed` (`esim-without-profiles`), power state low. Its `qcom-soc` plugin probes `qrtr3` and gives up (no QMI
   network port).
-- The radio may go online (`--dms-set-operating-mode=online` accepted, `HW restricted: 'no'`): no FCC lock. Mobile
-  data needs a SIM or an eSIM profile; not tested.
+- The radio may go online (`--dms-set-operating-mode=online` accepted, `HW restricted: 'no'`): no FCC lock.
 - In the normal boot the operating mode reads `shutting-down` (`qmicli -d qrtr://3 --dms-get-operating-mode`, with
   the rule below); `low-power`, set the same way, held through a night (2026-10-26).
 - Asleep, the modem changes nothing the battery can show (deep sleep, revision 3, 2026-10-24 to 2026-10-27): 0.86 W
@@ -62,6 +61,45 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
 - `77-sp11-modem.rules` (support RPM, 5G builds) sets `ID_MM_PORT_IGNORE` on the port: ModemManager makes the modem
   at 30.8 s, stops in 19 ms, and the tablet sleeps (deep) with the modem powered. Anything else that writes to the
   port still blocks sleep until it closes it.
+
+## Mobile data
+
+- Two SIM slots: ModemManager's slot 1 is the nano-SIM behind the SSD door (Windows' slot index 0), slot 2 the
+  eSIM. ModemManager 1.24.2 switches them over MBIM (`--set-primary-sim-slot`); with a SIM in, the modem took slot
+  1 after Windows had mapped it. A SIM with a PIN is locked again whenever the modem restarts (`unknown -> locked`).
+- The modem frames its data as MBIM: the WDA data format of its PCIe endpoint (`qmicli -d qrtr://3
+  --wda-get-data-format="ep-type=pcie,ep-iface-number=4"`; without the endpoint `InvalidArgument`) reads link
+  layer `raw-ip`, uplink and downlink aggregation `mbim`, NDP signature 5460041 (`IPS` and 0, MBIM's NDP16 for IP
+  session 0), at most 32 datagrams and 32768 bytes per downlink transfer. Asked for raw IP without aggregation, it
+  answers `Successfully set data format` with `mbim` again.
+- Up to revision 7 the bare `17cb:0308` entry named the data channels `IP_HW0` for `mhi_net` (`mhi_hwip0`, plain IP;
+  `mhi_swip0` on `IP_SW0`): the connection came up with the carrier's addresses but carried nothing. The modem
+  forwarded none of the packets it took (ModemManager's counters: 48 bytes per connection, also for one that lasted
+  0 s), and the NTBs it sent ended as IPv4 header errors (`IpInHdrErrors`; an NTB starts with `NCMH`).
+- From revision 8 (patch 0090) the modem's IDs get the generic channel set with the data channels named
+  `IP_HW0_MBIM`, for `mhi_wwan_mbim`, without `IP_SW0`: one network device, `wwan0`. ModemManager 1.24.2 lists
+  `wwan0 (net), wwan0mbim0 (mbim)` and connects session 0 on `wwan0`. Its driver check for MBIM data ports knows
+  only `cdc_mbim` and `mhi_net` (and resolves `wwan0` to `mhi-pci-generic`), but no connect path calls it; upstream
+  (c3ef78cc, 1.25.95-dev) accepts `mhi-pci-generic` there and no longer `mhi_net`.
+- With a module build of the change on revision 7 (2026-10-29, o2 Germany): IPv4 and IPv6, 5 MB in 0.34 s, pages in
+  Firefox with Wi-Fi off, name lookups over `wwan0`, ModemManager's counters 6.4 MB in and 0.6 MB out in 60 s; GPS's
+  QRTR path unchanged; a deep sleep, then the connection again. Revision 8 itself the same day: 5 MB in 0.38 s,
+  IPv4 and IPv6, GPS's QRTR path (`docs/verified.md`).
+- The APN: Fedora's mobile-broadband-provider-info (20240407) knows 262/03 only through E-Plus-era entries
+  (AldiTalk, blau.de, E-Plus, simyo, all `internet.eplus.de`), so GNOME offers no o2 entry; `internet` (Windows')
+  and `internet.eplus.de` both work.
+- After a wake (revision 5 on: the modem off in deep sleep, restarted by the MHI recovery) its ports return during
+  the resume, its main processor appears on QRTR 13 s later and it answers ModemManager's MBIM open 33 to 36 s
+  after the wake (0.5 s after a driver reload without a power cycle). ModemManager drops the modem at every
+  suspend and probes it again on resume; it then waits 10 s, at every start of the modem, for a location
+  indication this modem never sends (`couldn't load supported assistance data types`; the event registration under
+  GNSS below), registers after 47 to 51 s, and NetworkManager reconnects a profile with `connection.autoconnect
+  yes` (GNOME's has `no`) about 2 s later.
+- Kept powered through the sleep (a test tree, 2026-10-29: `vreg_wwan` with `regulator-always-on` and no longer PCIe
+  5's `vddpe-3v3-supply`; the link still goes down) the modem resumed without a reset or new ports: ModemManager's
+  probe answered after 3.4 s, registration after 15.7 s (the 10 s wait included), mobile data after 16.7 s. In a
+  10-minute sleep `ddr` counted 569 of 608 s (579 of 619 s with the modem off), `cxsd` 0 in both; the battery's
+  reading moved by the same 0.511 Wh in both runs, too coarse for the modem's own draw.
 
 ## GNSS
 
@@ -118,6 +156,8 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
 ## Open
 
 - The wake pin; whether the modem needs to wake the tablet at all.
+- The modem kept powered through deep sleep (above): its cost through a night.
+- ModemManager's 10 s wait for the location indication; eSIM profiles from Linux (lpac, not packaged in Fedora).
 
 ## History
 
@@ -129,3 +169,7 @@ GNSS receiver, whose positions reach GeoClue through the support RPM's feed. Est
   device, its missing reconnection after sleep found and the feed paused across sleep instead (support 3.6).
 - 2026-10-27: the drain through a night measured with and without the PCIe link and with the radio in `low-power`:
   no difference within the battery's resolution.
+- 2026-10-29: mobile data with a nano-SIM: the connection carried nothing over `mhi_net` (rounds 1 to 3), the
+  modem's MBIM framing found and refusing raw IP; a module build with the data channels for `mhi_wwan_mbim` passed
+  (round 4); 7.2.11 revision 8 built with it and confirmed. The return after a wake timed; a test tree keeping the
+  modem powered through deep sleep brought mobile data back after 17 s instead of 52 s.

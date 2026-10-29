@@ -34,6 +34,7 @@ Fedora's kernel package rebuilt with the SP11 patch set: sources, build, revisio
 | 7.2.11 revision 5 | 2026-10-28 | `kernel-7.2.11-300.fc45` | A busy modem no longer aborts a system suspend |
 | 7.2.11 revision 6 | 2026-10-28 | `kernel-7.2.11-300.fc45` | Device test of revision 7 plus the clock `sync_state` series |
 | 7.2.11 revision 7 | 2026-10-29 | `kernel-7.2.11-300.fc45` | Type-C switch array, GPU fixes, video codec |
+| 7.2.11 revision 8 | 2026-10-29 | `kernel-7.2.11-300.fc45` | The 5G modem's data channels for the MBIM driver |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 
@@ -215,3 +216,5 @@ Every command with its expected output: `.claude/skills/sp11-kernel-update/`.
   (`a4c9a6c7`).
 - 2026-10-27 and 28: 7.2.11 revisions 4 (three mainline 7.3 changes for deep sleep) and 5 (the modem's driver no
   longer refuses a suspend); revision 5 passed and both were pushed together (`f9f03105`).
+- 2026-10-29: 7.2.11 revision 8, the 5G modem's data channels for `mhi_wwan_mbim` (mobile data); built from an
+  unpushed commit after its module build passed on the device, passed the same day and pushed (`86f4bc1a`).

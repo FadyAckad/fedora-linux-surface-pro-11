@@ -33,6 +33,10 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
 - GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from
   windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
   ([`docs/modem.md`](../modem.md)).
+- Mobile data (5G SKU, kernel revision 8 or later): Fedora's provider list offers no APN for some carriers (o2
+  Germany: set `internet` in Settings > Mobile Network). A SIM with a PIN asks for it again after every sleep, since
+  the modem restarts, and the connection returns about a minute after a wake only if it connects automatically
+  ([`docs/modem.md`](../modem.md), Mobile data).
 - Up to `sp11-sensors` 1.14, iio-sensor-proxy logged five SELinux denials at every start (`/etc/passwd`,
   `dac_read_search`, `dac_override`): GIO loaded gvfs's module into it, which looked for a desktop session. The
   sensors worked regardless. Fixed in 1.15 (2026-10-24); up to 1.12 GeoClue also got no heading from the compass

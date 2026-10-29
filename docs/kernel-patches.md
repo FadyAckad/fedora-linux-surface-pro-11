@@ -148,6 +148,16 @@ Dates and Fedora kernels: the revision table in `docs/kernel.md`.
   and the codec; it is left out (below).
 - Pushed 2026-10-29 (head `7f035fc3`, tree `d9bc0070`).
 
+### 7.2.11 revision 8: the 5G modem's MBIM data channels
+
+- One commit on top of revision 7 (0090, this repository): `mhi-pci-generic` matches the modem by its subsystem
+  (`17cb:0308`, subsystem `17cb:0308`) and gives it the generic channel set with the hardware data channels named
+  `IP_HW0_MBIM`, for `mhi_wwan_mbim`, without the software data channels, and a 32 kB MRU. The modem frames its data
+  as MBIM NTBs, which `mhi_net`, the bare entry's data driver, cannot carry (`docs/modem.md`, Mobile data).
+  Mainline has no entry for this modem.
+- A module build of the same `pci_generic.c` on revision 7 passed the device test first; revision 8 passed the same
+  day and was pushed (head `86f4bc1a`, tree `f5de3f91`).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -201,6 +211,7 @@ The patches by number, with their origin and what each is needed for.
 | 0083 | Type-C mux: initialize the orientation switch array | Haobo Cheng (posted 2026-08-04) | the orientation switch chain (not the reversed plug) |
 | 0084–0088 | Adreno GMU shutdown idle check, boot-up bandwidth vote, devfreq idle time, scheduler priority, preemption records across suspend | Jie Zhang, Akhil P Oommen (posted 2026-10-24) | GPU stability around its idle power-downs, a little power while awake |
 | 0089 | Denali device tree: the video codec with the Surface's firmware | this repository | hardware video decoding and encoding |
+| 0090 | MHI PCI: the Surface Pro 11 5G modem's data channels for the MBIM driver | this repository | mobile data (`docs/modem.md`) |
 
 ## Left out of v23.2, and the device check for each
 

@@ -38,6 +38,12 @@ Windows.
   `alsa-ucm` trigger.
 - Wi-Fi: WCN7850, PCI 17cb:1107, `qmi-board-id=255`; `disable-rfkill` is in the Denali DTS. Fedora's `board-2.bin`
   has no exact entry, so the 17cb:3378 entry is extracted with `ath12k-bdencoder` as `board.bin`.
+- Wi-Fi after a boot or a wake (7.2.11 revision 8, 2026-10-29; nl80211 events): the firmware starts in world
+  roaming, and NetworkManager's first scan takes 16 s, because the firmware's own country scan (802.11d) sets `DE`
+  about 7 s into it; with the country known a full scan of the 102 channels (none limited to passive scanning)
+  takes 8.5 s. Association then takes 0.3 s and DHCP 3 s: online 21 s after a wake, 27 s after the kernel's start.
+  Every deep sleep restarts the firmware. A country from user space (`iw reg set`) reaches ath12k only with
+  `ATH_REG_DYNAMIC_USER_REG_HINTS`, which needs `CFG80211_CERTIFICATION_ONUS`; Fedora sets neither.
 - PCIe L1.2 (7.2.11 revision 5, 2026-10-28): the Wi-Fi (`0004:01:00.0`) and NVMe (`0006:01:00.0`) functions report
   maximum snoop and no-snoop latencies of 0 ns (nothing programs them on Qualcomm hosts), which is below the
   links' `LTR1.2_Threshold` (76800 ns Wi-Fi, 136192 ns NVMe), so they never enter L1.2: since boot the Wi-Fi link
