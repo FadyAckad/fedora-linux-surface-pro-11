@@ -2,27 +2,32 @@
 
 ![Screenshot showing the About section](images/Screenshot-kde.png)
 
-Builds a Fedora 45 live ISO (aarch64) that boots and installs on a Microsoft Surface Pro, 11th Edition with the
-Samsung OLED panel (Snapdragon X Elite X1E80100). The kernel is Fedora's own kernel package
-(`kernel-7.2.11-300.fc45`) with Fedora's configuration, rebuilt with the Surface Pro 11 patch set and shipped as
-Fedora's usual `kernel`, `kernel-core` and `kernel-modules*` packages (`7.2.11-300.sp11.5.fc45.aarch64`). GRUB
-loads the Denali OLED device tree, on the 5G SKU the same tree with its modem. The build runs on the Surface itself,
-in WSL, and tailors every ISO to the unit that built it with files from its Windows installation. Secure Boot has
-to be off and Windows stays on the device (see Status and scope).
+This repository builds a Fedora 45 installer for the Microsoft Surface Pro, 11th Edition with the OLED panel, the
+Snapdragon X Elite tablet, including its 5G model. It is for owners of that tablet who want Fedora next to Windows.
+There is no ISO to download: the image contains firmware and sensor files copied from your own Windows
+installation, so you build it yourself, on the Surface, in WSL; the kernel alone takes about an hour.
+
+What you get: Fedora's own kernel rebuilt with the community's Surface Pro 11 patches, a support package with the
+device's firmware and settings, the pen daemon, the sensor stack, and Fedora's live ISO remastered with all of it,
+for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and the words the guides use:
+[`docs/guide/overview.md`](docs/guide/overview.md).
+
+## Current versions
+
+| Component | Version |
+|---|---|
+| Fedora | 45 Beta 1.3, Workstation or KDE Plasma Desktop |
+| Kernel | Fedora's `kernel-7.2.11-300.fc45`, SP11 revision 8 (`7.2.11-300.sp11.8.fc45.aarch64`) |
+| Support RPM (`sp11-surface-support`) | 3.8 |
+| Pen daemon (`sp11-iptsd`) | 3.1.0-3.sp11 |
+| Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
 
 ## What works
 
 Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`), on a Fedora 45 Beta Workstation installation from
-the ISO built on 2026-10-19 (7.2.11 revision 1, support RPM 3.4), updated on 2026-10-22 to 7.2.11 revision 2
-(three battery-driver fixes) and on 2026-10-23 and 24 to revision 3 (`7.2.11-300.sp11.3.fc45.aarch64`, the 5G
-SKU's modem) with support RPM 3.7 and sp11-sensors 1.15, which brought the GPS row, and on 2026-10-28 to revision
-5 (`7.2.11-300.sp11.5`, deep sleep's memory low-power mode); every row confirmed again with revision 5. On
-2026-10-29 it moved to revision 7 (`7.2.11-300.sp11.7`, GPU fixes and the video codec) with support RPM 3.8; with
-it the display, sleep, audio, touch, pen, Wi-Fi, Bluetooth, keyboard and rotation were confirmed again; the same day
-to revision 8 (`7.2.11-300.sp11.8`), which brought the mobile-data row (a nano-SIM of o2 Germany, LTE and 5G NSA);
-every row confirmed again with revision 8. The KDE
-Plasma Desktop edition builds from the same RPMs; it was last checked on 2026-09-30 with kernel revision 11.
-[`docs/verified.md`](docs/verified.md) has the details and the results with earlier kernels.
+the ISO built on 2026-10-19 and updated since to the versions above; every row was confirmed again on 2026-10-29.
+The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
+revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
 | Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.8) |
 |---|:-:|
@@ -55,19 +60,22 @@ Plasma Desktop edition builds from the same RPMs; it was last checked on 2026-09
 | IR camera (face login) | ❌ |
 | NPU (AI acceleration) | ❌ |
 
-✅: confirmed on the tested unit. ❌: not covered by this project. GPS needs no SIM; near a window the first
-position came within about a minute, away from windows none in two minutes ([`docs/modem.md`](docs/modem.md)). Under
-KDE Plasma, auto-rotation could stop until iio-sensor-proxy was restarted, and with automatic brightness on the
-tablet did not stay asleep; the sensors RPMs fix these since 2026-10-07 (libssc 0.4.4-3) and 2026-10-08
-(iio-sensor-proxy 3.9-3.sp11.2, [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)). Asleep, the
-tablet drew 0.33 W through 8 hours with revision 5, against 0.83 to 0.86 W with earlier revisions; the modem is off
-while it sleeps and back about a minute after a wake ([`docs/hardware.md`](docs/hardware.md), Sleep).
+✅: confirmed on the tested unit. ❌: not covered by this project. Notes:
 
-USB-C data works with the plug one way round; turned over, a USB 3 stick is not found on either port, while Windows
-finds it both ways ([`docs/hardware.md`](docs/hardware.md), USB-C data).
-
-In the live session, audio and battery status are unavailable because the audio DSP stays off while running from
-USB-C. Both work once installed.
+- GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
+  minutes ([`docs/gnss.md`](docs/gnss.md)).
+- Asleep, the tablet drew 0.33 W over 8 hours with kernel revision 5 or later, against 0.85 W before; the modem is
+  off while it sleeps and back about a minute after a wake ([`docs/sleep.md`](docs/sleep.md)).
+- Hardware video decoding works from kernel revision 7: a 720p VP9 clip decoded frame for frame in GStreamer, and
+  H.264 and H.265 clips once their colorimetry was relabelled ([`docs/hardware.md`](docs/hardware.md), Video
+  codec).
+- USB-C data works with the plug one way round; turned over, a USB 3 stick is not found on either port, while
+  Windows finds it both ways ([`docs/hardware.md`](docs/hardware.md), USB-C data).
+- In the live session, audio and battery status are unavailable because the audio DSP stays off while running
+  from USB-C. Both work once installed.
+- Under KDE Plasma, auto-rotation could stop until iio-sensor-proxy was restarted, and with automatic brightness on
+  the tablet did not stay asleep; the sensors RPMs fix both since libssc 0.4.4-3 (2026-10-07) and iio-sensor-proxy
+  3.9-3.sp11.2 (2026-10-08) ([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 
 ## Status and scope
 
@@ -107,44 +115,46 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.5.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.5.fc45.aarch64.iso`, with a `.sha256` beside it.
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.8.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.8.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
-- Every option and step: [`docs/guide/build.md`](docs/guide/build.md).
-- Writing the media and installing: [`docs/guide/install.md`](docs/guide/install.md).
-- Updating an installed system: [`docs/guide/update.md`](docs/guide/update.md).
+## Reporting results
+
+The hardware checks accept the non-5G OLED SKUs, but no build from one has been reported. If you build or install
+on another unit, open an issue with the SKU, the ISO's name, which rows of the table worked, and for anything that
+did not, the output of `sudo /usr/libexec/sp11/sp11-diag`. That file names your Bluetooth controller and devices by
+address; remove them before posting if you prefer.
 
 ## Documentation
 
-User guides:
+Start here:
 
-- [`docs/guide/build.md`](docs/guide/build.md): requirements, the pipeline, its options, steps and checks, building
-  one set of RPMs alone.
+- [`docs/guide/overview.md`](docs/guide/overview.md): how the build works, and a glossary of the terms used here.
 - [`docs/guide/install.md`](docs/guide/install.md): writing the USB, the firmware settings, the installer, the
   first boot.
 - [`docs/guide/update.md`](docs/guide/update.md): updating the support RPM and installing a new SP11 kernel.
-- [`docs/guide/support-rpm-history.md`](docs/guide/support-rpm-history.md): what each support RPM version changed.
+- [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md): diagnostics, known limitations, what earlier
+  releases fixed.
+
+Building:
+
+- [`docs/guide/build.md`](docs/guide/build.md): requirements, the pipeline, its options, steps and checks.
+- [`docs/guide/build-rpms.md`](docs/guide/build-rpms.md): building one set of RPMs alone for an installed system.
+- [`docs/guide/sensors.md`](docs/guide/sensors.md): the sensors stack: install, update, check, reset.
 - [`docs/guide/bluetooth-pairings.md`](docs/guide/bluetooth-pairings.md): sharing the Flex Keyboard and Slim Pen 2
   pairings with Windows.
-- [`docs/guide/sensors.md`](docs/guide/sensors.md): the sensors stack: install, update, check, reset.
-- [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md): diagnostics, known limitations, systems
-  installed from earlier ISOs.
-- [`docs/guide/design.md`](docs/guide/design.md): what the scripts decide for you, and why.
 - [`docs/guide/new-release.md`](docs/guide/new-release.md): moving to a new Fedora compose or kernel.
+
+Background:
+
+- [`docs/guide/design.md`](docs/guide/design.md): what the scripts decide for you, and why.
+- [`docs/guide/support-rpm-history.md`](docs/guide/support-rpm-history.md): what each support RPM version changed.
 - [`docs/guide/layout.md`](docs/guide/layout.md): what each file of the repository is.
 - [`docs/guide/credits.md`](docs/guide/credits.md): license and credits.
 
-Working notes, the verified facts the guides rest on (indexed by `CLAUDE.md`):
-
-- [`docs/pipeline.md`](docs/pipeline.md): the pipeline, its caches and pitfalls.
-- [`docs/hardware.md`](docs/hardware.md): the tested unit, its peripherals and firmware.
-- [`docs/kernel.md`](docs/kernel.md): the kernel build and its revisions.
-- [`docs/kernel-patches.md`](docs/kernel-patches.md): the patch manifest.
-- [`docs/fedora-media.md`](docs/fedora-media.md): the live media, GRUB and Anaconda.
-- [`docs/sensors.md`](docs/sensors.md): the sensors stack.
-- [`docs/modem.md`](docs/modem.md): the 5G SKU's modem and its GPS.
-- [`docs/camera.md`](docs/camera.md): the cameras.
-- [`docs/verified.md`](docs/verified.md): device results by date.
+For maintainers: the working notes under `docs/`, indexed in [`docs/README.md`](docs/README.md), hold the verified
+facts, measurements and lessons the guides rest on.
 
 ## License
 

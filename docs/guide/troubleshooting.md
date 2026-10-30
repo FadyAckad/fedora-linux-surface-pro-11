@@ -1,7 +1,7 @@
 # Troubleshooting
 
-The diagnostic tools, the known limitations, the power button setting under KDE Plasma, and the one-time steps for
-systems installed from earlier ISOs. The device results by date are in [`docs/verified.md`](../verified.md).
+The diagnostic tools, the known limitations, what earlier releases of the RPMs fixed, and the power button setting
+under KDE Plasma. The device results by date are in [`docs/verified.md`](../verified.md).
 
 ## Diagnostics
 
@@ -19,46 +19,46 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
 
 - In the live session, audio and battery status are unavailable because the audio DSP stays off while running
   from USB-C (an ADSP restart resets the port). Both work once installed.
+- USB-C data works with the plug one way round; turned over, a USB 3 stick is not found on either port, while
+  Windows finds it both ways ([`docs/hardware.md`](../hardware.md), USB-C data).
 - Once in a boot, a few minutes after it, the compute DSP's firmware can report a `sleep_stats` fatal error.
   remoteproc restarts that DSP by itself, and nothing on Linux uses it.
-- Auto-rotation and the light sensor stopping until iio-sensor-proxy is restarted, seen under KDE Plasma, whose
-  clients claim and release the sensors around screen-off and wake. Fixed in `libssc` 0.4.4-3 (2026-10-07), part
-  of the sensors RPMs since then; on an earlier release `sudo systemctl restart iio-sensor-proxy` brings them back
-  ([`docs/sensors.md`](../sensors.md), Known issues).
-- Under KDE Plasma the tablet woke within seconds of going to sleep, and with the cover closed slept and woke in a
-  loop, while automatic brightness (or auto-rotation in tablet mode) kept a sensor stream open: the audio DSP's
-  messages ended the sleep. Fixed in `iio-sensor-proxy` 3.9-3.sp11.2 with `sp11-sensors` 1.11 (2026-10-08), part
-  of the sensors RPMs since then; with an earlier build, switching automatic brightness off (System Settings,
-  Display & Monitor) avoids it ([`docs/sensors.md`](../sensors.md), Known issues).
 - GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from
   windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
-  ([`docs/modem.md`](../modem.md)).
+  ([`docs/gnss.md`](../gnss.md)).
 - Mobile data (5G SKU, kernel revision 8 or later): Fedora's provider list offers no APN for some carriers (o2
-  Germany: set `internet` in Settings > Mobile Network). A SIM with a PIN asks for it again after every sleep, since
-  the modem restarts, and the connection returns about a minute after a wake only if it connects automatically
+  Germany: set `internet` in Settings > Mobile Network). The modem restarts after every sleep, so a SIM with a PIN
+  asks for it again, and the connection returns about a minute after a wake only if it connects automatically
   ([`docs/modem.md`](../modem.md), Mobile data).
-- Up to `sp11-sensors` 1.14, iio-sensor-proxy logged five SELinux denials at every start (`/etc/passwd`,
-  `dac_read_search`, `dac_override`): GIO loaded gvfs's module into it, which looked for a desktop session. The
-  sensors worked regardless. Fixed in 1.15 (2026-10-24); up to 1.12 GeoClue also got no heading from the compass
-  (1.13).
 - Plugging the charger in while the tablet sleeps wakes it, sometimes several times in the first minutes. Under
   KDE Plasma, with the cover closed, it goes back to sleep about 10 s after each wake.
-- Up to `sp11-sensors` 1.11, after many sleeps in one boot `hexagonrpcd-adsp-sensorspd.service` was listed as
-  failed (`start-limit-hit`): its guard allowed twelve starts per boot, and every wake restarted it. The sensors
-  kept working. Fixed in 1.12 (2026-10-08), which no longer counts the restart after a wake.
 - Under KDE Plasma, with the power button set to Sleep, waking the tablet with the power key puts it back to sleep
-  a few seconds later: the power key's driver reports the press that woke it, and KDE takes it as a press to sleep.
-  Set the power button to Lock screen (below); opening the cover wakes it without that either way
-  ([`docs/hardware.md`](../hardware.md), Sleep).
-- Upgrading `iio-sensor-proxy` from 3.9-3.sp11.1 can pause `dnf` for about 45 s and leave an `iio-sensor-proxy`
-  core dump: the old proxy does not stop in time and systemd aborts it. The reboot after the install brings up the
-  new one ([`docs/guide/sensors.md`](sensors.md)).
+  a few seconds later. Set the power button to Lock screen (below).
 - Boot messages seen on the tested unit that mean nothing:
   - `qcom_pmic_glink … Failed to create device link` for the PD and USB nodes (probe deferral, retried);
   - `surface_hid … unexpected descriptor length` for one Surface Aggregator endpoint nothing depends on;
   - `unknown device posture for type-cover: 0`, once each time the keyboard is attached;
-  - the ADSP's `Handover signaled, but it already happened` lines: about one per second while a sensor stream is
-    open; since `iio-sensor-proxy` 3.9-3.sp11.2 no stream stays open during a sleep.
+  - the ADSP's `Handover signaled, but it already happened` lines, about one per second while a sensor stream is
+    open.
+
+## Fixed in earlier releases
+
+Systems running an older build of the RPMs can show these; the release named fixes each.
+
+- Auto-rotation and the light sensor stopping until iio-sensor-proxy is restarted, under KDE Plasma: fixed in
+  `libssc` 0.4.4-3 (2026-10-07). Until then `sudo systemctl restart iio-sensor-proxy` brings them back
+  ([`docs/sensors.md`](../sensors.md), Known issues).
+- The tablet waking within seconds of going to sleep under KDE Plasma, and sleeping and waking in a loop with the
+  cover closed, while automatic brightness or auto-rotation kept a sensor stream open: fixed in `iio-sensor-proxy`
+  3.9-3.sp11.2 with `sp11-sensors` 1.11 (2026-10-08). Until then, switching automatic brightness off (System
+  Settings, Display & Monitor) avoids it.
+- `hexagonrpcd-adsp-sensorspd.service` listed as failed (`start-limit-hit`) after many sleeps in one boot, the
+  sensors still working: fixed in `sp11-sensors` 1.12 (2026-10-08).
+- GeoClue without a heading from the compass: `sp11-sensors` 1.13 (2026-10-23). Five SELinux denials logged by
+  iio-sensor-proxy at every start, the sensors working regardless: `sp11-sensors` 1.15 (2026-10-24).
+- Upgrading `iio-sensor-proxy` from 3.9-3.sp11.1 can pause `dnf` for about 45 s and leave an `iio-sensor-proxy`
+  core dump: the old proxy does not stop in time and systemd aborts it. The reboot after the install brings up the
+  new one.
 
 ## The power button under KDE Plasma
 
@@ -83,27 +83,5 @@ busctl --user call org.kde.Solid.PowerManagement /org/kde/Solid/PowerManagement 
 
 To check, sleep from the launcher with the cover open, wake with the power key and wait 15 s: the tablet stays on
 the lock screen. With the cover closed it goes back to sleep 10 s after any wake, by design
-([`docs/hardware.md`](../hardware.md), Sleep). A kernel change that drops the waking press is described in
+([`docs/sleep.md`](../sleep.md)). A kernel change that drops the waking press is described in
 [`docs/kernel-patches.md`](../kernel-patches.md).
-
-## Systems installed from earlier ISOs
-
-Installations made from ISOs built before 2026-09-22 carry the ISO's build date as the modification time of every
-file the installer copied (`ls -l /usr/bin/bash` shows it). `rpm -V` flags the times and Python recompiles its
-bytecode at every start, but nothing malfunctions; updated packages and the next installation carry proper times.
-
-The same installations run with SELinux *disabled*: the earlier kernels had AppArmor as their active security
-module, so the live installer passed `--noselinux` to Anaconda, which put `selinux=0` into the boot arguments and
-`SELINUX=disabled` into `/etc/selinux/config`. Support RPMs 2.5 to 2.7 undid that by themselves; 3.0 no longer
-does. Such a system needs it once by hand:
-
-- `sudo grubby --update-kernel=ALL --remove-args=selinux=0`;
-- `SELINUX=enforcing` in `/etc/selinux/config`;
-- `sudo touch /.autorelabel`;
-- a reboot (the next boot relabels and reboots once).
-
-Kernels of the earlier `kernel-sp11` package stay installed next to the Fedora-based ones until removed with
-`sudo dnf remove kernel-sp11-<version>`. `kernel-sp11` RPMs built before 2026-09-17, such as the 7.2.0 one, leave
-their boot entry behind when removed while another kernel stays, so run
-`sudo kernel-install remove 7.2.0-jg-0sp11v23-qcom-x1e` first. `ls /boot/loader/entries` shows a leftover entry,
-and the same command cleans it up after the fact.

@@ -1,45 +1,11 @@
 # CLAUDE.md — Fedora live ISO for Surface Pro 11 (5G, X1E80100, OLED)
 
-Working notes for future sessions, kept by topic under `docs/`. Everything in them was verified in September 2026 on
-the tested unit described in `docs/hardware.md`; re-verify anything that depends on a newer Fedora, Fedora kernel,
-GRUB or Anaconda release. Only this file is loaded automatically: read the document named below before working on
-its area. `docs/guide/` holds the user guides `README.md` links to: they state results and procedures for users and
-link the note that holds the evidence. The notes are the source of truth: a new fact goes into its note first, and
-a guide says only what concretely works.
-
-## Documents
-
-- `docs/pipeline.md`: what each file of the repository is, the pipeline steps and their caches, the verification
-  steps 35, 36, 46 and 60, the version and content-pin rules, the WSL host, shell pitfalls. Read before touching
-  `sp11.conf`, `scripts/`, `rpm/` or `payload/`.
-- `docs/hardware.md`: the tested unit's identity, the Denali DTB and the SKU regexes, firmware, audio, Wi-Fi, the
-  Bluetooth address, the pen, the live-only DSP blacklist, the Windows GRUB entry, sleep and wake sources, the
-  Bluetooth pairings shared with Windows. Read before anything that depends on the device.
-- `docs/kernel.md`: Fedora's kernel source RPM rebuilt with the SP11 patch set, `kernel.spec`'s local-build slots,
-  `KERNEL_SP11_REV`, the configuration, sync state and the CDSP, how the patch set was extracted and how to rebase
-  it, kernel install and removal, SELinux. Read before touching steps 10 and 20, `payload/kernel-local`, the kernel
-  fork pins (`KERNEL_PATCH_*` in `sp11.conf`) or SELinux.
-- `docs/kernel-patches.md`: the patch manifest: the kernel fork's branch, where each commit comes from, what it is
-  needed for, what was left out of v23.2, the planned patch for the power key's waking press.
-- `docs/fedora-media.md`: the live media and Fedora's live menu, GRUB, Anaconda's installation order and the
-  installer's viewer, the kernel-install plugin, the live initramfs and root, `kernel-uki-dtbloader`, the dnf
-  repository override, and the Fedora 45 differences. Read before touching steps 50 and 60, GRUB, the installer
-  path or a Fedora release switch.
-- `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors), tablet
-  mode and auto-rotation; its dated history is at the end. Read before touching steps 45, 46 and 75,
-  `payload/sensors/` or the hexagonrpc fork.
-- `docs/modem.md`: the 5G SKU's modem and its GNSS: the wiring from Windows' ACPI, the 5G device tree and its
-  choice by SKU, the QMI port that blocks suspend and ModemManager, the location service's event registration, the
-  GNSS feed for GeoClue and its SELinux module. Read before touching the 5G tree, `77-sp11-modem.rules` or
-  `payload/sp11-gnss*`.
-- `docs/camera.md`: the three cameras: the kernel side (the camera commits of revisions 6 to 9), Fedora's libcamera,
-  the raw-capture probe, what the device has shown. Read before
-  touching `payload/camera/` or the kernel fork's camera commits.
-- `docs/verified.md`: what has been confirmed on the device, by date and package version. Read before stating
-  that something works; add to it after a device round.
-- `docs/guide/*.md`: the user guides (`build`, `install`, `update`, `support-rpm-history`, `bluetooth-pairings`,
-  `sensors`, `troubleshooting`, `design`, `new-release`, `layout`, `credits`), linked from `README.md`.
-  Update the guide whose procedure or result changes.
+Working notes for future sessions, kept by topic under `docs/` and indexed in `docs/README.md`: read that index
+first, then the note it names for the area being worked on. Everything in the notes was verified on the tested
+unit described in `docs/hardware.md`; re-verify anything that depends on a newer Fedora, Fedora kernel, GRUB or
+Anaconda release. The guides under `docs/guide/` are for users: they state results and procedures and link the
+note that holds the evidence. The notes are the source of truth: a new fact goes into its note first, and a guide
+says only what concretely works. Update the guide whose procedure or result changes.
 
 ## Layout
 
@@ -51,12 +17,14 @@ a guide says only what concretely works.
   iio-sensor-proxy patches and the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture
   probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in
   `sp11.conf`.
-- `docs/`: the working notes; `docs/guide/`: the user guides. `build/` (git-ignored): caches, work trees, RPMs and
-  output; see `docs/pipeline.md`.
+- `docs/`: the working notes, indexed in `docs/README.md`; `docs/guide/`: the user guides. `build/` (git-ignored):
+  caches, work trees, RPMs and output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
   command with its expected output in `reference.md`, hand-off templates, the DSP ping tool).
 - `.claude/skills/sp11-handoff/`: the standard for hand-offs to the maintainer (folder, `README.txt`, steps file,
   validation, the way back, device sessions and their review) as a Claude Code skill.
+- `.claude/skills/sp11-docs/`: the documentation standard (the reader tiers, the writing rules, what to update
+  after a device round) and `validate.py`, the checks to run before handing documentation over.
 
 ## Rules
 
@@ -86,23 +54,22 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   `IIO_SENSOR_PROXY_RPM_SUFFIX` (its template or its patches in `payload/sensors/iio-sensor-proxy/`; for a new SRPM
   its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum, and `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`),
   `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the registry export).
+- The spec templates are part of the RPM input hashes: a comment change there needs the release bump too.
 
 ## Conventions
 
-- Notes by topic, verified facts and lessons only; a compact dated history at the end of a topic, no round logs.
-- Lines wrap at 116 columns with code spans kept whole, so phrases stay greppable.
-- Keep the index above accurate when a document changes. Here and in the notes, name documents by plain path in
-  backticks, never `@path`: Claude Code inlines `@` imports into every session. `README.md` and the guides use
-  markdown links instead, so they are clickable on GitHub.
+- The notes' conventions (what a note holds, the 116-column wrap, plain backticked paths in the notes and markdown
+  links in the guides, the section names other files cite) are in `docs/README.md`; keep its index accurate when
+  a document changes. Never `@path` imports: Claude Code inlines them into every session.
 
 ## References
 
-rjindael/fedora-surface-pro-11 (Fedora bring-up notes); ooaklee/linux_ms_dev_kit-sp11 (the kernel tree the patch
-set was extracted from) and ooaklee/linux-surface-pro-11-oe (audio, iptsd releases, ADRs); Fedora's kernel dist-git
-(src.fedoraproject.org/rpms/kernel, `kernel.spec`) and the Fedora wiki "Building a custom kernel";
-ooaklee/lexr.sh `internal/image/fedora/*.go` (remaster design reference);
-denisix/ubuntu-surface-pro-11 (`SENSORS.md`: the SSC sensor stack on an SP11 under Ubuntu); linux-msm/hexagonrpc;
-DylanVanAssche/libssc (codeberg); Fedora wiki "Snapdragon WoA Laptop Install"; Arch wiki "Bluetooth" (dual-boot
-pairing); lkarlslund/linux-x1e-jglathe and its kernel branches lkarlslund/linux-x1e-t14s (ThinkPad T14s; the
-battery-driver fixes of 7.2.11 revision 2, X1E sleep work from justririll/x1e-sleep and
-ramonjesusmiranda-debug/sp11-el2).
+- rjindael/fedora-surface-pro-11 (Fedora bring-up notes); ooaklee/linux_ms_dev_kit-sp11 (the kernel tree the
+  patch set was extracted from) and ooaklee/linux-surface-pro-11-oe (audio, iptsd releases, ADRs).
+- Fedora's kernel dist-git (src.fedoraproject.org/rpms/kernel, `kernel.spec`) and the Fedora wiki "Building a
+  custom kernel"; the Fedora wiki "Snapdragon WoA Laptop Install"; ooaklee/lexr.sh `internal/image/fedora/*.go`
+  (remaster design reference).
+- denisix/ubuntu-surface-pro-11 (`SENSORS.md`: the SSC sensor stack on an SP11 under Ubuntu); linux-msm/hexagonrpc;
+  DylanVanAssche/libssc (codeberg); Arch wiki "Bluetooth" (dual-boot pairing).
+- lkarlslund/linux-x1e-jglathe and its kernel branches lkarlslund/linux-x1e-t14s (ThinkPad T14s; the battery-driver
+  fixes of 7.2.11 revision 2), X1E sleep work from justririll/x1e-sleep and ramonjesusmiranda-debug/sp11-el2.

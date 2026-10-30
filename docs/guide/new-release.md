@@ -28,11 +28,10 @@ release can touch, each of which stops the build rather than guessing:
   - the UCM matcher patch in `scripts/30-build-support-rpm.sh`, which expects ooaklee's v19c `x1e80100.conf`
     matcher line.
 
-`KERNEL_SP11_REV` (default 7, for 7.2.11) is everything the project changes in Fedora's kernel: the patch set's
+`KERNEL_SP11_REV` (default 8, for 7.2.11) is everything the project changes in Fedora's kernel: the patch set's
 pinned commit and `payload/kernel-local`. It becomes the buildid `.sp11.<revision>`, as in
-`kernel-7.2.11-300.sp11.7.fc45`. The kernel packages are install-only, and a rebuild with the same version would own
+`kernel-7.2.11-300.sp11.8.fc45`. The kernel packages are install-only, and a rebuild with the same version would own
 the same `/boot` and module paths as the installed one, so bump the revision with every change to the pinned commit
-or to `kernel-local`; a new Fedora kernel version starts again at 1. `sp11.conf`
-pins each revision's content in `KERNEL_SP11_REV_SHA256` (the revision number, `kernel-local`'s effective lines and
-the two pinned commits); step 20 stops when they and the revision disagree, and prints the value for the new
-revision.
+or to `kernel-local`; a new Fedora kernel version starts again at 1. `sp11.conf` pins each revision's content in
+`KERNEL_SP11_REV_SHA256` (the revision number, `kernel-local`'s effective lines and the two pinned commits); step 20
+stops when they and the revision disagree, and prints the value for the new revision.

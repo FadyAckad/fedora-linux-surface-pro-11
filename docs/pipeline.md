@@ -1,26 +1,25 @@
 # Pipeline
-The repository's files, the pipeline and verification steps, the WSL build host, and shell pitfalls.
+The repository's files, the build tree, the verification steps, the version and content pins, the WSL host, and
+shell pitfalls. What each file is for a user: `docs/guide/layout.md`.
 
 ## Repository
+
+What each file is, for a user: `docs/guide/layout.md`. What matters to the pipeline:
 
 - `sp11.conf`: every version, URL, regex, boot-policy string and content pin, sourced through `scripts/lib.sh`; only
   the support RPM's `VERSION=` lives in step 30.
 - `rpm/*.spec.in`: the spec templates; `render()` fills their `@KEY@` placeholders, a leftover one fails the build.
-- `scripts/NN-*.sh`: the pipeline steps, idempotent; `FORCE=1` rebuilds.
-- `build-all.sh`: runs 00, 05, 10, 20, 30, 40, 45 and 50, then steps 35 and 46, which need step 50's live root
-  (steps 30 and 45 run them when it exists).
-- `70-export-bt-pairings.sh`: the pairing export (`docs/hardware.md`); `75-export-sensor-registry.sh`: the sensor
-  registry export from Windows into `build/sensors/` (`docs/sensors.md`).
-- `sync-state-drivers.py`: step 20's check that the Denali device trees' rail and interconnect users all have a
-  driver (`docs/kernel.md`).
-- `payload/`: `sp11-surface-support`'s payload, installed under `/usr/libexec/sp11`, `/etc/grub.d` and
-  `/usr/lib/...`, with the 5G SKU's modem rule and GNSS feed (`77-sp11-modem.rules`, `sp11-gnss*`) in 5G builds
-  only (`docs/modem.md`); `payload/README-iso.txt.in` is the note inside the ISO.
-- `payload/kernel-local`: kernel configuration additions, a build input of step 20 and part of `KERNEL_SP11_REV`;
-  the patch set is the kernel fork's, pinned by `KERNEL_PATCH_*`.
-- `payload/sensors/`: `sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the patches of libssc
-  (`libssc/`) and iio-sensor-proxy (`iio-sensor-proxy/`), the unpackaged `sp11-sam-posture` probe.
-- `payload/camera/`: the unpackaged `sp11-camera-probe` (`docs/camera.md`).
+- `scripts/NN-*.sh`: the pipeline steps, idempotent; `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30,
+  40, 45 and 50, then steps 35 and 46, which need step 50's live root (steps 30 and 45 run them when it exists).
+  Outside the pipeline: `70-export-bt-pairings.sh` (`docs/hardware.md`), `75-export-sensor-registry.sh`
+  (`docs/sensors.md`) and `sync-state-drivers.py`, step 20's check that the Denali device trees' rail and
+  interconnect users all have a driver (`docs/kernel.md`).
+- `payload/`: the support RPM's payload, installed under `/usr/libexec/sp11`, `/etc/grub.d` and `/usr/lib/...`
+  (the modem rule and GNSS feed in 5G builds only); `kernel-local`, a build input of step 20 and part of
+  `KERNEL_SP11_REV` (the patch set itself is the kernel fork's, pinned by `KERNEL_PATCH_*`); `sensors/`
+  (`sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the libssc and iio-sensor-proxy patches, the
+  unpackaged posture probe); `camera/` (the unpackaged raw-capture probe); `README-iso.txt.in`, the note inside
+  the ISO.
 - `build/`, git-ignored: `cache/` (downloads, source RPMs, checkouts, `rpm-deps/`, the fork's partial clone
   `kernel-patches.git`, its series `kernel-patches/<commit>/`), `kernel/` (step 20's tree and logs; the build runs
   in `/var/lib/mock/<MOCK_CONFIG>-sp11-kernel`), `work/iso/` (the live root, root-owned), `rpms/`, `out/` (the
@@ -28,31 +27,33 @@ The repository's files, the pipeline and verification steps, the WSL build host,
 
 ## Verification steps
 
+Each check works in an overlay of the live root step 50 extracts (a real ext4 `/boot` loop, grub2 stubs), so it
+never touches the host.
+
 ### Step 35: the support RPM
 
-- `35-verify-support-rpm.sh` installs the support RPM in an overlay of the live root (a real ext4 `/boot` loop,
-  grub2 stubs) on both paths it reaches a machine: `dnf upgrade` (`rpm -U` with scriptlets) and the ISO build
-  (`rpm -U --noscripts` plus the helper runs). After step 50 the live root carries that RPM, so the upgrade is a
-  reinstall with `--replacepkgs`; `SUPPORT_PREVIOUS_RPM=<rpm>` installs that build first.
+- Installs the support RPM on both paths it reaches a machine: `dnf upgrade` (`rpm -U` with scriptlets) and the
+  ISO build (`rpm -U --noscripts` plus the helper runs). After step 50 the live root carries that RPM, so the
+  upgrade is a reinstall with `--replacepkgs`; `SUPPORT_PREVIOUS_RPM=<rpm>` installs that build first.
 - The update path first stages a wrong GRUB policy (`GRUB_GFXMODE=640x480`, an empty `GRUB_FONT`,
   `GRUB_TIMEOUT=99`, no font in `/boot`), so a package that installs without applying the `sp11.conf` policy to
-  `/etc/default/grub` and the menu fails; both paths also check the 3.x payload (dnf override,
-  `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover) and, from 3.5, the modem's files and the policy module
-  of the GNSS feed on a 5G unit (loaded by hand on the live path, as step 50 does) and their absence on the others,
-  from 3.6 the sleep hook's pause instead of a stop (`docs/modem.md`), from 3.7 `sp11-diag`'s denial search of the
-  whole journal.
+  `/etc/default/grub` and the menu fails.
+- Both paths check the 3.x payload (dnf override, `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover); from
+  3.5 the modem's files and the GNSS feed's policy module on a 5G unit (loaded by hand on the live path, as step
+  50 does) and their absence on the others; from 3.6 the sleep hook's pause instead of a stop; from 3.7
+  `sp11-diag`'s denial search of the whole journal.
 
 ### Step 36: the kernel install
 
-- `36-verify-kernel-install.sh`, not in `build-all.sh`, installs the SP11 kernel packages (`KERNEL_PKGS`) into the
-  same kind of overlay, as `dnf install` does (`rpm -i` with scriptlets, one transaction, next to the previous
-  kernel), then the support RPM with `rpm -U` unless the live root carries that version, and checks the BLS entry,
-  `saved_entry`, the initramfs, the menu, `kernel-local` in the shipped `config` and the `rpm -e` way back.
+- Not in `build-all.sh`. Installs the SP11 kernel packages (`KERNEL_PKGS`) as `dnf install` does (`rpm -i` with
+  scriptlets, one transaction, next to the previous kernel), then the support RPM with `rpm -U` unless the live root
+  carries that version, and checks the BLS entry, `saved_entry`, the initramfs, the menu, `kernel-local` in the
+  shipped `config` and the `rpm -e` way back.
 - After an ISO build, pass the support RPM the live root carries as `SUPPORT_PREVIOUS_RPM`: its reinstall's
   `%posttrans` writes the menu an installed system has; `20-grub.install` regenerates it only when
   `/etc/kernel/cmdline` is older than `/etc/default/grub`, and the SP11 plugin rewrites that file first.
-- The entry's device tree is the one the unit's SKU takes (`load_hardware`), so the support RPM it installs must be
-  one built for the unit (from 7.2.11 revision 3 the 5G SKU's tree differs).
+- The entry's device tree is the one the unit's SKU takes (`load_hardware`), so the support RPM must be one built
+  for the unit (from 7.2.11 revision 3 the 5G SKU's tree differs).
 - `kernel-install` exits non-zero in the chroot (`95-set-boot-entry.install` wants an initramfs the previous
   kernel's entry lacks), so the script judges by the entry, as the RPM's `%posttrans` does with `|| :`; that
   plugin turns `tmp_saved_entry` into `saved_entry`, so a kernel without an initramfs never becomes the default.
@@ -60,22 +61,21 @@ The repository's files, the pipeline and verification steps, the WSL build host,
 
 ### Steps 45 and 46: the sensors stack
 
-- `45-build-sensors-rpms.sh` builds `hexagonrpc`, `libssc` and `iio-sensor-proxy` with `mock --chain`
-  (`mock_chain` in `lib.sh`) and `sp11-sensors` from files (`build_rpm`), always in mock so the host never gets
-  unpackaged libraries; libssc's spec applies the patches of `payload/sensors/libssc/`, a change there bumps
-  `LIBSSC_RPM_RELEASE`, and iio-sensor-proxy's those of `payload/sensors/iio-sensor-proxy/`, a change there bumps
-  `IIO_SENSOR_PROXY_RPM_SUFFIX` (`docs/sensors.md`). It refuses a proxy without libssc or without the sleep pause.
-- `46-verify-sensors-rpms.sh` installs the four RPMs into an overlay of the live root with scriptlets and the
-  runtime dependencies of `SENSORS_DEPS_PKGS`, matched by capability (F45 ships `protobuf-c` as `protobuf3-c`),
-  and checks the installed stack, a write as `fastrpc` and the erase; `SENSORS_PREVIOUS_RPMS="<earlier RPMs>"`
-  adds the in-place upgrade.
+- Step 45 builds `hexagonrpc`, `libssc` and `iio-sensor-proxy` with `mock --chain` (`mock_chain` in `lib.sh`) and
+  `sp11-sensors` from files (`build_rpm`), always in mock so the host never gets unpackaged libraries. libssc's
+  spec applies the patches of `payload/sensors/libssc/` (a change there bumps `LIBSSC_RPM_RELEASE`),
+  iio-sensor-proxy's those of `payload/sensors/iio-sensor-proxy/` (a change there bumps
+  `IIO_SENSOR_PROXY_RPM_SUFFIX`); the step refuses a proxy without libssc or without the sleep pause.
+- Step 46 installs the four RPMs with scriptlets and the runtime dependencies of `SENSORS_DEPS_PKGS`, matched by
+  capability (F45 ships `protobuf-c` as `protobuf3-c`), and checks the installed stack, a write as `fastrpc` and
+  the erase; `SENSORS_PREVIOUS_RPMS="<earlier RPMs>"` adds the in-place upgrade.
 
 ### Step 60: the remastered root
 
-`60-verify-rootfs.sh`, optional and not in `build-all.sh`, checks the remastered root step 50 leaves and the Denali
-firmware directory, and simulates the installed system's kernel-install hand-off in a chroot: the BLS entry
-must get the unit's Denali DTB and the SP11 arguments; on a 5G unit the GNSS feed's policy module, which step 50
-loads, must be in the policy store.
+Optional, not in `build-all.sh`. Checks the remastered root step 50 leaves and the Denali firmware directory, and
+simulates the installed system's kernel-install hand-off in a chroot: the BLS entry must get the unit's Denali DTB
+and the SP11 arguments; on a 5G unit the GNSS feed's policy module, which step 50 loads, must be in the policy
+store.
 
 ### Cameras
 
@@ -91,7 +91,8 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
   never reached the machine), which step 35 guards.
 - Input hashes: steps 30 and 45 record `inputs_sha256` (`lib.sh`; the payload, the spec template, the rendered
   `sp11.conf` values, for step 45 also the registry export and the DriverStore package) as `Inputs:` in the RPM
-  description and die when the cached RPM of the same version was built from other inputs, `FORCE=1` or not.
+  description and die when the cached RPM of the same version was built from other inputs, `FORCE=1` or not. The
+  hash covers repo-relative paths, so a payload rename invalidates it too.
 - Kernel revision pins: `KERNEL_SP11_REV_SHA256` in `sp11.conf` pins each revision's content (`kernel_rev_sha256`
   over the revision number, the effective `kernel-local` lines and the two pinned commits); step 20 dies when
   either differs from the pin and prints the value to set after a bump.

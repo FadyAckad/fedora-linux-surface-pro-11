@@ -1,5 +1,6 @@
 # Fedora media
-The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and the Fedora 45 differences.
+The source media and their layout, GRUB, the live initramfs and menu, Anaconda, kernel-install and BLS entries, the
+live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 
 ## Source media
 
@@ -24,16 +25,11 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
 - Loader paths under `/boot/aarch64/loader/`: `linux`, `initrd`, the font `grub2/fonts/unicode.pf2`. Step 50 reads
   them from the ISO, maps `sp11-console.pf2` in beside the font and reproduces the layout with
   `xorriso ... -boot_image any replay -map ...`.
-
-### KDE Plasma Desktop image
-
-- `Fedora-KDE-Desktop-Live-45_Beta-1.3.aarch64.iso`, 3.4 GB, volume id `Fedora-KDE-Live-45`: the same kiwi layout,
-  loader paths and live menu, so step 50 remasters it unchanged. It carries Plasma 6.7.4, the same stock kernel
-  set (7.2.0-61), Anaconda 45.22 with `slitherer` (see Anaconda) and every iptsd and sensors dependency, so
-  step 50 installs no dependency RPM.
-- Step 50 replaces Fedora's iio-sensor-proxy with the SP11 build, which satisfies KWin's `Requires`; KWin reads
-  orientation and light over D-Bus itself (`net.hadess.SensorProxy`, not `qt6-qtsensors`). `sp11-sensors-check`'s
-  mutter query fails on Plasma with a D-Bus error; the rest of its output applies.
+- The KDE Plasma Desktop image (`Fedora-KDE-Desktop-Live-45_Beta-1.3.aarch64.iso`, 3.4 GB, volume id
+  `Fedora-KDE-Live-45`) has the same kiwi layout, loader paths and live menu, so step 50 remasters it unchanged.
+  It carries Plasma 6.7.4, the same stock kernel set (7.2.0-61), Anaconda 45.22 with `slitherer` (Anaconda below)
+  and every iptsd and sensors dependency, so step 50 installs no dependency RPM. KWin reads orientation and light
+  over D-Bus itself (`net.hadess.SensorProxy`), so the SP11 iio-sensor-proxy satisfies its `Requires`.
 
 ## GRUB image, font and modules
 
@@ -47,18 +43,17 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   or "Vera".
 - `00_header` honours `GRUB_FONT`: a single `if loadfont <path>` replaces its own font search, so exactly one font
   is loaded. The result (grub2 2.12-76.fc45) is `if loadfont /grub2/fonts/sp11-console.pf2` and
-  `set gfxmode=2880x1920,auto`.
-- The font file must be under `/boot`: on the LUKS layout nothing else is readable by GRUB, 00_header's own
-  fallback `/usr/share/grub/unicode.pf2` included.
+  `set gfxmode=2880x1920,auto`. The font file must be under `/boot`: on the LUKS layout nothing else is readable by
+  GRUB, 00_header's own fallback `/usr/share/grub/unicode.pf2` included.
 - A `GRUB_FONT` naming a missing file makes 00_header run `grub2-probe` on it and grub2-mkconfig fails outright, so
   `sp11-grub-defaults` writes an empty `GRUB_FONT=` (the supported opt-out) whenever the copy into
   `/boot/grub2/fonts/` did not happen.
 - The ESP stub `EFI/fedora/grub.cfg`, which Anaconda writes with `gen_grub_cfgstub`, does
   `search --fs-uuid <boot uuid>` and `configfile $prefix/grub.cfg` with `$prefix` set to `/boot/grub2`; it names
-  one /boot, so a second Fedora on the same ESP takes the menu over. Fedora's aarch64 os-prober has no EFI Windows
-  probe (`os-probes/mounted/efi/` holds only `05shell`), so `GRUB_DISABLE_OS_PROBER=false` never finds Windows;
-  the Windows generator is `29_sp11_windows` to precede `30_uefi-firmware` (UEFI Firmware Settings) in
-  `/etc/grub.d/` order.
+  one /boot, so a second Fedora on the same ESP takes the menu over.
+- Fedora's aarch64 os-prober has no EFI Windows probe (`os-probes/mounted/efi/` holds only `05shell`), so
+  `GRUB_DISABLE_OS_PROBER=false` never finds Windows; the Windows generator is `29_sp11_windows`, named to precede
+  `30_uefi-firmware` (UEFI Firmware Settings) in `/etc/grub.d/` order.
 
 ## Live initramfs and live menu
 
@@ -67,7 +62,7 @@ The live media, GRUB, Anaconda, kernel-install, the live initramfs and root, and
   root, plus the Fedora 45 omissions below.
 - Fedora's live `grub.cfg` is kept (`set default="1"` selects the media check, `timeout=10`). Step 50 changes only
   what the SP11 needs: the console-font block replaces `terminal_output console` after the
-  `search --file --set=root <marker>` line, every `linux` line gets `$sp11_args` (installed + live-only
+  `search --file --set=root <marker>` line, every `linux` line gets `$sp11_args` (installed plus live-only
   arguments) and every `initrd` line a following `devicetree $sp11_dtb`; an unrecognised layout stops the build.
 - `rd.live.check` needs the ISO checksum that `implantisomd5` writes and xorriso's remastering drops; step 50
   implants it again and checks the result with `checkisomd5`.
@@ -102,9 +97,9 @@ Installation order, from `modules/boss/installation.py`:
   `/usr/bin/anaconda` merges the defaults, the profile and `/etc/anaconda/conf.d/*.conf` into
   `/run/anaconda/anaconda.conf`, which `/usr/libexec/anaconda/webui-desktop` reads.
 - On the device slitherer draws the installer corrupted (truncated text, the language list missing) while the
-  Plasma desktop is fine; its GPU rendering is the cause (`QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu` draws
+  Plasma desktop is fine. Its GPU rendering is the cause: `QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu` draws
   correctly, and KHelpCenter, widget-based on the same Qt WebEngine, draws correctly with the GPU, so nothing
-  system-wide is changed). QtWebView versus Fedora's forced `QT_QPA_PLATFORM=xcb` (RHBZ 2483236) is not separated.
+  system-wide is changed. QtWebView versus Fedora's forced `QT_QPA_PLATFORM=xcb` (RHBZ 2483236) is not separated.
 - Step 50 writes `/etc/anaconda/conf.d/90-sp11-webui.conf` (`webui_web_engine = firefox`) into any root that has
   `/usr/bin/slitherer` and stops when such a root has no Firefox (LXQt and SoaS in 45 Beta 1.3); Workstation has
   no slitherer. Step 60 checks that the resolved viewer is `firefox`.
@@ -131,7 +126,7 @@ Installation order, from `modules/boss/installation.py`:
 ## Live root repack
 
 - `mkfs.erofs -Ededupe` is single-threaded in erofs-utils 1.9.4 (hours);
-  `-Efragments -C1048576 --workers=N -zlzma,level=6` takes ~5 min and is only slightly larger. Use
+  `-Efragments -C1048576 --workers=N -zlzma,level=6` takes about 5 minutes and is only slightly larger. Use
   `--file-contexts` from the root's own SELinux policy.
 - `mkfs.erofs -T` alone implies `--all-time`, so every file gets the build time and Anaconda's `rsync -t` copies
   that onto the installed system; step 50 passes `--mkfs-time` since 2026-09-22 and asserts that
@@ -148,17 +143,17 @@ Installation order, from `modules/boss/installation.py`:
   the live initramfs run and installs only the GPU zap shader.
 - `rpm --noscripts` also skips triggers, so step 50 runs `sp11-ucm-apply` in the chroot itself; on a normal install
   the support RPM's `%triggerin -- alsa-ucm` and `%triggerin -- grub2-efi-aa64-modules` fire for its own
-  installation too and systemd's file triggers reload systemd and udev, so the spec needs no `%post`.
+  installation too, and systemd's file triggers reload systemd and udev, so the spec needs no `%post`.
 - Never install RPMs into the live root with `--nodeps`: `sp11-iptsd` without `spdlog` (which Workstation Live
-  lacks) fails udev's `check-device`, so no `sp11-iptsd@` unit starts; `LIVE_EXTRA_PKGS` in `sp11.conf` lists
-  what step 10 downloads and step 50 installs first, step 50 refuses unmet dependencies (`rpm -U --test`) and
+  lacks) fails udev's `check-device`, so no `sp11-iptsd@` unit starts. `LIVE_EXTRA_PKGS` in `sp11.conf` lists
+  what step 10 downloads and step 50 installs first; step 50 refuses unmet dependencies (`rpm -U --test`) and
   step 60 checks that the shipped binaries load.
 
 ## Fedora 45 differences (verified 2026-09-16 against 45 Beta 1.3)
 
 ### Building for the target release
 
-- fmt 11.2.0 → 12.1.0 and spdlog 1.15.3 → 1.17.0 change the sonames `sp11-iptsd` links against, so a host-built
+- fmt 11.2.0 to 12.1.0 and spdlog 1.15.3 to 1.17.0 change the sonames `sp11-iptsd` links against, so a host-built
   RPM cannot install into an F45 root: `IPTSD_BUILD_MODE=auto` builds iptsd in `mock` for the target whenever
   `FEDORA_RELEASE` differs from `rpm -E %{fedora}`, as the kernel and the sensors chain always are;
   `sp11-bt-set-addr` is libc-only.
@@ -182,7 +177,7 @@ Installation order, from `modules/boss/installation.py`:
 - The support RPM keeps stock kernels off installed systems with
   `/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo`, a `[*]` section with
   `excludepkgs=kernel,kernel-core,…,kernel-uki-*` that dnf5 5.4 applies to configured repositories only, so a
-  kernel RPM given as a file installs from `@commandline` (step 35 checks this). Support 1.6–2.7 used a global
+  kernel RPM given as a file installs from `@commandline` (step 35 checks this). Support 1.6 to 2.7 used a global
   `[main] excludepkgs` in `libdnf5.conf.d`, which also hid local RPMs of those names.
 - dnf5 has no `--disableexcludes`; the override is `dnf --setopt=disable_excludes='*' ...`.
 
@@ -191,10 +186,10 @@ Installation order, from `modules/boss/installation.py`:
 - No rescue image (`dracut_rescue_image="no"` in the support RPM's drop-in): `51-dracut-rescue.install` copies the
   kernel's BLS entry with the version replaced, so `devicetree /dtb-<version>/…` becomes
   `/dtb-0-rescue-<machine-id>/…`, a directory nothing creates.
-- `LIVE_DRACUT_OMIT` in step 50 omits two new aarch64 dracut modules that defeat the live-media policy:
+- `LIVE_DRACUT_OMIT` in step 50 omits two aarch64 dracut modules that defeat the live-media policy:
   `devicetree-firmware`, whose `--no-hostonly` path globs `$fw_dir/qcom/x1e80100/*/*/*.mbn|elf` (the Denali set),
-  and `qcom-adsp`, which modprobes `qcom_q6v5_pas` from a pre-udev hook past the live-only DSP blacklist. The
-  installed initramfs needs the Adreno microcode for plymouth's GPU probe, or early boot logs
+  and `qcom-adsp`, which modprobes `qcom_q6v5_pas` from a pre-udev hook past the live-only DSP blacklist.
+- The installed initramfs needs the Adreno microcode for plymouth's GPU probe, or early boot logs
   `failed to load gen70500_sqe.fw` until switch-root: `payload/90-sp11.conf` installs `qcom/gen70500_sqe.fw.xz`
   and `qcom/gen70500_gmu.bin.xz` from `qcom-firmware`, a support RPM `Requires:` since 2.0.
 

@@ -1,8 +1,9 @@
 # Sensors
 
 The accelerometer, gyroscope, magnetometer and ambient light sensor: what the stack is, how to install or update it
-on an installed system, and how to check and reset it. How it works, and its device history, are in
-[`docs/sensors.md`](../sensors.md). Building its RPMs is part of [`docs/guide/build.md`](build.md).
+on an installed system, and how to check and reset it. How it works: [`docs/sensors.md`](../sensors.md); tablet
+mode and auto-rotation: [`docs/tablet-mode.md`](../tablet-mode.md); building its RPMs:
+[`docs/guide/build-rpms.md`](build-rpms.md).
 
 The sensors hang off the Snapdragon Sensor Core, the sensor framework inside the ADSP firmware, not off any bus
 Linux can see. Four RPMs reach them with free software: `hexagonrpc` serves the framework its configuration and
@@ -13,10 +14,9 @@ media, which runs without the ADSP, and active on the installed system from its 
 
 ## Install or update
 
-The four RPMs come from a build (`build/rpms/`, step 45 of [`docs/guide/build.md`](build.md)) or from the ISO's
-`/sp11/rpms`. `sp11-sensors` carries this unit's sensor registry, exported once from Windows by
-`scripts/75-export-sensor-registry.sh`. On an installed system that lacks the stack or runs an older build, run
-this from the directory holding the RPMs:
+The four RPMs come from a build (`build/rpms/`) or from the ISO's `/sp11/rpms`. `sp11-sensors` carries this unit's
+sensor registry, exported once from Windows by `scripts/75-export-sensor-registry.sh`. On an installed system that
+lacks the stack or runs an older build, run this from the directory holding the RPMs:
 
 ```bash
 sudo dnf install --setopt=disable_excludes='*' ./hexagonrpc-*.rpm ./libssc-0*.rpm ./iio-sensor-proxy-*.rpm ./sp11-sensors-*.rpm

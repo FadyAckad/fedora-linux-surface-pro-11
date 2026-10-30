@@ -30,7 +30,7 @@ in [`docs/verified.md`](../verified.md).
 - 2.5: the user-namespace sysctl is limited to the earlier AppArmor kernels (`-` prefix, ignored where the key does
   not exist). `sp11-diag` reports the active LSMs, `getenforce` and AVC denials. `sp11-selinux-restore` re-enables
   SELinux on installations the live installer disabled it on
-  ([`docs/guide/troubleshooting.md`](troubleshooting.md)).
+  ([`docs/kernel.md`](../kernel.md), SELinux).
 - 2.6: `sp11-diag` runs `sp11-sensors-check` when the sensors stack is installed.
 - 2.7: the internal microphone's decimator gain (`UCM_MIC_GAIN`, +16 dB) in the UCM Mic device. `sp11-diag` reports
   the audio controls and the PipeWire source.

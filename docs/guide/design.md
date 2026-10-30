@@ -3,9 +3,9 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.2.11-300.fc45` source RPM with Fedora's configuration, rebuilt with the 89 patches of
+- Kernel: Fedora's `kernel-7.2.11-300.fc45` source RPM with Fedora's configuration, rebuilt with the 90 patches of
   the branch `sp11/7.2.11` of the project's kernel fork (on the stable tag `v7.2.11`, pinned by commit; SP11
-  revision 7 of 7.2.11) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md); each patch, its authors
+  revision 8 of 7.2.11) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md); each patch, its authors
   and what it is needed for: [`docs/kernel-patches.md`](../kernel-patches.md).
   - `kernel-local` enables the patch set's touch driver and two camera sensor drivers, and two drivers Fedora's
     configuration leaves out, the video clock controller and the crypto engine: without them Linux never lowers
@@ -16,7 +16,7 @@ bullet is in the working note it names.
     packaging, SAUCE patches, camera stack and ADSP attach series are not carried.
   - Deep sleep takes the PCIe links down, so the memory reaches its low-power mode (about 0.33 W asleep instead of
     0.85 W). The modem loses power with its link and starts again after each wake; keeping its link up would keep
-    the memory awake ([`docs/hardware.md`](../hardware.md), Sleep).
+    the memory awake ([`docs/sleep.md`](../sleep.md)).
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb` from the kernel package, on the 5G SKU
   `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree with the modem on PCIe 5 (chosen by the unit's SKU).
   It is loaded explicitly everywhere: GRUB `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry
@@ -67,19 +67,20 @@ bullet is in the working note it names.
 - Sensors: the four RPMs of the stack are installed into the live root with their scriptlet effects applied by the
   build. The live session never starts them, since there is no FastRPC node while the ADSP is off; the installed
   system starts them on its first boot. [`docs/sensors.md`](../sensors.md).
+- Tablet mode: mainline gives the Surface Pro 11 the Surface Aggregator's KIP cover switch, whose change event this
+  firmware never sends, so the kernel always reported laptop mode. The SP11 patch set registers the POS posture
+  switch instead, which follows the keyboard: tablet mode while it is detached or folded back. GNOME then offers
+  auto-rotation (with the sensors packages), and libinput switches the keyboard and touchpad off while the
+  keyboard is folded back. [`docs/tablet-mode.md`](../tablet-mode.md).
 - Cameras: the drivers and device-tree nodes are part of the SP11 patch set; libcamera is Fedora's own package,
   unmodified. [`docs/camera.md`](../camera.md).
 - GPS (5G SKU): the modem's location service answers over QRTR once a client registers the way Qualcomm's own
   client does, which libqmi and ModemManager do not, and its firmware sends no NMEA. The support RPM's
   `sp11-gnss` therefore speaks the service itself and writes each fix as NMEA to a socket GeoClue reads, only while
   an application asks for the exact location; across a sleep it pauses rather than closes, since GeoClue does not
-  reconnect. A udev rule keeps ModemManager off the modem's QMI port, which never answers and would block every
-  suspend. Mobile data: the modem frames its data as MBIM, so from kernel revision 8 its data channels go to the
-  kernel's MBIM driver; ModemManager and NetworkManager do the rest. [`docs/modem.md`](../modem.md).
+  reconnect. [`docs/gnss.md`](../gnss.md).
+- Modem (5G SKU): a udev rule keeps ModemManager off the modem's QMI port, which never answers and would block
+  every suspend. The modem frames its data as MBIM, so from kernel revision 8 its data channels go to the kernel's
+  MBIM driver; ModemManager and NetworkManager do the rest. [`docs/modem.md`](../modem.md).
 - Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth radio, so an
   external monitor or a USB Bluetooth dongle does not change the result. [`docs/hardware.md`](../hardware.md).
-- Tablet mode: mainline gives the Surface Pro 11 the Surface Aggregator's KIP cover switch, whose change event this
-  firmware never sends, so the kernel always reported laptop mode. The last patch of the SP11 patch set registers
-  the POS posture switch instead, which follows the keyboard: tablet mode while it is detached or folded back.
-  GNOME then offers auto-rotation (with the sensors packages), and libinput switches the keyboard and touchpad off
-  while the keyboard is folded back. [`docs/sensors.md`](../sensors.md).

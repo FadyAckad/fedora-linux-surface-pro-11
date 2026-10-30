@@ -98,13 +98,14 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 
 ## 6. Documents now
 
-- `docs/kernel.md`: the revision in Sources and packages, the tarball fact and the size of Fedora's own patch for
-  the version, what this rebase met in the rebase section, a History line.
+- `docs/kernel.md`: a row in the revision table, the tarball fact and the size of Fedora's own patch for the
+  version in Sources and packages, what this rebase met in the rebase section.
 - `docs/kernel-patches.md`: a subsection for the revision (dropped, adapted and new patches, old-to-new numbers)
-  and the renumbered Contents table. Patch numbers are cited in `docs/kernel.md`,
-  `docs/hardware.md`, `docs/sensors.md` and `docs/camera.md` as well.
+  and the renumbered Contents table. Patch numbers are cited in the other notes as well (`docs/kernel.md`,
+  `docs/hardware.md`, `docs/sleep.md`, `docs/sensors.md`, `docs/tablet-mode.md`, `docs/modem.md`,
+  `docs/camera.md`).
 - `docs/guide/new-release.md`: the default revision.
-- Any other note whose facts the update changed; a new fact goes into its note first (`CLAUDE.md`, Conventions).
+- Any other note whose facts the update changed; a new fact goes into its note first (`CLAUDE.md`).
 - Lines of at most 116 columns with code spans whole; the MAC grep of `CLAUDE.md` before handing over.
 
 ## 7. Hand-off

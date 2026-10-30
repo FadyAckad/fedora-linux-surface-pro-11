@@ -1,8 +1,8 @@
 # Build
 
 Building the ISO on the Surface itself: the requirements, the pipeline and its options, the steps and the checks.
-Also building the kernel, support, pen daemon or sensors RPMs alone. What each step does underneath, its caches and
-the pitfalls are in [`docs/pipeline.md`](../pipeline.md).
+Building one set of RPMs alone, for a system that is already installed: [`docs/guide/build-rpms.md`](build-rpms.md).
+What each step does underneath, its caches and the pitfalls: [`docs/pipeline.md`](../pipeline.md).
 
 ## Requirements
 
@@ -31,7 +31,7 @@ scripts/build-all.sh
 ```
 
 Steps 00 to 45 skip finished work, and `FORCE=1` rebuilds one of them. Step 50 and the checks always run. The
-kernel build takes about an hour after the downloads. WSL has to keep running meanwhile, or the build stops and
+kernel build takes about an hour after the downloads; WSL has to keep running meanwhile, or the build stops and
 starts over on the next run. Two settings in `sp11.conf`, also accepted from the environment, select the source
 media:
 
@@ -55,9 +55,9 @@ release.
 ## Steps
 
 1. `scripts/00-setup-host.sh` installs the build dependencies and checks the host.
-2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, checks them
-   against the supported models and writes `build/hardware.env`. The SKU decides the device tree (the 5G SKU's
-   carries its modem) and whether the support RPM carries the modem's files.
+2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, checks them against the
+   supported models and writes `build/hardware.env`. The SKU decides the device tree (the 5G SKU's carries its
+   modem) and whether the support RPM carries the modem's files.
 3. `scripts/10-fetch-sources.sh` downloads and verifies the sources: the Fedora ISO, Fedora's kernel and
    iio-sensor-proxy source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11 patch set from the
    kernel fork's pinned commit, the pinned checkouts (iptsd, OE, hexagonrpc, libssc) and the Bluetooth helper
@@ -69,20 +69,19 @@ release.
 5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: the firmware from the Windows DriverStore, the
    audio topology and UCM, the Wi-Fi board data, the Bluetooth address service, the boot policy (kernel-install
    plugin, dracut and module settings, the dnf override that keeps stock kernels off the system), the Windows GRUB
-   entry, the first-boot service, `sp11-bt-import-pairings` and `sp11-diag`. The step rebuilds when its `VERSION=`
-   or the target Fedora release changes, refuses to rebuild the same version from a changed payload, and then runs
-   `scripts/35-verify-support-rpm.sh` (see Checks) when a live root is there.
-6. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface
-   Pro 11 integration.
+   entry, the first-boot service, `sp11-bt-import-pairings` and `sp11-diag`; on the 5G SKU also the modem's udev
+   rule and the GNSS feed. The step rebuilds when its `VERSION=` or the target Fedora release changes, refuses to
+   rebuild the same version from a changed payload, and then runs step 35 (see Checks) when a live root is there.
+6. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface Pro 11
+   integration.
 7. `scripts/45-build-sensors-rpms.sh` builds the sensors stack: `hexagonrpc`, `libssc` and the SSC-enabled
    `iio-sensor-proxy` in a mock buildroot of the target release, and `sp11-sensors` from this unit's registry
-   export (step 75) and the Windows sensor configuration. The step runs `scripts/46-verify-sensors-rpms.sh` when a
-   live root is there.
+   export (step 75) and the Windows sensor configuration. The step runs step 46 when a live root is there.
 8. `scripts/50-build-iso.sh` builds the ISO: it replaces the live root's stock kernel packages with the SP11 build
    of the same packages, installs the support, iptsd and sensors RPMs, builds the live initramfs, adds the device
    tree, the kernel arguments and the console font to Fedora's own live GRUB menu, then assembles the ISO and
    implants the media-check checksum. The result is, for example,
-   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.7.fc45.aarch64.iso`, plus `.sha256`.
+   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.8.fc45.aarch64.iso`, plus `.sha256`.
 
 ## Checks
 
@@ -103,94 +102,3 @@ each one installs and asserts is in [`docs/pipeline.md`](../pipeline.md).
 - Step 60 is optional and checks the root that step 50 left behind: packages and binaries, the installer and its
   viewer, the firmware, the SP11 kernel in place of the stock one, the sensors stack and the boot configuration an
   installation would get.
-
-## Building the kernel RPMs alone
-
-`build-all.sh` builds them in step 20. Build only them for a system that is already installed, once `sp11.conf`
-names a newer Fedora kernel or `KERNEL_SP11_REV` than that system runs. A full `scripts/build-all.sh` run has to
-come first: it provides the host setup, the downloads and the live root the check installs into. Use its
-`FEDORA_TARGET` and `FEDORA_EDITION`, since step 10 also fetches the image they name when the cache lacks it:
-
-```bash
-scripts/10-fetch-sources.sh
-```
-
-```bash
-scripts/20-build-kernel.sh
-```
-
-Step 20 builds when `build/rpms/` holds no `kernel-core` of the configured version (about an hour, with WSL running
-throughout); otherwise it only repeats its checks. A patch set or `payload/kernel-local` of your own needs a new
-revision first: [`docs/guide/new-release.md`](new-release.md).
-
-Then step 36 (see Checks) installs the packages next to the live root's kernel. Pass the support RPM of
-`build/rpms/` as `SUPPORT_PREVIOUS_RPM`, so that it is installed first and writes the GRUB menu an installed system
-has; the live root's own menu, Fedora's, fails the menu check:
-
-```bash
-SUPPORT_PREVIOUS_RPM=$(ls build/rpms/sp11-surface-support-*.rpm) scripts/36-verify-kernel-install.sh
-```
-
-The step ends with `kernel packages verified on an installed system next to` and the live root's kernel. That
-kernel must not be the kernel under test, so after an ISO build with the new kernel the step does not apply. Copy
-the five packages the ISO installs (`kernel`, `kernel-core`, `kernel-modules-core`, `kernel-modules`,
-`kernel-modules-extra`) from `build/rpms/` to the installed system and install them there:
-[`docs/guide/update.md`](update.md).
-
-## Building the support RPM alone
-
-`build-all.sh` builds it in step 30. Build only it once `VERSION=` in `scripts/30-build-support-rpm.sh` is newer
-than the installed system's; bump it with every change to the payload, because `dnf upgrade` acts on the version
-alone. A full `scripts/build-all.sh` run has to come first, as for the kernel, and step 10 after a change to
-`sp11.conf`:
-
-```bash
-scripts/30-build-support-rpm.sh
-```
-
-The step builds when `build/rpms/` holds no support RPM of that version for the target Fedora release, stops when
-the payload changed without a new version, and then runs step 35 (see Checks). To check the upgrade the installed
-system will make, pass the support RPM that system runs: a copy kept from its build (a new build removes the older
-RPM from `build/rpms/`) or the one on its ISO under `/sp11/rpms`:
-
-```bash
-SUPPORT_PREVIOUS_RPM=<rpm> scripts/35-verify-support-rpm.sh
-```
-
-Copy `build/rpms/sp11-surface-support-<version>-1.fc<release>.aarch64.rpm` to the installed system and upgrade it
-there: [`docs/guide/update.md`](update.md).
-
-## Building the pen daemon RPM alone
-
-`build-all.sh` builds `sp11-iptsd` in step 40. Build only it once `sp11.conf` pins another iptsd commit or
-`IPTSD_RPM_RELEASE`. A full `scripts/build-all.sh` run has to come first, then step 10, which moves the checkouts
-to the pinned commits. Use that run's `FEDORA_TARGET` and `FEDORA_EDITION`, as for the kernel:
-
-```bash
-scripts/10-fetch-sources.sh
-```
-
-```bash
-scripts/40-build-iptsd-rpm.sh
-```
-
-Step 40 builds when `build/rpms/` holds no `sp11-iptsd` of the pinned version, release and commit, in a mock
-buildroot of the target release when the host runs another Fedora. Copy the RPM to the installed system; upgrading
-it there restarts the pen daemon: [`docs/guide/update.md`](update.md).
-
-## Building the sensors RPMs alone
-
-`build-all.sh` builds them in step 45. Rebuild only them after a full `scripts/build-all.sh` run, with the
-`FEDORA_TARGET` of the installed system. The library RPMs are built in a mock buildroot of that release, so the
-first run takes a while:
-
-```bash
-FEDORA_TARGET=beta scripts/45-build-sensors-rpms.sh
-```
-
-This builds `hexagonrpc` (from this project's fork, see [`docs/guide/credits.md`](credits.md)), `libssc`,
-`iio-sensor-proxy` (Fedora's own source RPM with `-Dssc-support=enabled` and this project's sleep patch) and
-`sp11-sensors`, and verifies them in the extracted live root. `SENSORS_VERSION` in `sp11.conf` versions
-`sp11-sensors`; a changed payload at the same version stops the step, as does a change in Fedora's iio-sensor-proxy
-spec until the template is refreshed.
-Installing them: [`docs/guide/sensors.md`](sensors.md).

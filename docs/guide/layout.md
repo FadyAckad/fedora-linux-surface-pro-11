@@ -12,18 +12,20 @@ What each file and directory of the repository is. The build tree's caches and o
   `libssc`, `iio-sensor-proxy`, `sp11-sensors`). The kernel uses Fedora's own `kernel.spec`.
 - `payload/`: the payload of the support RPM (on the 5G SKU also the modem's udev rule `77-sp11-modem.rules` and
   the GNSS feed `sp11-gnss*`), the kernel's configuration additions (`payload/kernel-local`) and the README inside
-  the ISO. `payload/sensors/` holds the files and helper scripts of `sp11-sensors`, hexagonrpc's
-  sysusers entry and udev rule, the patches of `libssc` and `iio-sensor-proxy`, and `sp11-sam-posture`, an
-  unpackaged probe of the Surface Aggregator's cover and posture state. `payload/camera/` holds
-  `sp11-camera-probe`, an unpackaged measurement of the cameras' raw output.
+  the ISO. `payload/sensors/` holds the files and helper scripts of `sp11-sensors`, hexagonrpc's sysusers entry and
+  udev rule, the patches of `libssc` and `iio-sensor-proxy`, and `sp11-sam-posture`, an unpackaged probe of the
+  Surface Aggregator's cover and posture state. `payload/camera/` holds `sp11-camera-probe`, an unpackaged
+  measurement of the cameras' raw output.
 - `images/`: the README's screenshot.
 - `LICENSE`: GPL-3.0-or-later for the repository's content (see [`docs/guide/credits.md`](credits.md)).
 - `CLAUDE.md`: entry point of the working notes (the index of `docs/`, rules for every session, references).
-- `docs/`: the working notes by topic (`pipeline.md`, `hardware.md`, `kernel.md`, `kernel-patches.md`,
-  `fedora-media.md`, `sensors.md`, `modem.md`, `camera.md`, `verified.md`). They hold verified facts about the
-  hardware, the Fedora media and the pipeline, its pitfalls, and what has been confirmed on the device, by date.
-  `docs/guide/`: the user guides the README links to.
+- `docs/`: the working notes by topic, indexed in `docs/README.md` (`pipeline.md`, `hardware.md`, `sleep.md`,
+  `kernel.md`, `kernel-patches.md`, `fedora-media.md`, `sensors.md`, `tablet-mode.md`, `modem.md`, `gnss.md`,
+  `camera.md`, `verified.md`). They hold verified facts about the hardware, the Fedora media and the pipeline, its
+  pitfalls, and what has been confirmed on the device, by date. `docs/guide/`: the user guides the README links
+  to, starting with `overview.md`.
+- `.claude/skills/`: the update to a new Fedora kernel, the hand-off standard and the documentation standard
+  with its validator, as Claude Code skills.
 - `.gitattributes`: LF line endings for every file; the payload scripts break with CRLF.
-- `build/`: caches, work trees, RPMs and output ISOs (git-ignored). `build/hardware.env`,
-  `build/bt-pairings/` and `build/sensors/` hold your unit's identity, pairing keys and sensor calibration;
-  keep them private.
+- `build/`: caches, work trees, RPMs and output ISOs (git-ignored). `build/hardware.env`, `build/bt-pairings/`
+  and `build/sensors/` hold your unit's identity, pairing keys and sensor calibration; keep them private.
