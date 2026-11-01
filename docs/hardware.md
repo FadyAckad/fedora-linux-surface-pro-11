@@ -54,7 +54,21 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   into it. With the country known a full scan of the 102 channels (none limited to passive scanning) takes 8.5 s,
   association 0.3 s and DHCP 3 s: online 21 s after a wake, 27 s after the kernel's start (7.2.11 revision 8,
   2026-10-29). A country from user space (`iw reg set`) reaches ath12k only with
-  `ATH_REG_DYNAMIC_USER_REG_HINTS`, which needs `CFG80211_CERTIFICATION_ONUS`; Fedora sets neither.
+  `ATH_REG_DYNAMIC_USER_REG_HINTS`, which needs `CFG80211_CERTIFICATION_ONUS`; Fedora sets neither. The driver
+  keeps the country its 11d scan found (`ar->alpha2`) across the firmware's restart but re-sent it only after a
+  crash recovery. 7.2.11 revision 9 (patch 0092) sent it when the radio started, and the first scan after a wake
+  still ran over the world list (15 s, `DE` by the chip's own scan 7 s in; 2026-10-31): `ath12k_regd_update` applies
+  one answer per `regd_updated` cycle, and the interfaces added right after the start re-apply the rules last
+  received, so the firmware's answer loses the race unless it is in first (the night's wake: an 8.4 s scan, online
+  after 13.1 s). Revision 10 waited for any regulatory event and lost the same race once in two wakes (the
+  firmware's own first event completes the wait); revision 11 waited for the answer that carries the country and
+  still saw the world rules at both wakes. Revision 12's log found the cause at the sleep, not the wake: the
+  scan NetworkManager starts as it disconnects is aborted by the link going down, the chip's 11d scan stops and
+  reports no country (`00`), and the driver takes that over as the known country and sends it to the firmware,
+  so nothing is left to restore. Revision 13 keeps a known country when the 11d scan reports none and restores
+  it as the radio starts: sent, answered by the firmware within a few milliseconds, applied before the interfaces
+  exist; the first scan after a wake then takes 8.5 s and the station is online after 13.2 to 13.5 s, with `DE`
+  and the 160 MHz link (2026-11-01, both wakes of the round). A boot has no country to restore: 27 s as before.
 - PCIe L1.2 (7.2.11 revision 5, 2026-10-28): the Wi-Fi (`0004:01:00.0`) and NVMe (`0006:01:00.0`) functions
   report snoop and no-snoop latencies of 0 ns (nothing programs them on Qualcomm hosts), below the links'
   `LTR1.2_Threshold` (76800 ns Wi-Fi, 136192 ns NVMe), so the links enter L1.1 and almost never L1.2

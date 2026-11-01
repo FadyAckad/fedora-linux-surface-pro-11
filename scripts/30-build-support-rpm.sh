@@ -10,7 +10,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.8"
+VERSION="3.9"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
@@ -182,7 +182,9 @@ sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_window
 ## 7. The 5G SKU's modem (docs/modem.md): ModemManager kept off its QMI port, which never answers (a request queued
 ##    there blocks suspend; ModemManager's probe of it costs 45 s at start and at shutdown), and the GNSS feed for
 ##    GeoClue: the service, its socket (started by the rule when the modem appears), the sleep hook, GeoClue's
-##    drop-in and the policy module that lets GeoClue connect. Only for the 5G SKU (the 5G device tree).
+##    drop-in and the policy module that lets GeoClue connect; and ModemManager's quick suspend/resume, which
+##    keeps the modem across a sleep (the kernel keeps it powered from 7.2.11 revision 9). Only for the 5G SKU
+##    (the 5G device tree).
 MODEM=0
 if [ "$SP11_DTB" = "$SP11_DTB_5G" ]; then
   MODEM=1
@@ -192,10 +194,11 @@ if [ "$SP11_DTB" = "$SP11_DTB_5G" ]; then
   install -D -m 0755 "$PAYLOAD_DIR/sp11-gnss-sleep" "$STAGE/usr/lib/systemd/system-sleep/sp11-gnss"
   install -D -m 0644 "$PAYLOAD_DIR/sp11-gnss-geoclue.conf" "$STAGE/etc/geoclue/conf.d/90-sp11-gnss.conf"
   install -D -m 0644 "$PAYLOAD_DIR/sp11-gnss.cil" "$STAGE/usr/share/selinux/packages/sp11-gnss.cil"
+  install -D -m 0644 "$PAYLOAD_DIR/sp11-quick-suspend-resume.conf" "$STAGE/usr/lib/systemd/system/ModemManager.service.d/sp11-quick-suspend-resume.conf"
   bash -n "$STAGE/usr/lib/systemd/system-sleep/sp11-gnss" || die "shell syntax error in the sp11-gnss sleep hook"
   python3 -I -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' "$STAGE/usr/libexec/sp11/sp11-gnss" \
     || die "Python syntax error in sp11-gnss"
-  log "5G SKU: the modem's rule and GNSS feed included"
+  log "5G SKU: the modem's rule, GNSS feed and ModemManager's quick suspend/resume included"
 else
   log "SKU $SP11_SKU has no modem: no modem files"
 fi

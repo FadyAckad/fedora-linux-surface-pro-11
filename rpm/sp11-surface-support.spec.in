@@ -1,5 +1,5 @@
 %global stage @STAGE@
-# 1 on the 5G SKU: the modem's rule and GNSS feed (scripts/30-build-support-rpm.sh, section 7).
+# 1 on the 5G SKU: the modem's rule, GNSS feed and ModemManager drop-in (scripts/30-build-support-rpm.sh, section 7).
 %global sp11_modem @MODEM@
 %global debug_package %{nil}
 %global __os_install_post %{nil}
@@ -43,8 +43,9 @@ data, Bluetooth public-address service, kernel-install boot policy plugin
 a GRUB menu entry that chainloads the Windows Boot Manager, a dnf repository override
 that keeps Fedora's stock kernel packages (which lack the SP11 patch set) off the
 system, the first-boot finalizer and, built for the 5G SKU, a udev rule that keeps
-the modem's QMI port from ModemManager and a GNSS feed that passes the modem's
-positions to GeoClue.
+the modem's QMI port from ModemManager, a GNSS feed that passes the modem's
+positions to GeoClue, and a drop-in that makes ModemManager keep the modem across
+a system sleep.
 The firmware is proprietary and must not be redistributed.
 Inputs: @INPUTS@
 
@@ -113,6 +114,8 @@ fi
 /usr/lib/systemd/system-sleep/sp11-gnss
 /etc/geoclue/conf.d/90-sp11-gnss.conf
 /usr/share/selinux/packages/sp11-gnss.cil
+%dir /usr/lib/systemd/system/ModemManager.service.d
+/usr/lib/systemd/system/ModemManager.service.d/sp11-quick-suspend-resume.conf
 %endif
 
 %changelog

@@ -131,6 +131,7 @@ assert_payload() {
     check as_root test ! -e "$M/usr/libexec/sp11/sp11-gnss"
     check as_root test ! -e "$M/etc/geoclue/conf.d/90-sp11-gnss.conf"
     check as_root sh -c "! chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-gnss"
+    check as_root test ! -e "$M/usr/lib/systemd/system/ModemManager.service.d/sp11-quick-suspend-resume.conf"
     return 0
   fi
   check as_root grep -q 'ENV{ID_MM_PORT_IGNORE}="1"' "$M/usr/lib/udev/rules.d/77-sp11-modem.rules"
@@ -148,6 +149,10 @@ assert_payload() {
   check as_root grep -qx 'Type=notify' "$M/usr/lib/systemd/system/sp11-gnss.service"
   check as_root grep -qF 'systemctl kill -s USR1 sp11-gnss.service' "$M/usr/lib/systemd/system-sleep/sp11-gnss"
   check as_root sh -c "! grep -q 'systemctl stop' '$M/usr/lib/systemd/system-sleep/sp11-gnss'"
+  # 3.9: ModemManager keeps the modem across a sleep (its unit still loads with the drop-in).
+  check as_root grep -qx 'ExecStart=/usr/bin/ModemManager --test-quick-suspend-resume' \
+    "$M/usr/lib/systemd/system/ModemManager.service.d/sp11-quick-suspend-resume.conf"
+  check as_root chroot "$M" /usr/bin/systemd-analyze verify /usr/lib/systemd/system/ModemManager.service
 }
 
 # dnf5 with the override in place: a stock kernel offered by a configured repository is hidden, the same package as a

@@ -41,8 +41,9 @@ own behaviour across a sleep is in `docs/modem.md`, the sensor streams' in `docs
   every sleep (`broken_l1ss_resume`).
 - 7.2.11 revision 4 (patches 0079 to 0081, mainline 7.3: D3 for native hot-plug root ports on non-x86, GENI
   serial force-suspended in system sleep, the crypto engine's vote only while busy): `ddr` 591 of 630 s in a
-  10-minute sleep. The modem loses its link and, with it, its power (`vreg_wwan` is PCIe 5's slot supply) and
-  comes back through the MHI recovery on resume (`docs/modem.md`, Across a sleep). With the modem's link kept up
+  10-minute sleep. The modem loses its link and, with it, its power (`vreg_wwan` is PCIe 5's slot supply up to
+  revision 8) and comes back through the MHI recovery on resume (`docs/modem.md`, Across a sleep). With the
+  modem's link kept up
   (`d3cold_allowed` 0) `ddr` stays 0: `qcom_pcie_suspend_noirq()` votes 1 kB/s on the memory path for a link that
   stays up (ad9b9b6e36c9); tagging that vote active-only (`icc_set_tag()`) compiled but was not tested.
 - Revision 4's night: a wake by an ADSP notice, then a suspend 26 s later that `mhi-pci-generic` refused
@@ -50,8 +51,10 @@ own behaviour across a sleep is in `docs/modem.md`, the sensor streams' in `docs
   fell back to `s2idle` for 3 h 23 min: 1.40 W. Revision 5 (patch 0082) powers a busy modem down for the suspend
   instead (`device busy, powering it down for system suspend`); every sleep stays deep and GPS answers afterwards.
 - Revision 5, 8 hours on battery: 0.33 W with 47 s awake, `ddr` 27335 of 28988 s suspended, the ADSP 10 sleep
-  entries a second (about 100 before revision 4). The PM core logs `parent mhi0 should not be sleeping` once per
-  channel device the modem's restart re-creates while the next suspend is prepared; harmless.
+  entries a second (about 100 before revision 4). Revision 9 (the modem powered through the sleep, registered and
+  kept by ModemManager): 0.32 W over 28885 s, `ddr` 27148 s, the ADSP 10 a second (2026-10-31). Up to revision 8
+  the PM core logs `parent mhi0 should not be sleeping` once per channel device the modem's restart re-creates while
+  the next suspend is prepared; harmless.
 - `cxsd` and `aosd` stayed 0 in every configuration: CX never collapses. Linux runs at EL1 under the firmware's
   hypervisor (Gunyah). Another Surface Pro 11 (X1E80100, OLED), booted at EL2 with slbounce, reaches `cxsd`,
   `aosd` and the DDR low-power modes for 99.9 % of a 73-minute s2idle suspend at about 0.26 W, against 1.06 W on

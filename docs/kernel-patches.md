@@ -122,6 +122,48 @@ after their trailers that names the source and the change.
 - A module build of the same `pci_generic.c` on revision 7 passed the device test first; revision 8 passed the
   same day and was pushed (head `86f4bc1a`, tree `f5de3f91`).
 
+### 7.2.11 revision 9: the modem kept powered through a sleep, Wi-Fi's country restored after it
+
+- 0091 (this repository): the 5G device tree keeps the modem's supply `vreg_wwan` on (`regulator-always-on`)
+  and no longer hands it to PCIe 5 as `vddpe-3v3-supply`, so a deep sleep takes the link down but not the
+  modem's power; the change the test tree of 2026-10-29 carried (`docs/modem.md`, Across a sleep).
+- 0092 (this repository): ath12k sends the firmware the country its 11d scan found before (`ar->alpha2`) when
+  a radio starts, as `reconfig_complete` does after a crash recovery; the firmware restarts in world roaming
+  after every system suspend and the driver never told it (`docs/hardware.md`, Wi-Fi). A boot has no country
+  yet; the 11d scan still runs and replaces a stale country before an association.
+- The device round of 2026-10-31: 0091 and ModemManager's quick resume passed (mobile data 2.0 s after a wake,
+  the night at 0.32 W); 0092's answer from the firmware was dropped by the `regd_updated` gate, so the first scan
+  after a wake still ran in world roaming. Not pushed; revision 10 carries the fix.
+
+### 7.2.11 revisions 10 and 11: the country re-send waits for the firmware's answer
+
+- 0091 unchanged. 0092 reworked: after sending the country, `ath12k_mac_start` waits up to 500 ms for the
+  firmware's regulatory answer (`regd_update_completed`), clears the `regd_updated` gate and applies the answer,
+  so the interfaces added right after and the first scan see the country's channel list; a `00` country (the
+  registration's default without an SMBIOS code) is not sent.
+- Revision 10 waited for any regulatory event and lost the race once in two wakes: the firmware's own first
+  event after the restart completed the wait, the world rules were applied, the answer was dropped. Revision 11
+  loops on the completion until `ab->reg_info` carries the restored country, within the 500 ms, and applies it;
+  without such an answer the start goes on with a warning and the behaviour of revision 8. On the device
+  (2026-11-01) the answer was found and the world rules were still applied at both wakes.
+
+### 7.2.11 revision 12: the country re-send with diagnostics
+
+- 0092 again: every stored regulatory event, every apply to the wiphy and the restore's steps logged at info
+  level; the regulatory event handler clears the `regd_updated` gate so that a changed country is applied, and
+  sends the known country again (twice at most per start) when the firmware reports world roaming while a
+  country is known. The device round (2026-11-01) showed the real cause at the sleep: the 11d scan, stopped by
+  the link going down, reports `00`, which the driver takes over as the known country; neither guard mattered.
+
+### 7.2.11 revision 13: the country kept across a sleep
+
+- 0092 in its final form: `ath12k_reg_11d_new_cc_event` keeps a known country when the 11d scan reports `00`
+  (and sends nothing to the firmware then); `ath12k_mac_start` sends the known country, waits up to 500 ms for
+  the answer that carries it, clears the `regd_updated` gate and applies it; without an answer the start goes
+  on with a warning. No diagnostics, no re-send, no gate release in the event handler. Passed its device round
+  on 2026-11-01 (`DE` before the first scan at both wakes, Wi-Fi online after 13.2 and 13.5 s); the push of 0091
+  and 0092 is the owner's step.
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -176,6 +218,8 @@ The patches by number, with their origin and what each is needed for.
 | 0084–0088 | Adreno GMU shutdown idle check, boot-up bandwidth vote, devfreq idle time, scheduler priority, preemption records across suspend | Jie Zhang, Akhil P Oommen (posted 2026-10-24) | GPU stability around its idle power-downs, a little power while awake |
 | 0089 | Denali device tree: the video codec with the Surface's firmware | this repository | hardware video decoding and encoding |
 | 0090 | MHI PCI: the Surface Pro 11 5G modem's data channels for the MBIM driver | this repository | mobile data (`docs/modem.md`) |
+| 0091 | 5G device tree: the modem's supply stays on through a system sleep | this repository | mobile data back within seconds of a wake (`docs/modem.md`, Across a sleep) |
+| 0092 | ath12k: a known country kept when the 11d scan reports none, restored when a radio starts | this repository | the first Wi-Fi scan after a wake with the country known (`docs/hardware.md`, Wi-Fi) |
 
 ## Left out of v23.2
 

@@ -27,9 +27,11 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
   ([`docs/gnss.md`](../gnss.md)).
 - Mobile data (5G SKU, kernel revision 8 or later): Fedora's provider list offers no APN for some carriers (o2
-  Germany: set `internet` in Settings > Mobile Network). The modem restarts after every sleep, so a SIM with a PIN
-  asks for it again, and the connection returns about a minute after a wake only if it connects automatically
-  ([`docs/modem.md`](../modem.md), Mobile data).
+  Germany: set `internet` in Settings > Mobile Network). Up to kernel revision 8 the modem restarts after every
+  sleep, so a SIM with a PIN asks for it again and the connection returns about a minute after a wake; from
+  revision 9 the modem keeps its power through a sleep and the connection is back within about 17 s, within
+  2 s with support 3.9 (ModemManager's quick resume). Either way only if the profile connects automatically
+  ([`docs/modem.md`](../modem.md), Across a sleep).
 - Plugging the charger in while the tablet sleeps wakes it, sometimes several times in the first minutes. Under
   KDE Plasma, with the cover closed, it goes back to sleep about 10 s after each wake.
 - Under KDE Plasma, with the power button set to Sleep, waking the tablet with the power key puts it back to sleep

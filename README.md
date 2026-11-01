@@ -17,8 +17,8 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Component | Version |
 |---|---|
 | Fedora | 45 Beta 1.3, Workstation or KDE Plasma Desktop |
-| Kernel | Fedora's `kernel-7.2.11-300.fc45`, SP11 revision 8 (`7.2.11-300.sp11.8.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.8 |
+| Kernel | Fedora's `kernel-7.2.11-300.fc45`, SP11 revision 13 (`7.2.11-300.sp11.13.fc45.aarch64`) |
+| Support RPM (`sp11-surface-support`) | 3.9 |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-3.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
 
@@ -29,7 +29,7 @@ the ISO built on 2026-10-19 and updated since to the versions above; every row w
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.8) |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.9) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Display with GPU acceleration | ✅ |
@@ -64,8 +64,12 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
 
 - GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
   minutes ([`docs/gnss.md`](docs/gnss.md)).
-- Asleep, the tablet drew 0.33 W over 8 hours with kernel revision 5 or later, against 0.85 W before; the modem is
-  off while it sleeps and back about a minute after a wake ([`docs/sleep.md`](docs/sleep.md)).
+- Asleep, the tablet drew 0.33 W over 8 hours with kernel revision 5 or later, against 0.85 W before. From
+  revision 9 the modem keeps its power through the sleep at no measurable cost (0.32 W), and with support 3.9
+  mobile data is back within 2 s of a wake; from revision 13 Wi-Fi is back about 13 s after a wake instead of
+  21 s
+  ([`docs/sleep.md`](docs/sleep.md), [`docs/modem.md`](docs/modem.md), [`docs/hardware.md`](docs/hardware.md),
+  Wi-Fi).
 - Hardware video decoding works from kernel revision 7: a 720p VP9 clip decoded frame for frame in GStreamer, and
   H.264 and H.265 clips once their colorimetry was relabelled ([`docs/hardware.md`](docs/hardware.md), Video
   codec).
@@ -115,8 +119,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.8.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.8.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.13.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.13.fc45.aarch64.iso`, with a `.sha256` beside it. Then
 write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
 ## Reporting results

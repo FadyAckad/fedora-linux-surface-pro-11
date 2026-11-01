@@ -168,3 +168,84 @@ One entry per round; the facts each established live in the topic notes.
   battery's reading changed by the same 0.511 Wh in both runs. Wi-Fi: country `DE` for the system and the chip,
   102 channels, none passive-only; a full scan took 8.5 s with the country known, the first scan after a wake 16 s
   (`docs/hardware.md`, Wi-Fi).
+
+## Kernel 7.2.11 revision 9: the modem powered through a sleep, ModemManager's quick resume (2026-10-31)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.9.fc45` (the 5G tree keeps the modem's supply through a sleep, 0091;
+  ath12k re-sends the country when a radio starts, 0092) with support 3.8, `dnf install` next to revisions 7
+  and 8, dnf removing revision 5; a drop-in on ModemManager's unit with `--test-quick-suspend-resume` (not in the
+  support RPM).
+- Confirmed: the standard checks; the 5G tree with `regulator-always-on` on the modem's supply and no slot supply
+  on PCIe 5; mobile data over `wwan0` (5 MB in 1.8 s on 5G), GPS's QRTR path; no SELinux denial. By hand (owner):
+  every row of the feature table.
+- Measured after a 10-minute deep sleep: ModemManager synced the modem 1.4 s after the wake, mobile data online
+  after 2.0 s (revision 8: 52.3 s), no modem restart and no port re-attach in the kernel log; `ddr` 560 of 599 s,
+  `cxsd` 0. The night: 8 hours asleep at 0.32 W (27.035 to 24.485 Wh over 28885 s, `ddr` 27148 s, one sleep;
+  revision 5 with the modem off: 0.33 W); in the morning mobile data online 2.0 s after the wake.
+- Found: patch 0092 did not reach the first scan after the wake: the nl80211 events show the firmware starting
+  in world roaming, the scan over its list (15 s) and `DE` set by the chip's own country scan 7 s in, as on
+  revision 8; the night's wake scanned in 8.4 s and was online after 13.1 s. The driver's `regd_updated` gate and
+  the interfaces added right after the start re-apply the rules last received, so the firmware's answer to the
+  restored country is dropped unless it arrives first (`docs/hardware.md`, Wi-Fi); revision 10 waits for it.
+- The Wi-Fi figures of the boot and of the 10-minute wake were taken on a phone hotspot that was not beaconing at
+  the time (online after 190 s and 35 s) and say nothing about the kernel; the night's wake was on the home network.
+
+## Kernel 7.2.11 revision 10: the country re-send with a wait (2026-10-31)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.10.fc45` (revision 9 with 0092 waiting for a regulatory answer)
+  with support 3.8 and the ModemManager drop-in, `dnf install` next to revisions 8 and 9, dnf removing
+  revision 7.
+- Confirmed: `Enforcing`, the DSPs, the modem connected; no SELinux denial. Mobile data online 1.8 s and 2.0 s
+  after two wakes. On the home network (5180 MHz, 160 MHz): a boot online after 30.2 s (unchanged by design); the
+  second wake with `DE` restored before the first scan, the scan 8.6 s, online after 13.6 s; `DE` and the 160 MHz
+  link after both wakes.
+- Found: the first wake still ran its scan over the world list (16.1 s, online after 20.6 s): the wait returned
+  on the firmware's own first regulatory event, not on the answer to the command, so the world rules were applied
+  and the answer dropped by the gate. Revision 11 waits for the answer that carries the country.
+
+## Kernel 7.2.11 revision 11: the country re-send waiting for the matching answer (2026-11-01)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.11.fc45` (revision 10 with 0092 waiting for the answer that carries
+  the country) with support 3.8 and the ModemManager drop-in, `dnf install` next to revisions 9 and 10, dnf
+  removing revision 8.
+- Confirmed: `Enforcing`, the DSPs, the modem connected; no SELinux denial. Mobile data online 2.4 s and 1.8 s
+  after two wakes on the home network; a boot online after 27.3 s; `DE` and the 160 MHz link after both wakes.
+- Found: both wakes still scanned the world list (16 s, online after 20.3 s and 20.4 s), with the world rules
+  applied twice at the start and `DE` only from the chip's own scan 7 s in, although the driver found the
+  restored country in the firmware's answer within 500 ms (no timeout warning). Revision 10's one good wake had
+  the radio restarted by the resume path, not by NetworkManager's link-up. Revision 12 logs the sequence.
+
+## Kernel 7.2.11 revision 12: the country re-send with diagnostics (2026-11-01)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.12.fc45` (revision 11 with the regulatory path logged, a changed
+  country let through the gate, a re-send on world roaming) with support 3.8 and the ModemManager drop-in,
+  `dnf install` next to revisions 10 and 11, dnf removing revision 9.
+- Confirmed: `Enforcing`, the DSPs, the modem connected; no SELinux denial. Mobile data online 2.1 s and 1.1 s
+  after two wakes; a boot online after 26.3 s; `DE` and the 160 MHz link after both wakes. At the second wake the
+  restore worked end to end: the country sent as the radio started, answered after 3 ms, applied before the
+  interfaces were created, the scan 8.5 s, Wi-Fi online after 12.4 s.
+- Found: at a sleep, NetworkManager's disconnection starts a scan that the link's end aborts, the chip's 11d
+  scan stops and reports no country (`00`), and the driver takes that over as the known country and sends it to
+  the firmware, which is the `set to world roaming` of every sleep. At the next wake there is nothing to restore
+  (the first wake: no restore, the world list, online after 21.0 s). The second sleep had no scan to abort (it
+  fell back to `s2idle`), so the country survived to the second wake. Revision 13 keeps a known country when the
+  11d scan reports none.
+
+## Kernel 7.2.11 revision 13: the country kept across a sleep (2026-11-01)
+
+- Installed: the kernel RPMs `7.2.11-300.sp11.13.fc45` (0091 and the final 0092: a known country kept when the
+  11d scan reports none, restored as the radio starts) with support 3.8 and the ModemManager drop-in,
+  `dnf install` next to revisions 11 and 12, dnf removing revision 10.
+- Confirmed: `Enforcing`, the DSPs, the modem connected; no SELinux denial. On the home network (5180 MHz,
+  160 MHz): after two wakes `DE` applied within 1.4 s of the resume and before the first scan, the scan 8.5 and
+  8.6 s, Wi-Fi online after 13.2 and 13.5 s (revision 8: 20.7 s), mobile data after 2.4 and 2.0 s (revision 8:
+  52.3 s); a boot online after 27.7 s (unchanged); `DE` and the 160 MHz link after both wakes; at the sleeps the
+  aborted scan no longer ends in world roaming; no regulatory warning in the kernel log.
+
+## Support RPM 3.9: ModemManager's quick resume packaged (2026-11-01)
+
+- Installed: `sp11-surface-support-3.9-1.fc45` with `dnf upgrade` over 3.8 on kernel 7.2.11 revision 13; the kit's
+  copy of the drop-in removed from `/etc`, so that the package's copy under `/usr/lib` is the one in force
+  (`systemctl cat ModemManager.service` shows only that one).
+- Confirmed: the modem `connected` again after the restart; after a wake ModemManager's sync 2.5 s and mobile
+  data online 2.5 s after it, no probe, pings over `wwan0`; Wi-Fi online after 12.9 s.

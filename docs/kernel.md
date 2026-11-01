@@ -37,10 +37,16 @@ removal, SELinux.
 | 7.2.11 revision 6 | 2026-10-28 | `kernel-7.2.11-300.fc45` | Device test of revision 7 plus the clock `sync_state` series |
 | 7.2.11 revision 7 | 2026-10-29 | `kernel-7.2.11-300.fc45` | Type-C switch array, GPU fixes, video codec |
 | 7.2.11 revision 8 | 2026-10-29 | `kernel-7.2.11-300.fc45` | The 5G modem's data channels for the MBIM driver |
+| 7.2.11 revision 9 | 2026-10-31 | `kernel-7.2.11-300.fc45` | The 5G modem kept powered through a sleep; the country re-sent at a radio's start |
+| 7.2.11 revision 10 | 2026-10-31 | `kernel-7.2.11-300.fc45` | The country re-send waits for a regulatory answer |
+| 7.2.11 revision 11 | 2026-10-31 | `kernel-7.2.11-300.fc45` | The country re-send waits for the answer that carries the country |
+| 7.2.11 revision 12 | 2026-11-01 | `kernel-7.2.11-300.fc45` | Diagnostics for the country re-send; a changed country passes the gate, a re-send on world roaming |
+| 7.2.11 revision 13 | 2026-11-01 | `kernel-7.2.11-300.fc45` | A known country kept when the 11d scan reports none; the re-send at a radio's start |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
-Every revision but 2 and 6 passed its device round the day it was built (`docs/verified.md`); the fork branch head
-and tree of each is in `docs/kernel-patches.md`. Before 2026-09-23 the project built ooaklee's v23 kernel as
+Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to
+12 passed but for the country re-send, which the sleep's 11d result defeated until revision 13); the fork branch
+head and tree of each is in `docs/kernel-patches.md`. Before 2026-09-23 the project built ooaklee's v23 kernel as
 `kernel-sp11` (`7.2.5-jg-0sp11v23.2-qcom-x1e`), with revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode
 switch).
 

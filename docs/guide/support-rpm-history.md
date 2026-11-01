@@ -57,3 +57,5 @@ in [`docs/verified.md`](../verified.md).
 - 3.7: `sp11-diag` finds SELinux denials. It searched only the kernel's messages, where the audit daemon's denials
   never appear.
 - 3.8: the video codec's firmware (`qcvss8380.mbn`), which the kernel requests from 7.2.11 revision 6 on.
+- 3.9: on the 5G SKU, ModemManager's quick suspend/resume (a drop-in on its unit): with a kernel from 7.2.11
+  revision 9, whose modem keeps its power through a sleep, mobile data is back 2 s after a wake instead of 52 s.

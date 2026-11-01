@@ -3,9 +3,9 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.2.11-300.fc45` source RPM with Fedora's configuration, rebuilt with the 90 patches of
+- Kernel: Fedora's `kernel-7.2.11-300.fc45` source RPM with Fedora's configuration, rebuilt with the 92 patches of
   the branch `sp11/7.2.11` of the project's kernel fork (on the stable tag `v7.2.11`, pinned by commit; SP11
-  revision 8 of 7.2.11) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md); each patch, its authors
+  revision 13 of 7.2.11) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md); each patch, its authors
   and what it is needed for: [`docs/kernel-patches.md`](../kernel-patches.md).
   - `kernel-local` enables the patch set's touch driver and two camera sensor drivers, and two drivers Fedora's
     configuration leaves out, the video clock controller and the crypto engine: without them Linux never lowers
@@ -81,6 +81,8 @@ bullet is in the working note it names.
   reconnect. [`docs/gnss.md`](../gnss.md).
 - Modem (5G SKU): a udev rule keeps ModemManager off the modem's QMI port, which never answers and would block
   every suspend. The modem frames its data as MBIM, so from kernel revision 8 its data channels go to the kernel's
-  MBIM driver; ModemManager and NetworkManager do the rest. [`docs/modem.md`](../modem.md).
+  MBIM driver; ModemManager and NetworkManager do the rest. From kernel revision 9 the modem keeps its power
+  through a sleep, and a drop-in (support 3.9) makes ModemManager keep the modem across it instead of probing it
+  again, so mobile data is back 2 s after a wake. [`docs/modem.md`](../modem.md).
 - Hardware detection uses the built-in panel (WMI connection type internal) and the built-in Bluetooth radio, so an
   external monitor or a USB Bluetooth dongle does not change the result. [`docs/hardware.md`](../hardware.md).

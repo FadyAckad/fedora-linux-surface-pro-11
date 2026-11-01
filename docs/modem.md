@@ -24,9 +24,10 @@ mobile data on 2026-10-29 with a nano-SIM.
 - `x1e80100-microsoft-denali-oled-5g.dts` (patch 0078, 7.2.11 revision 3): the OLED tree plus the CRD's PCIe 5
   block: `vreg_wwan` on TLMM 221 (on at boot), `pcie5` and `pcie5_phy` with `vreg_l3i_0p8` and `vreg_l3e_1p2`,
   reset on TLMM 149, CLKREQ# on 150; no wake pin; the OLED tree's compatibles, model "(OLED, 5G)".
-- `vreg_wwan` (`SDX_VPH_PWR`) is also PCIe 5's `vddpe-3v3` supply, and the qcom driver switches its supplies off
-  when a sleep takes the link down (host deinit): from 7.2.11 revision 4 on the modem is off in a deep sleep
-  (Across a sleep).
+- Up to revision 8 `vreg_wwan` (`SDX_VPH_PWR`) is also PCIe 5's `vddpe-3v3` supply, and the qcom driver switches
+  its supplies off when a sleep takes the link down (host deinit): from 7.2.11 revision 4 to 8 the modem is off in
+  a deep sleep. From revision 9 (patch 0091) the supply is `regulator-always-on` and no longer PCIe 5's, so the
+  modem keeps its power through the sleep (Across a sleep).
 - The build gives the tree to the 5G SKU only (`docs/hardware.md`): `SP11_DTB` follows the SKU in `load_hardware`,
   and step 20 checks that PCIe 5 is enabled in the 5G tree and disabled in the OLED tree. A `build/hardware.env`
   from before revision 3 records the OLED tree; `load_hardware` replaces it and says so.
@@ -102,14 +103,24 @@ mobile data on 2026-10-29 with a nano-SIM.
   ModemManager's probe answered after 3.4 s, registration after 15.7 s (the 10 s wait included), mobile data
   after 16.7 s. In a 10-minute sleep `ddr` counted 569 of 608 s (579 of 619 s with the modem off), `cxsd` 0 in
   both; the battery's reading moved by the same 0.511 Wh in both runs, too coarse for the modem's own draw.
+  7.2.11 revision 9 (patch 0091) makes this the 5G tree's wiring.
+- ModemManager's quick suspend/resume (`--test-quick-suspend-resume`, a systemd drop-in on its unit) keeps the
+  modem object across a sleep: terse mode at the suspend, a state sync at the resume instead of the re-probe and
+  its 10 s wait. With revision 9 (2026-10-31): the sync done 1.4 s after the wake, NetworkManager's profile
+  connected 2.0 s after it, after a 10-minute sleep and after an 8-hour night alike; no modem restart. Only for a
+  modem that stays powered (revision 9 on); in the support RPM from 3.9 (5G builds:
+  `/usr/lib/systemd/system/ModemManager.service.d/sp11-quick-suspend-resume.conf`).
+- The powered modem costs nothing the battery resolves: revision 9's night drew 0.32 W over 8 hours (`ddr` 94 %
+  of the time), revision 5's with the modem off 0.33 W (`docs/sleep.md`).
 - Before revision 4 (the link up through the sleep) a night drew the same with the link, without it (the OLED
   tree) and with the radio in `low-power`, within the battery's resolution of about 0.06 W.
 
 ## Open
 
 - The wake pin; whether the modem needs to wake the tablet at all.
-- The modem kept powered through deep sleep: its cost through a night.
-- ModemManager's 10 s wait for the location indication; eSIM profiles from Linux (lpac, not packaged in Fedora).
+- ModemManager's 10 s wait for the location indication at every start of the modem (a boot; a rebuilt
+  ModemManager would be needed).
+- eSIM profiles from Linux (lpac, not packaged in Fedora).
 
 ## History
 
@@ -122,3 +133,5 @@ mobile data on 2026-10-29 with a nano-SIM.
   refusing raw IP; a module build with the data channels for `mhi_wwan_mbim` passed, 7.2.11 revision 8 built with
   it and confirmed. The return after a wake timed; a test tree keeping the modem powered through deep sleep
   brought mobile data back after 17 s instead of 52 s.
+- 2026-10-31: 7.2.11 revision 9 with the test tree's change (0091) and ModemManager's quick suspend/resume on the
+  device: mobile data back 2.0 s after a wake, the night at 0.32 W.
