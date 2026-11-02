@@ -23,7 +23,7 @@ after their trailers that names the source and the change.
 - Source: ooaklee's linux_ms_dev_kit-sp11 release `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (`ce78e6ebc3d7`) with the 7.2.5
   stable update (the v23.2 kernel of `docs/kernel.md`).
 - Result: 61 patches reproducing 70 of the 80 files they touch byte for byte from v23.2; the other 10 differ only
-  by the parts left out (below). In the numbering of the current branch `sp11/7.2.11`:
+  by the parts left out (below). In the numbering of the current branch `sp11/7.2.14`:
   - 0001–0041: jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses; 0014 lacks a
     jglathe-only X1P file, 0030 keeps only its Denali hunk.
   - 0042–0047: ooaklee's branch commits as they are (OLED link-rate quirk, dwc3 PHY re-init, platform profile).
@@ -161,8 +161,14 @@ after their trailers that names the source and the change.
   (and sends nothing to the firmware then); `ath12k_mac_start` sends the known country, waits up to 500 ms for
   the answer that carries it, clears the `regd_updated` gate and applies it; without an answer the start goes
   on with a warning. No diagnostics, no re-send, no gate release in the event handler. Passed its device round
-  on 2026-11-01 (`DE` before the first scan at both wakes, Wi-Fi online after 13.2 and 13.5 s); the push of 0091
-  and 0092 is the owner's step.
+  on 2026-11-01 (`DE` before the first scan at both wakes, Wi-Fi online after 13.2 and 13.5 s). Pushed 2026-11-01
+  (head `2155c742`, tree `e202be02`).
+
+### 7.2.14 revision 1: a rebase without a change
+
+- The 92 commits rebased unchanged onto `v7.2.14` (`sp11/7.2.14`, head `db86d659`, tree `46612749`, pushed
+  2026-11-02); every number stays. The stable update itself brings the Wi-Fi power sequencer's reset of the chip
+  at its probe, which the Wi-Fi boot campaign's test patch had planned (`docs/hardware.md`, Wi-Fi).
 
 ## Contents
 

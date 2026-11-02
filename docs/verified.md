@@ -242,6 +242,20 @@ One entry per round; the facts each established live in the topic notes.
   52.3 s); a boot online after 27.7 s (unchanged); `DE` and the 160 MHz link after both wakes; at the sleeps the
   aborted scan no longer ends in world roaming; no regulatory warning in the kernel log.
 
+## Kernel 7.2.14 revision 1: the rebase onto 7.2.14 (2026-11-02)
+
+- Installed: the kernel RPMs `7.2.14-300.sp11.1.fc45` (7.2.11 revision 13's 92 patches unchanged on Fedora's
+  `kernel-7.2.14-300.fc45`) with support 3.9, `dnf install` next to revisions 12 and 13 of 7.2.11, dnf removing
+  revision 11; the 5G device tree in the boot entry, `saved_entry` on the new kernel.
+- Confirmed: the standard checks (the modem `registered`, the light and accelerometer readings, orientation,
+  light and compass through the proxy; a 78 s deep sleep); the USB-C retimers and the UCSI supplies as with
+  revision 13; Wi-Fi up in both boots, the second a reboot, with the link up, the chip named and no error line
+  (the 7.2.13 reset at the sequencer's probe); the journal's errors those of 7.2.11 revision 1 (the ADSP handover
+  lines after the resume). One new kind of warning in the first boot: the touch controller's HID-SPI read at 10 s
+  returned an invalid header (`ret=-71`), and the driver's cold recovery brought it up 1 s later; not in the 17
+  earlier diagnostics, and no 7.2.12 to 7.2.14 change touches the SPI, GPI DMA or TLMM paths the touch uses.
+  By hand (owner): the round's checks passed, touch and pen, USB-C, the cameras and the wake's checks included.
+
 ## Support RPM 3.9: ModemManager's quick resume packaged (2026-11-01)
 
 - Installed: `sp11-surface-support-3.9-1.fc45` with `dnf upgrade` over 3.8 on kernel 7.2.11 revision 13; the kit's

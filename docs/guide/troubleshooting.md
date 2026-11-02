@@ -47,6 +47,11 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
 
 Systems running an older build of the RPMs can show these; the release named fixes each.
 
+- Wi-Fi missing on some boots, Bluetooth working (the PCIe link failing to train, `LTSSM: PRE_DETECT_QUIET`, or
+  the chip stopping after the link came up, `failed to power up :-34`), more often with Windows Fast Startup or
+  hibernation on: fixed in kernel 7.2.14 revision 1 (2026-11-02), whose stable update resets the Wi-Fi chip before
+  the link trains ([`docs/hardware.md`](../hardware.md), Wi-Fi). Until then a full shutdown, or a reboot, brought
+  Wi-Fi back.
 - Auto-rotation and the light sensor stopping until iio-sensor-proxy is restarted, under KDE Plasma: fixed in
   `libssc` 0.4.4-3 (2026-10-07). Until then `sudo systemctl restart iio-sensor-proxy` brings them back
   ([`docs/sensors.md`](../sensors.md), Known issues).

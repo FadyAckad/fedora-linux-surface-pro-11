@@ -69,6 +69,13 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   it as the radio starts: sent, answered by the firmware within a few milliseconds, applied before the interfaces
   exist; the first scan after a wake then takes 8.5 s and the station is online after 13.2 to 13.5 s, with `DE`
   and the 160 MHz link (2026-11-01, both wakes of the round). A boot has no country to restore: 27 s as before.
+- Wi-Fi at boot: up to 7.2.12 the WCN7850's power sequencer kept the Wi-Fi enable line (TLMM 117) as the firmware
+  left it, high at its probe, so the chip was never reset before the link trained. One boot in twelve on 7.2.11
+  revision 1 (a reboot, 2026-10-20) lost Wi-Fi: the link came up and the chip answered its first read, then
+  `link down error during global reset` and `failed to power up :-34`; the next reboot had Wi-Fi. 7.2.13 drives
+  the line low at the probe, and the PCIe host's pwrctrl powers the chip up right before link training (upstream
+  `dbd674ccf30f`, from a Surface Pro 11 whose boots never enumerated the chip); in the SP11 kernel from 7.2.14
+  revision 1 on (its round's two boots, one a reboot, had Wi-Fi; 2026-11-02).
 - PCIe L1.2 (7.2.11 revision 5, 2026-10-28): the Wi-Fi (`0004:01:00.0`) and NVMe (`0006:01:00.0`) functions
   report snoop and no-snoop latencies of 0 ns (nothing programs them on Qualcomm hosts), below the links'
   `LTR1.2_Threshold` (76800 ns Wi-Fi, 136192 ns NVMe), so the links enter L1.1 and almost never L1.2

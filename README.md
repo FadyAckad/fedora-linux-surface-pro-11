@@ -17,7 +17,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Component | Version |
 |---|---|
 | Fedora | 45 Beta 1.3, Workstation or KDE Plasma Desktop |
-| Kernel | Fedora's `kernel-7.2.11-300.fc45`, SP11 revision 13 (`7.2.11-300.sp11.13.fc45.aarch64`) |
+| Kernel | Fedora's `kernel-7.2.14-300.fc45`, SP11 revision 1 (`7.2.14-300.sp11.1.fc45.aarch64`) |
 | Support RPM (`sp11-surface-support`) | 3.9 |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-3.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -25,11 +25,12 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 ## What works
 
 Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`), on a Fedora 45 Beta Workstation installation from
-the ISO built on 2026-10-19 and updated since to the versions above; every row was confirmed again on 2026-10-29.
+the ISO built on 2026-10-19 and updated since to the versions above; every row was confirmed again on 2026-11-02
+(GPS on 2026-10-23).
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
-| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.11-300 (sp11.9) |
+| Feature | Fedora 45 Beta Workstation, Fedora's 7.2.14-300 (sp11.1) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Display with GPU acceleration | ✅ |
@@ -119,8 +120,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.13.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.11-300.sp11.13.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+`Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.14-300.sp11.1.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45_Beta-1.3-SP11-7.2.14-300.sp11.1.fc45.aarch64.iso`, with a `.sha256` beside it. Then
 write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
 ## Reporting results

@@ -11,9 +11,10 @@ removal, SELinux.
 - The result: Fedora's package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
-- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9 and 7.2.11 checked).
-  Fedora's own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in 7.2.9, 91 in 7.2.11)
-  shares only the media `Kconfig`, `Makefile` and `MAINTAINERS` with the patch set and is applied after it.
+- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9, 7.2.11 and 7.2.14
+  checked). Fedora's own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in 7.2.9, 91 in
+  7.2.11, 95 in 7.2.14) shares only the media `Kconfig`, `Makefile` and `MAINTAINERS` with the patch set and is
+  applied after it.
 
 ### The builds, by revision
 
@@ -42,6 +43,7 @@ removal, SELinux.
 | 7.2.11 revision 11 | 2026-10-31 | `kernel-7.2.11-300.fc45` | The country re-send waits for the answer that carries the country |
 | 7.2.11 revision 12 | 2026-11-01 | `kernel-7.2.11-300.fc45` | Diagnostics for the country re-send; a changed country passes the gate, a re-send on world roaming |
 | 7.2.11 revision 13 | 2026-11-01 | `kernel-7.2.11-300.fc45` | A known country kept when the 11d scan reports none; the re-send at a radio's start |
+| 7.2.14 revision 1 | 2026-11-02 | `kernel-7.2.14-300.fc45` | Rebased onto `v7.2.14` |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to
@@ -152,6 +154,13 @@ onto the new stable tag, whatever lies between (a stable tag contains every earl
   clock runs (`docs/hardware.md`, Audio), UCSI matches connectors by `reg` (Denali lists 0 and 1 in order),
   ath12k's panic handler is reverted, dwc3's gadget clears an invalid event count. Fedora's configuration adds the
   Cortex-A725 erratum 3821522, the Raspberry Pi 5 IOMMU and PWM drivers and `CC_OPT_INLINE_MEMSET`.
+- 7.2.11 to 7.2.14 (7.2.14 revision 1, straight past 7.2.12 and 7.2.13): the 92 commits rebased unchanged; one
+  7.2.13 commit touches a file of the series (`pci_dev_wait()` in `drivers/pci/pci.c`), none its code. 7.2.13
+  changes four drivers this machine uses: the WCN7850 power sequencer drives the Wi-Fi enable line low at its
+  probe (`docs/hardware.md`, Wi-Fi); the GENI I2C driver keeps a 19.2 MHz source clock unless 32 MHz is already
+  selected (the retimers' buses); a PMIC GPIO direction change clears the opposite buffer (the volume keys, the
+  left retimer's reset and supplies, the panel's enable); the CCI accumulates its halt-acknowledge resets (the
+  cameras' buses). Fedora's configuration enables `EROFS_FS_PAGE_CACHE_SHARE`.
 
 ### Procedure
 
