@@ -95,7 +95,10 @@ mobile data on 2026-10-29 with a nano-SIM.
 - ModemManager drops the modem at every suspend and probes it again on resume; it then waits 10 s, at every start
   of the modem, for a location indication this modem never sends (`couldn't load supported assistance data
   types`; `docs/gnss.md`), registers after 47 to 51 s, and NetworkManager reconnects a profile with
-  `connection.autoconnect yes` (GNOME's has `no`) about 2 s later. A SIM with a PIN asks for it again.
+  `connection.autoconnect yes` about 2 s later; without it the profile stays down until it is activated by hand
+  (2026-11-02, with the modem registered 0.1 s after the wake). GNOME's Mobile Data switch is that setting: the
+  panel reads the switch from the default APN profile's `autoconnect` and writes it back on every change
+  (gnome-control-center, `panels/wwan/cc-wwan-data.c`). A SIM with a PIN asks for it again.
 - Revision 5 powers a busy modem down for a suspend started within 15 s of a wake instead of aborting the suspend
   (patch 0082, `docs/sleep.md`).
 - Kept powered through the sleep (a test tree, 2026-10-29: `vreg_wwan` with `regulator-always-on` and no longer

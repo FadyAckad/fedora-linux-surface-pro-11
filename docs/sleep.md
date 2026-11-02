@@ -1,7 +1,8 @@
 # Sleep
 Deep sleep on the tested unit: the sleep state and the wake sources, what kept the memory awake until 7.2.11
-revision 4, the drain measured, the wakes that name no interrupt, and the power key under KDE Plasma. The modem's
-own behaviour across a sleep is in `docs/modem.md`, the sensor streams' in `docs/sensors.md` (Known issues).
+revision 4, the drain measured, the wakes that name no interrupt, the power key under KDE Plasma, and what a wake
+costs until the panel is lit. The modem's own behaviour across a sleep is in `docs/modem.md`, the sensor streams'
+in `docs/sensors.md` (Known issues).
 
 ## Sleep state and wake sources
 
@@ -52,9 +53,11 @@ own behaviour across a sleep is in `docs/modem.md`, the sensor streams' in `docs
   instead (`device busy, powering it down for system suspend`); every sleep stays deep and GPS answers afterwards.
 - Revision 5, 8 hours on battery: 0.33 W with 47 s awake, `ddr` 27335 of 28988 s suspended, the ADSP 10 sleep
   entries a second (about 100 before revision 4). Revision 9 (the modem powered through the sleep, registered and
-  kept by ModemManager): 0.32 W over 28885 s, `ddr` 27148 s, the ADSP 10 a second (2026-10-31). Up to revision 8
-  the PM core logs `parent mhi0 should not be sleeping` once per channel device the modem's restart re-creates while
-  the next suspend is prepared; harmless.
+  kept by ModemManager): 0.32 W over 28885 s, `ddr` 27148 s, the ADSP 10 a second (2026-10-31). 7.2.14 revision 2
+  (the PCIe controllers suspended in parallel, mobile data connecting by itself): 0.32 W over 29027 s, `ddr` 27253
+  of 28957 s, the ADSP 10 a second, no wake in the night (2026-11-03). Up to revision 8 the PM core logs
+  `parent mhi0 should not be sleeping` once per channel device the modem's restart re-creates while the next
+  suspend is prepared; harmless.
 - `cxsd` and `aosd` stayed 0 in every configuration: CX never collapses. Linux runs at EL1 under the firmware's
   hypervisor (Gunyah). Another Surface Pro 11 (X1E80100, OLED), booted at EL2 with slbounce, reaches `cxsd`,
   `aosd` and the DDR low-power modes for 99.9 % of a 73-minute s2idle suspend at about 0.26 W, against 1.06 W on
@@ -93,6 +96,93 @@ own behaviour across a sleep is in `docs/modem.md`, the sensor streams' in `docs
 - PowerDevil sleeps again 10 s after a wake if the lid is closed, no external monitor counts and the lid action is
   Sleep (`checkWakeup`); after a wake by network, telephony or timer, after 30 s idle instead.
 
+## Wake
+
+What a wake costs from the power key to the lit panel, measured on 2026-11-02 (7.2.14 revision 1, support 3.9,
+`sp11-iptsd` 3.1.0-3, GNOME 51 on Wayland; four cycles over two boots, sleeps of 0.1 to 128 minutes, within 0.03 s
+of each other on the kernel side; the device session's kit and logs are in the hand-off record
+`sp11-wake-latency-2026-11-02`). The kernel's own timestamps stop while the SoC sleeps, so a kernel figure never
+includes the firmware's part; journald's wall clock does.
+
+| Part | Duration | Measured how |
+|---|---|---|
+| Firmware: the key press until the kernel runs again | not measurable from logs | the kit: `qcom_stats`'s `apss` exit stamp (the system counter) against the kernel's first message |
+| Kernel: `Enabling non-boot CPUs` to `PM: suspend exit` | 2.54 to 2.58 s | the kernel's timestamps |
+| systemd-sleep's post hooks: `System returned from sleep` to logind's `Operation 'suspend' finished` | 1.15 to 1.45 s | journald's wall clock |
+| GNOME: logind's signal until the panel is lit | not logged | the kit's watch on the DRM connector's `dpms` |
+
+The kernel's 2.58 s, as offsets from `Enabling non-boot CPUs`:
+
+- 0.03 s: the eleven secondary CPUs come back.
+- 1.02 s: the three PCIe controllers resume one after the other in the noirq phase (`link up` at +0.35, +0.66 and
+  +1.02: NVMe, Wi-Fi, the modem). Each costs 0.31 to 0.36 s by construction: `qcom_pcie_perst_deassert()`'s
+  100 ms, `dw_pcie_wait_for_link()`'s 90 ms polling steps, the 100 ms post-training wait. They run serially
+  because platform devices lack `power.async_suspend` (`is_async()` in `drivers/base/power/main.c`);
+  `CONFIG_PM_ADVANCED_DEBUG` is off in Fedora's configuration, so there is no `power/async` attribute to switch at
+  runtime. The host bridges, root ports and endpoints below them are async already.
+- 0.52 s: the early phase, the Wi-Fi: `ath12k_pci_pm_resume_early()` waits in `mhi_sync_power_up()` for the
+  firmware that every sleep powers down (upstream's design: QRTR's resume right after it needs MHI's mission
+  mode).
+- 0.84 s: the resume phase, the touch controller: `g6ts_resume()` (patch 0050) ran the 500 and 300 ms delays of
+  `g6ts_power_on()` inside the PM callback and scheduled the recovery work, which 100 ms later powered the
+  controller off and on again on its hardware path, so the callback's power-on was thrown away (`touch
+  controller initialized` 1.02 s after the resume phase). In parallel the Wi-Fi's `ath12k_core_resume()` waits
+  0.2 to 0.3 s for its firmware's restart and the NVMe resets in its own work; neither reached 0.84 s.
+- 0.16 to 0.19 s from the thaw to `PM: suspend exit`.
+
+User space: `sp11-iptsd`'s sleep hook up to 3.1.0-3 (ooaklee's `sp11-iptsd-restart`) polled for the hidraw node
+in its `post` phase, restarted `sp11-iptsd@<node>.service` and waited until the new process owned the node. The
+node comes back about 1.17 s after the suspend exit (the suspend destroys the HID device, the resume rebuilds it
+in the driver's recovery work), so the hook held systemd-sleep for 1.15 to 1.45 s; logind sends
+`PrepareForSleep(false)`, on which mutter and gsd-power light the panel, only when systemd-sleep exits. The
+restart was redundant: `70-sp11-iptsd.rules` starts the unit on the hidraw add event (the journal shows that
+instance connected before the hook's restart killed it) and `BindsTo=%i.device` stops it when the node goes. The
+GNSS hook, `sp11-sensors-resume.service` and ModemManager's state sync are off the path.
+
+Changes built on 2026-11-02 (7.2.14 revision 2 and `sp11-iptsd` 3.1.0-4; the device round of the same evening
+passed, `docs/verified.md`):
+
+- Patch 0093: `g6ts_resume()` no longer powers the controller on; the recovery work does, once. 0.80 s less in
+  the resume phase, the hidraw node back about 0.8 s earlier.
+- Patch 0094: `device_enable_async_suspend()` in `qcom_pcie_probe()`: the three controllers suspend and resume
+  side by side; the PM core still orders each after its parent and suppliers and its root port and endpoints
+  after it. About 0.65 s less in the noirq phase. The suspend side runs the same code to the same end state (the
+  links down, the votes released), which the round checks through `ddr`'s count.
+- `payload/iptsd/sp11-iptsd-sleep` in place of ooaklee's hook: the `pre` phase stops the running instances as
+  before (0.17 s on the suspend side), the `post` phase does nothing. The hooks' 1.15 to 1.45 s gone.
+
+Measured in the round and its follow-up (the kernel's own timestamps from the journal's JSON form, thirteen
+wakes on revision 2 within 0.1 s of each other; the panel from the DRM connector's `dpms` read every 20 ms):
+
+| Part | Revision 1 (four cycles) | Revision 2 (thirteen wakes) |
+|---|---|---|
+| noirq phase, the PCIe links | 1.02 s, one after the other | 0.36 s, side by side (`link up` at +0.35, +0.35, +0.39; the modem's controller the longest) |
+| early phase, the Wi-Fi firmware | 0.52 s | 0.52 s |
+| resume phase | 0.84 s (the touch callback) | 0.21 to 0.28 s (the Wi-Fi's restart wait, 0.21 s) |
+| the thaw to `PM: suspend exit` | 0.16 to 0.19 s | 0.16 to 0.22 s |
+| kernel, first line to `PM: suspend exit` | 2.54 to 2.58 s | 1.31 to 1.42 s |
+| systemd-sleep's post hooks | 1.15 to 1.45 s | 0.015 s |
+| DRM connector on, after the suspend exit | 1.27 to 1.33 s (the old hook) | 0.05 s |
+| `touch controller initialized`, after the suspend exit | 0.82 to 0.85 s | 0.56 to 0.70 s |
+| the hidraw node, after the suspend exit | 1.17 to 1.19 s | 0.91 to 1.04 s |
+
+From the kernel's first line to the lit connector about 1.4 s, against 3.9 s before; the touch controller is
+initialized 2.0 s after the kernel's first line instead of 3.4 s. The firmware's part before the kernel's first
+line is still unmeasured: the follow-up's `tar` of the debugfs counters stored empty files (tar trusts their zero
+size; `cat` per file, as `sp11-power-snapshot.sh` does, is the way). Of the kernel's remaining 1.35 s the Wi-Fi
+holds 0.73 s (the early phase's `mhi_sync_power_up()` and the resume phase's restart wait).
+The memory's low-power share was unchanged by the parallel suspend: 617 of 675 s
+suspended on revision 2 (91 %), 677 of 752 s on revision 1 the same evening, both on battery with 30 s cycles
+included; the night of 2026-11-03 on revision 2 drew 0.32 W, as revision 9's (What sleeps). With the charger
+connected and the battery charging at 38 W the memory counted only 69 of 682 s, and
+the tablet woke by itself three times in 25 minutes, between 60 and 80 % of charge: wakes that name no interrupt,
+as the battery manager's notices are (above).
+
+Windows wakes at once because it never leaves S0 (Modern Standby): the devices stay in their runtime D3 states
+and the panel is lit before any device is touched. In `deep` every driver's resume callback runs before user
+space, and the PCIe links, the Wi-Fi firmware and the touch controller are rebuilt from power-off; `s2idle` would
+remove only the firmware's part, at 1.40 W a night (above).
+
 ## History
 
 - 2026-10-22: `aosd`, `cxsd` and `ddr` found at 0 across every suspend (7.2.11 revision 1).
@@ -101,3 +191,7 @@ own behaviour across a sleep is in `docs/modem.md`, the sensor streams' in `docs
 - 2026-10-27: the memory's votes traced to the crypto engine, the bandwidth monitors, the PCIe links and the
   UARTs; revision 4 built from the mainline fixes.
 - 2026-10-28: revision 4's night at 1.40 W after the `s2idle` fallback; revision 5 at 0.33 W over 8 hours.
+- 2026-11-02: the wake measured (2.6 s in the kernel, 1.2 to 1.5 s in the iptsd hook); 7.2.14 revision 2 and
+  `sp11-iptsd` 3.1.0-4 built against it and passed their round: the panel on 0.05 s after the suspend exit
+  instead of 1.3 s, the kernel's resume 1.4 s instead of 2.6 s, the memory's sleep share unchanged.
+- 2026-11-03: revision 2's night at 0.32 W over 8 hours, no wake in the night.

@@ -170,6 +170,19 @@ after their trailers that names the source and the change.
   2026-11-02); every number stays. The stable update itself brings the Wi-Fi power sequencer's reset of the chip
   at its probe, which the Wi-Fi boot campaign's test patch had planned (`docs/hardware.md`, Wi-Fi).
 
+### 7.2.14 revision 2: the wake's resume path
+
+- 0093 (this repository): `g6ts_resume()` in `mshw0485_touch.c` no longer runs `g6ts_power_on()`, whose 500 and
+  300 ms delays held the PM core's resume phase; the recovery work the callback schedules powers the controller off
+  and on again on its hardware path anyway, so the callback's power-on was undone 100 ms later (`docs/sleep.md`,
+  Wake).
+- 0094 (this repository): `qcom_pcie_probe()` enables asynchronous suspend and resume for the controller
+  (`device_enable_async_suspend()`), as the PCI core does for the host bridges, ports and devices below it, so the
+  three controllers' link resumes of 0.31 to 0.36 s overlap instead of following one another in the noirq phase.
+  Mainline's `pcie-qcom.c` has no such change (2026-11-02).
+- Passed its device round on 2026-11-02 (`docs/sleep.md`, Wake) and pushed the same evening (head `1ca86c76`,
+  tree `e42be2f1`, the tree the kernel was built from).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -226,6 +239,8 @@ The patches by number, with their origin and what each is needed for.
 | 0090 | MHI PCI: the Surface Pro 11 5G modem's data channels for the MBIM driver | this repository | mobile data (`docs/modem.md`) |
 | 0091 | 5G device tree: the modem's supply stays on through a system sleep | this repository | mobile data back within seconds of a wake (`docs/modem.md`, Across a sleep) |
 | 0092 | ath12k: a known country kept when the 11d scan reports none, restored when a radio starts | this repository | the first Wi-Fi scan after a wake with the country known (`docs/hardware.md`, Wi-Fi) |
+| 0093 | MSHW0485 touch: no power-on in the resume callback; the recovery work powers the controller, once | this repository | 0.8 s less in a wake's resume phase (`docs/sleep.md`, Wake) |
+| 0094 | PCIe (qcom): the controllers suspend and resume asynchronously | this repository | the three links resumed side by side, about 0.65 s less in a wake |
 
 ## Left out of v23.2
 

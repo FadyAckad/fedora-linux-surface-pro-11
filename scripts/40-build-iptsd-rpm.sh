@@ -29,17 +29,21 @@ IDIR="$BUILD_DIR/iptsd"; SRC="$IDIR/SOURCES"; rm -rf "$SRC"; mkdir -p "$SRC"
 git -C "$CACHE_DIR/iptsd" archive --format=tar.gz --prefix="iptsd-$IPTSD_COMMIT/" -o "$SRC/iptsd-$IPTSD_COMMIT.tar.gz" HEAD
 OEI="$CACHE_DIR/oe/userspace/iptsd-sp11"
 # ooaklee's templates use @IPTSD@/@CHECKER@/@SYSTEMCTL@/@SYSTEMD_ESCAPE@; render them for Fedora's paths here.
-for f in packaging/70-sp11-iptsd.rules.in packaging/sp11-iptsd@.service.in packaging/sp11-iptsd-restart.in; do
+for f in packaging/70-sp11-iptsd.rules.in packaging/sp11-iptsd@.service.in; do
   [ -f "$OEI/$f" ] || die "missing $OEI/$f"
   out="$SRC/$(basename "${f%.in}")"
   render "$OEI/$f" "$out" IPTSD=/usr/libexec/sp11-iptsd CHECKER=/usr/libexec/sp11-iptsd-check-device \
     SYSTEMCTL=/usr/bin/systemctl SYSTEMD_ESCAPE=/usr/bin/systemd-escape
 done
+# The sleep hook is this repository's: ooaklee's packaging/sp11-iptsd-restart.in restarts the daemon in its post
+# phase and waits for it, which holds every wake for 1.2 to 1.5 s, while the hidraw add event and BindsTo= already
+# do the job (docs/sleep.md, Wake). Ours keeps the pre phase and does nothing after the wake.
+install -m 0755 "$PAYLOAD_DIR/iptsd/sp11-iptsd-sleep" "$SRC/sp11-iptsd-sleep"
 for f in config/surface-pro-11-0c80.conf config/surface-pro-11-0c83.conf; do
   [ -f "$OEI/$f" ] || die "missing $OEI/$f"; install -m 0644 "$OEI/$f" "$SRC/$(basename "$f")"
 done
 grep -q 'KERNELS=="001C:045E:0C83' "$SRC/70-sp11-iptsd.rules" || die "udev rule does not match the OLED digitizer 045E:0C83"
-bash -n "$SRC/sp11-iptsd-restart" || die "rendered sleep hook has a syntax error"
+bash -n "$SRC/sp11-iptsd-sleep" || die "the sleep hook has a syntax error"
 if [ "$BUILD_MODE" = host ]; then
   log "building sp11-iptsd RPM (meson, system libraries)"
   RPM=$(build_rpm "$SPEC_DIR/sp11-iptsd.spec.in" sp11-iptsd "$SRC" COMMIT="$IPTSD_COMMIT" VERSION="$IPTSD_VERSION" RPMREL="$IPTSD_RPM_RELEASE")
@@ -49,6 +53,7 @@ else
   RPM=$(mock_rebuild "$SRPM" sp11-iptsd)
 fi
 rpm -qpl "$RPM" | grep -x /usr/libexec/sp11-iptsd >/dev/null || die "RPM lacks /usr/libexec/sp11-iptsd"
+rpm -qpl "$RPM" | grep -x /usr/lib/systemd/system-sleep/sp11-iptsd-sleep >/dev/null || die "RPM lacks the sleep hook sp11-iptsd-sleep"
 
 # The point of the mock route is the linkage, so assert it: a cross-release build must not have picked up
 # the host's sonames. Comparing against what the host's own fmt/spdlog provide keeps this release-agnostic.

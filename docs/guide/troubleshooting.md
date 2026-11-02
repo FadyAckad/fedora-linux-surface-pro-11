@@ -32,6 +32,16 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   revision 9 the modem keeps its power through a sleep and the connection is back within about 17 s, within
   2 s with support 3.9 (ModemManager's quick resume). Either way only if the profile connects automatically
   ([`docs/modem.md`](../modem.md), Across a sleep).
+- Mobile data does not come back by itself after a wake, and GNOME's Mobile Data switch shows off: the profile's
+  `connection.autoconnect` is `no`. Set it once, with the profile's name from
+  `nmcli -g NAME,TYPE connection show | grep gsm`:
+
+  ```bash
+  nmcli connection modify "Default" connection.autoconnect yes
+  ```
+
+  NetworkManager then connects about 2 s after a wake and at boot. GNOME's switch is this same setting, so
+  switching it off there clears it again ([`docs/modem.md`](../modem.md), Across a sleep).
 - Plugging the charger in while the tablet sleeps wakes it, sometimes several times in the first minutes. Under
   KDE Plasma, with the cover closed, it goes back to sleep about 10 s after each wake.
 - Under KDE Plasma, with the power button set to Sleep, waking the tablet with the power key puts it back to sleep

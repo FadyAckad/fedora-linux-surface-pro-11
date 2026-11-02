@@ -263,3 +263,32 @@ One entry per round; the facts each established live in the topic notes.
   (`systemctl cat ModemManager.service` shows only that one).
 - Confirmed: the modem `connected` again after the restart; after a wake ModemManager's sync 2.5 s and mobile
   data online 2.5 s after it, no probe, pings over `wwan0`; Wi-Fi online after 12.9 s.
+
+## Kernel 7.2.14 revision 2 and sp11-iptsd 3.1.0-4: the wake (2026-11-02)
+
+- Installed: `sp11-iptsd-3.1.0-4.sp11` with `dnf upgrade` over 3.1.0-3 on 7.2.14 revision 1, then the kernel
+  RPMs `7.2.14-300.sp11.2.fc45` (revision 1 plus 0093 and 0094) with `dnf install` next to 7.2.11 revision 13 and
+  7.2.14 revision 1, dnf removing 7.2.11 revision 12; the 5G device tree in the boot entry, `saved_entry` on the
+  new kernel.
+- Confirmed: `Enforcing`, the modem `registered`, Wi-Fi connected, the QSPI touch path, both DSPs, no provider
+  waiting for `sync_state`; the hook's `pre complete: stopped=1` and `post: nothing to do` lines at every sleep
+  with one `Started sp11-iptsd@` per wake; the DRM connector on 0.05 to 0.07 s after `PM: suspend exit` on
+  revision 1 and 2 with the new hook, against 1.27 to 1.33 s with the old one; twelve wakes on revision 2 with
+  three `link up` lines each, the modem controller's L2 timeout at every suspend as before, no other new kernel
+  line; NVMe `live`, Wi-Fi connected, the modem `registered` after them; the memory's low-power share 617 of
+  675 s suspended (91 %, on battery). By hand (owner): touch and pen after every wake, Wi-Fi and mobile data,
+  speakers, the Bluetooth keyboard and pen, the cameras, charging; later the same evening, with the profile set
+  to connect automatically, mobile data back by itself at once after every wake. The journal's errors those of
+  revision 1.
+- From the follow-up of the same evening (the journal's JSON form of that boot and of a new revision 2 boot with
+  one wake with mobile data on): the kernel from its first line to `PM: suspend exit` 1.31 to 1.42 s over the
+  thirteen wakes (2.54 to 2.58 s on revision 1), the three links up within 0.39 s side by side, the resume phase
+  0.21 to 0.28 s, the hooks 0.015 s (`docs/sleep.md`, Wake); mobile data connected and pinging after that wake
+  once its profile was activated. Not measured: the firmware's share (the follow-up's tarball of the debugfs
+  counters held empty files).
+- Seen: with the charger connected the tablet woke by itself three times (wakes without a wake interrupt, between
+  60 and 80 % of charge), and the memory's low-power share was 69 of 682 s while it charged at 38 W
+  (`docs/sleep.md`, Wake).
+- The night of 2026-11-03 on battery with mobile data on: 29027 s with one sleep, 0.32 W, `ddr` 27253 of 28957 s
+  (94 %), the ADSP 10 a second, woken by the power key with nothing in between; mobile data and Wi-Fi connected
+  and pinging at the wake. The same as revision 9's night of 2026-10-31.

@@ -97,6 +97,9 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   find Microsoft.GSL. It runs on the HIDRAW bridge of `mshw0485_touch` (patch 0050), `hidraw` parent
   `001C:045E:0C83.*`, as `sp11-iptsd@dev-hidrawN.service` started by udev; the kernel's "Microsoft Surface G6 Pen"
   input device is silent by design.
+- The sleep hook (`payload/iptsd/sp11-iptsd-sleep`, from 3.1.0-4) stops the running instances before a sleep;
+  after the wake the hidraw add event starts the daemon again. ooaklee's hook, used up to 3.1.0-3, also restarted
+  it after the wake and waited, which held every wake for 1.2 to 1.5 s (`docs/sleep.md`, Wake).
 
 ## Power supplies and battery
 

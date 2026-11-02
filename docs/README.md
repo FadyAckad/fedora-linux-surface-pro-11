@@ -21,7 +21,8 @@ Read the note named below before working on its area.
   power supplies, video codec, USB-C, the live-only DSP blacklist, the Windows GRUB entry, the Bluetooth pairings
   shared with Windows. Read before anything that depends on the device.
 - `docs/sleep.md`: deep sleep and its wake sources, what kept the memory awake and the drain measured, the wakes
-  without a wake interrupt, the power key under KDE. Read before touching sleep or power.
+  without a wake interrupt, the power key under KDE, what a wake costs until the panel is lit. Read before touching
+  sleep or power.
 - `docs/kernel.md`: Fedora's kernel rebuilt with the SP11 patch set: `kernel.spec`'s slots, the revision table and
   `KERNEL_SP11_REV`, the configuration, sync state and the CDSP, the rebase procedure, install and removal,
   SELinux. Read before touching steps 10 and 20, `payload/kernel-local`, the `KERNEL_PATCH_*` pins or SELinux.

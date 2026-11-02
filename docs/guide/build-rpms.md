@@ -59,7 +59,8 @@ The result is `build/rpms/sp11-surface-support-<version>-1.fc<release>.aarch64.r
 
 ## Pen daemon
 
-Build once `sp11.conf` pins another iptsd commit or `IPTSD_RPM_RELEASE`:
+Build once `sp11.conf` pins another iptsd commit or `IPTSD_RPM_RELEASE` (bumped for a change to the spec template
+or to the sleep hook in `payload/iptsd/`):
 
 ```bash
 scripts/40-build-iptsd-rpm.sh

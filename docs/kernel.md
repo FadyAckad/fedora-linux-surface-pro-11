@@ -44,6 +44,7 @@ removal, SELinux.
 | 7.2.11 revision 12 | 2026-11-01 | `kernel-7.2.11-300.fc45` | Diagnostics for the country re-send; a changed country passes the gate, a re-send on world roaming |
 | 7.2.11 revision 13 | 2026-11-01 | `kernel-7.2.11-300.fc45` | A known country kept when the 11d scan reports none; the re-send at a radio's start |
 | 7.2.14 revision 1 | 2026-11-02 | `kernel-7.2.14-300.fc45` | Rebased onto `v7.2.14` |
+| 7.2.14 revision 2 | 2026-11-02 | `kernel-7.2.14-300.fc45` | The wake: no power-on in the touch resume callback, PCIe controllers resumed in parallel |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to

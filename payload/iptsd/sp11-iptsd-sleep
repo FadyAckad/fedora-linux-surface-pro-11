@@ -1,0 +1,58 @@
+#!/usr/bin/sh
+# systemd-sleep hook of the Surface Pro 11 stylus daemon: stop the running sp11-iptsd@ instances before the
+# system sleeps. The suspend destroys the kernel's HIDRAW bridge and the resume rebuilds it; the hidraw node's
+# add event (70-sp11-iptsd.rules) starts the daemon again and BindsTo= in its unit stops it should the node go,
+# so the post phase has nothing to do. Adapted from ooaklee/linux-surface-pro-11-oe's
+# packaging/sp11-iptsd-restart.in (turbineBMW/surface-pro-11-linux 05e5335bc72476d44390336701cf03efa5fd0165),
+# whose post phase restarted the daemon udev had already started and waited for it, which held every wake for
+# 1.2 to 1.5 s (docs/sleep.md, Wake).
+
+set -eu
+
+BINARY="/usr/libexec/sp11-iptsd"
+UNIT_GLOB="sp11-iptsd@*.service"
+
+log() {
+	echo "sp11-iptsd-sleep: $*"
+}
+
+phase="${1:-unknown}"
+operation="${2:-unknown}"
+
+case "$operation" in
+	suspend|hibernate|hybrid-sleep|suspend-then-hibernate)
+		;;
+	*)
+		exit 0
+		;;
+esac
+
+case "$phase" in
+	pre)
+		units="$(systemctl list-units "$UNIT_GLOB" --state=active --plain --no-legend |
+			awk '{print $1}')"
+		stopped=0
+		for unit in $units; do
+			old_pid="$(systemctl show "$unit" -p MainPID --value)"
+			[ "$old_pid" -gt 0 ] || {
+				log "pre failure: invalid PID for $unit"
+				exit 1
+			}
+			[ "$(readlink -f "/proc/$old_pid/exe")" = "$BINARY" ] || {
+				log "pre failure: executable mismatch for $unit PID $old_pid"
+				exit 1
+			}
+			systemctl stop "$unit"
+			stopped=$((stopped + 1))
+		done
+		log "pre complete: stopped=$stopped operation=$operation"
+		;;
+	post)
+		log "post: nothing to do, the hidraw add event starts the daemon; operation=$operation"
+		;;
+	*)
+		exit 0
+		;;
+esac
+
+exit 0
