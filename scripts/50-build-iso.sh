@@ -113,9 +113,14 @@ for pkg in $LIVE_EXTRA_PKGS $SENSORS_DEPS_PKGS; do
   [ -n "$f" ] || die "missing dependency RPM for $pkg (run scripts/10-fetch-sources.sh)"
   DEP_RPMS+=("$f")
 done
+# The installs below run the host's rpm against the live root's database. Fedora 45's rpm requires a valid signature
+# by default (%_pkgverify_level all): it refuses the unsigned SP11 RPMs ("no signature"), and Fedora's dependency RPMs
+# as long as that root has not imported Fedora's key (NOKEY). The digest level keeps the digests mandatory (a damaged
+# package still fails), verifies a signature whose key is known and warns about an unknown key, as rpm did before.
+RPM_VERIFY=(--define '_pkgverify_level digest')
 if [ ${#DEP_RPMS[@]} -gt 0 ]; then
   log "installing runtime dependencies into the live root: $(printf '%s ' "${DEP_RPMS[@]##*/}")"
-  as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacepkgs "${DEP_RPMS[@]}" >"$W/rpm-deps.log" 2>&1 \
+  as_root rpm --root "$ROOTFS" "${RPM_VERIFY[@]}" -Uvh --noscripts --replacepkgs "${DEP_RPMS[@]}" >"$W/rpm-deps.log" 2>&1 \
     || { cat "$W/rpm-deps.log" >&2; die "dependency RPM install into live root failed"; }
 fi
 ## 4. Fedora's stock kernel packages go first: the SP11 kernel is the same package family (kernel, kernel-core,
@@ -129,9 +134,9 @@ if [ ${#STOCK_PKGS[@]} -gt 0 ]; then
     || { cat "$W/rpm-erase.log" >&2; die "stock kernel removal failed"; }
 fi
 log "installing the SP11 kernel and RPMs into the live root"
-as_root rpm --root "$ROOTFS" -U --test --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-test.log" 2>&1 \
+as_root rpm --root "$ROOTFS" "${RPM_VERIFY[@]}" -U --test --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-test.log" 2>&1 \
   || { cat "$W/rpm-test.log" >&2; die "SP11 RPMs have unmet dependencies in the live root (add the package to LIVE_EXTRA_PKGS or SENSORS_DEPS_PKGS)"; }
-as_root rpm --root "$ROOTFS" -Uvh --noscripts --replacefiles --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-install.log" 2>&1 \
+as_root rpm --root "$ROOTFS" "${RPM_VERIFY[@]}" -Uvh --noscripts --replacefiles --replacepkgs "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" >"$W/rpm-install.log" 2>&1 \
   || { cat "$W/rpm-install.log" >&2; die "rpm install into live root failed"; }
 # shellcheck disable=SC2086
 as_root rpm --root "$ROOTFS" -q $KERNEL_PKGS sp11-surface-support sp11-iptsd hexagonrpc libssc iio-sensor-proxy sp11-sensors >/dev/null \
@@ -301,7 +306,12 @@ SNIPPET="$W/grub-sp11.cfg"
 awk -v snip="$SNIPPET" '
   /^terminal_output console$/ { dropped++; next }
   /^search --file --set=root / { print; while ((getline l < snip) > 0) print l; searched++; next }
-  /^[ \t]*linux[ \t]/ { print $0 " $sp11_args"; kernels++; next }
+  /^[ \t]*linux[ \t]/ {
+    # Fedora boots its live entries with "quiet rhgb"; the SP11 media show the boot messages instead, so a slow
+    # live boot can be told from a frozen one. Anaconda gives the installed system its own "rhgb quiet".
+    match($0, /^[ \t]*/); line = substr($0, 1, RLENGTH)
+    for (i = 1; i <= NF; i++) if ($i != "quiet" && $i != "rhgb") line = line (i > 1 ? " " : "") $i
+    print line " $sp11_args"; kernels++; next }
   /^[ \t]*initrd[ \t]/ { print; match($0, /^[ \t]*/); print substr($0, 1, RLENGTH) "devicetree $sp11_dtb"; initrds++; next }
   { print }
   END { if (dropped != 1 || searched != 1 || kernels < 1 || kernels != initrds) exit 1 }
@@ -309,7 +319,9 @@ awk -v snip="$SNIPPET" '
   || die "Fedora's live grub.cfg has an unexpected layout (see $W/src-grub.cfg); review the menu transformation in step 50"
 [ "$(grep -c 'devicetree \$sp11_dtb$' "$W/grub.cfg")" = "$(grep -c '^[[:space:]]*menuentry ' "$W/grub.cfg")" ] \
   || die "not every live menu entry loads the device tree"
-log "live menu: Fedora's $(grep -c '^[[:space:]]*menuentry ' "$W/grub.cfg") entries with the Denali DTB, the SP11 arguments and the console font"
+! grep -qE '^[[:space:]]*linux[[:space:]].*[[:space:]](quiet|rhgb)([[:space:]]|$)' "$W/grub.cfg" \
+  || die "a live menu entry still boots with quiet or rhgb"
+log "live menu: Fedora's $(grep -c '^[[:space:]]*menuentry ' "$W/grub.cfg") entries with the Denali DTB, the SP11 arguments and the console font, without quiet rhgb"
 
 ## 9. /sp11 payload: the RPMs the media carries, and a note
 rm -rf "$W/sp11"; mkdir -p "$W/sp11/rpms"; cp "${KERNEL_RPMS[@]}" "$SRPM" "$IRPM" "${SENSOR_RPMS[@]}" "$W/sp11/rpms/"

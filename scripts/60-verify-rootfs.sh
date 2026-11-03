@@ -53,8 +53,10 @@ check test "$(r rpm --root "$ROOTFS" -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' k
 # The sensors stack is part of the media (inert here: no FastRPC node without the ADSP; active on the installed
 # system). Step 50 applied its scriptlet effects itself: the fastrpc user, the policy module, the registry copy.
 check r rpm --root "$ROOTFS" -q hexagonrpc libssc iio-sensor-proxy sp11-sensors
+# The host's rpm installing unsigned RPMs: digests required, no signature (step 50's RPM_VERIFY).
+RPM_VERIFY=(--define '_pkgverify_level digest')
 for rpmf in "$(rpm_of hexagonrpc)" "$(rpm_of libssc)" "$(rpm_of iio-sensor-proxy)" "$(rpm_of sp11-sensors)"; do
-  check r rpm --root "$ROOTFS" -U --test --replacepkgs "$rpmf"
+  check r rpm --root "$ROOTFS" "${RPM_VERIFY[@]}" -U --test --replacepkgs "$rpmf"
 done
 check r sh -c "rpm --root '$ROOTFS' -q --qf '%{RELEASE}\n' iio-sensor-proxy | grep -q '\.sp11\.'"
 check r chroot "$ROOTFS" /usr/bin/sh -c 'ldd /usr/libexec/iio-sensor-proxy | grep -q libssc.so.2'
@@ -69,7 +71,7 @@ check r grep -q 'iio-sensor-proxy' "$ROOTFS/etc/dnf/libdnf5.conf.d/91-sp11-senso
 check r test ! -e "$ROOTFS/usr/lib/dracut/modules.d/95sp11-sensors"
 check sh -c "! lsinitrd '$WORK_DIR/iso/initrd' | grep -qE 'sp11-sensors|hexagonrpc'"
 for rpmf in "$(rpm_of kernel-core)" "$(rpm_of sp11-surface-support)" "$(rpm_of sp11-iptsd)"; do
-  check r rpm --root "$ROOTFS" -U --test --replacepkgs "$rpmf"
+  check r rpm --root "$ROOTFS" "${RPM_VERIFY[@]}" -U --test --replacepkgs "$rpmf"
 done
 for bin in /usr/libexec/sp11-iptsd /usr/libexec/sp11-iptsd-check-device /usr/libexec/sp11/sp11-bt-set-addr; do
   check r chroot "$ROOTFS" /usr/bin/sh -c "! ldd $bin | grep -q 'not found'"

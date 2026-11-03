@@ -124,8 +124,10 @@ one release's set.
 
 ## Host
 
-- WSL2 Fedora 44 aarch64 on the Surface itself (12 cores, 11 GiB RAM), passwordless sudo, Windows at `/mnt/c`;
-  `powershell.exe` interop serves the hardware detection and the registry export.
+- WSL2 Fedora 45 aarch64 on the Surface itself (12 cores, 11 GiB RAM; Fedora 44 until 2026-11-03), passwordless
+  sudo, Windows at `/mnt/c`; `powershell.exe` interop serves the hardware detection and the registry export. The
+  host's release matters only to step 40: with host and target both 45, `IPTSD_BUILD_MODE=auto` builds
+  `sp11-iptsd` on the host; the kernel and the sensors chain always build in mock.
 - No Docker: the kernel and the cross-release packages build in mock buildroots of the target release; the
   kernel's root needs about 40 GiB on the same disk, hence the 80 GiB check in step 0.
 - `00-setup-host.sh` installs every tool, even those the stock WSL image lacks.

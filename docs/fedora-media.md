@@ -7,21 +7,26 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 - `FEDORA_TARGET` in `sp11.conf` picks the compose family: `ga` (`releases/<n>/`), `beta`
   (`releases/test/<n>_Beta/`) or `nightly` (`development/<n>/`, needs `FEDORA_COMPOSE=<stamp>`). `FEDORA_RELEASE`
   stays the numeric release (`--releasever`, `%{dist}`, cache keys); `FEDORA_MEDIA_VERSION` is the version string
-  inside the ISO name (`45_Beta`).
+  inside the ISO name (`45` for the release, `45_Beta` for the Beta). The default since 2026-11-03 is the Fedora 45
+  release, compose 1.4 (`Fedora-Workstation-Live-45-1.4.aarch64.iso`); the 45 Beta 1.3 stays under
+  `releases/test/45_Beta/`.
 - The CHECKSUM file name differs per family: GA `Fedora-Workstation-<v>-<c>-<arch>-CHECKSUM`, Beta
   `Fedora-Workstation-iso-<v>-<c>-<arch>-CHECKSUM`, nightly `Fedora-Workstation-iso-<n>-<arch>-<stamp>-CHECKSUM`;
   the body is the same clearsigned BSD digest, checked with `sha256sum -c --ignore-missing`.
 - `FEDORA_EDITION` (default `Workstation`) names the desktop as in the ISO file name, `FEDORA_PRODUCT` the compose
   directory and CHECKSUM: KDE Plasma Desktop is edition `KDE-Desktop` but product `KDE` (`KDE/`,
-  `Fedora-KDE-iso-45_Beta-1.3-aarch64-CHECKSUM`); every other value is a spin under `Spins/`, which share the
+  `Fedora-KDE-45-1.4-aarch64-CHECKSUM`); every other value is a spin under `Spins/`, which share the
   `Spins` CHECKSUM. `KDE-Mobile` is a spin.
 
 ## ISO layout
 
 - `Fedora-Workstation-Live-44-1.7.aarch64.iso`, volume id `Fedora-WS-Live-44`, built by kiwi. The live root
-  `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB.
+  `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB. The 45 release image
+  (`Fedora-Workstation-Live-45-1.4.aarch64.iso`, 2.99 GB, volume id `Fedora-WS-Live-45`, composed 2026-10-28) has
+  the same layout, loader paths and live menu, only the marker differs; its root is 2.59 GB, 1950 packages.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does
-  `search --file --set=root /boot/0x503d6c7e`, then `configfile ($root)/boot/grub2/grub.cfg`.
+  `search --file --set=root /boot/<marker>` (`0x503d6c7e` in 44 1.7, `0xcdf4802f` in 45 1.4), then
+  `configfile ($root)/boot/grub2/grub.cfg`.
 - Loader paths under `/boot/aarch64/loader/`: `linux`, `initrd`, the font `grub2/fonts/unicode.pf2`. Step 50 reads
   them from the ISO, maps `sp11-console.pf2` in beside the font and reproduces the layout with
   `xorriso ... -boot_image any replay -map ...`.
@@ -42,9 +47,10 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
   2880x1920. DejaVu's Bitstream-Vera licence needs the extra `License:` term and a font name without "Bitstream"
   or "Vera".
 - `00_header` honours `GRUB_FONT`: a single `if loadfont <path>` replaces its own font search, so exactly one font
-  is loaded. The result (grub2 2.12-76.fc45) is `if loadfont /grub2/fonts/sp11-console.pf2` and
-  `set gfxmode=2880x1920,auto`. The font file must be under `/boot`: on the LUKS layout nothing else is readable by
-  GRUB, 00_header's own fallback `/usr/share/grub/unicode.pf2` included.
+  is loaded. The result (grub2 2.12-76.fc45; the same branch in 2.12-81, the 45 1.4 image's) is
+  `if loadfont /grub2/fonts/sp11-console.pf2` and `set gfxmode=2880x1920,auto`. The font file must be under
+  `/boot`: on the LUKS layout nothing else is readable by GRUB, 00_header's own fallback
+  `/usr/share/grub/unicode.pf2` included.
 - A `GRUB_FONT` naming a missing file makes 00_header run `grub2-probe` on it and grub2-mkconfig fails outright, so
   `sp11-grub-defaults` writes an empty `GRUB_FONT=` (the supported opt-out) whenever the copy into
   `/boot/grub2/fonts/` did not happen.
@@ -63,7 +69,9 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 - Fedora's live `grub.cfg` is kept (`set default="1"` selects the media check, `timeout=10`). Step 50 changes only
   what the SP11 needs: the console-font block replaces `terminal_output console` after the
   `search --file --set=root <marker>` line, every `linux` line gets `$sp11_args` (installed plus live-only
-  arguments) and every `initrd` line a following `devicetree $sp11_dtb`; an unrecognised layout stops the build.
+  arguments) and loses Fedora's `quiet rhgb` (since 2026-11-03: the boot messages tell a slow live boot from a
+  frozen one; Anaconda gives the installed system its own `rhgb quiet`), and every `initrd` line a following
+  `devicetree $sp11_dtb`; an unrecognised layout stops the build.
 - `rd.live.check` needs the ISO checksum that `implantisomd5` writes and xorriso's remastering drops; step 50
   implants it again and checks the result with `checkisomd5`.
 
@@ -72,7 +80,7 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 - Anaconda (44.30 and 45.22) discovers kernels only from `/boot/vmlinuz-*` (45.22 also `vmlinuz-dtbloader.efi`)
   and runs `kernel-install add <ver> /lib/modules/<ver>/vmlinuz` for each. Step 50 installs the SP11 kernel with
   `--noscripts`, so it copies `vmlinuz` and `.vmlinuz.hmac` to `/boot` itself, as `20-grub.install` would.
-- Only `preserved_arguments` (`clk_ignore_unused pd_ignore_unused arm64.nopauth`, in 45.22 also
+- Only `preserved_arguments` (`clk_ignore_unused pd_ignore_unused arm64.nopauth`, in 45.22 and 45.30 also
   `systemd.tpm2_wait`) reach the boot args from the live command line, plus `rhgb quiet` and storage arguments;
   `modprobe.blacklist`, `rd.driver.blacklist`, the soundwire argument and the live root's `/etc/default/grub`
   never do. Anaconda's commands and their output are in `/var/log/anaconda/program.log`.
@@ -144,12 +152,23 @@ Installation order, from `modules/boss/installation.py`:
 - `rpm --noscripts` also skips triggers, so step 50 runs `sp11-ucm-apply` in the chroot itself; on a normal install
   the support RPM's `%triggerin -- alsa-ucm` and `%triggerin -- grub2-efi-aa64-modules` fire for its own
   installation too, and systemd's file triggers reload systemd and udev, so the spec needs no `%post`.
+- Fedora 45's rpm requires a valid signature by default (`%_pkgverify_level all`, rpm 6.0.1-5, the Change
+  "Enforcing signature checking by default"): `rpm -U` refuses an unsigned SP11 RPM (`does not verify: no
+  signature`) and Fedora's own dependency RPM as long as the target root has not imported Fedora's key (`NOKEY`).
+  The verification steps pass `--define '_pkgverify_level none'` to the live root's rpm since the 45 Beta; since
+  the host runs Fedora 45 (2026-11-03) steps 50 and 60 pass `_pkgverify_level digest` to the host's `rpm --root`:
+  digests stay mandatory, a signature is verified when its key is known, an unknown key is a warning again.
 - Never install RPMs into the live root with `--nodeps`: `sp11-iptsd` without `spdlog` (which Workstation Live
   lacks) fails udev's `check-device`, so no `sp11-iptsd@` unit starts. `LIVE_EXTRA_PKGS` in `sp11.conf` lists
   what step 10 downloads and step 50 installs first; step 50 refuses unmet dependencies (`rpm -U --test`) and
   step 60 checks that the shipped binaries load.
 
-## Fedora 45 differences (verified 2026-09-16 against 45 Beta 1.3)
+## Fedora 45 differences (verified 2026-09-16 against 45 Beta 1.3, 2026-11-03 against 45 1.4)
+
+The 45 1.4 Workstation image carries Anaconda 45.30 with anaconda-webui 90 and Firefox 158 (no slitherer), dnf5
+5.4.6, dracut 111, grub2 2.12-81, systemd 262, rpm 6.1, fmt 12.1 without spdlog, every `SENSORS_DEPS_PKGS`
+capability (`protobuf-c` from `protobuf3-c`), the stock kernel set below at 7.2.11-300 and the two dracut modules
+`LIVE_DRACUT_OMIT` names; its `os-release` says `VERSION_ID=45`, `RELEASE_TYPE=stable`.
 
 ### Building for the target release
 
@@ -163,11 +182,12 @@ Installation order, from `modules/boss/installation.py`:
 
 ### kernel-uki-dtbloader
 
-- On aarch64 Fedora's images boot `kernel-uki-dtbloader` and carry no `kernel-core` (the 44 1.7 and 45 Beta sets:
-  `kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`): a systemd-stub UKI with `.dtbauto` device
-  trees and a `.hwids` table from Fedora's `stubble` package, which `Conflicts:` with `kernel-core` of the same
-  version. Its `%posttrans` runs `kernel-install add` on `vmlinuz-dtbloader.efi`, `20-grub.install` writes an
-  ordinary BLS entry, and the stub replaces a DTB it did not choose with its own of the same compatible.
+- On aarch64 Fedora's images boot `kernel-uki-dtbloader` and carry no `kernel-core` (the 44 1.7, 45 Beta 1.3 and
+  45 1.4 sets: `kernel`, `kernel-modules{,-core,-extra}`, `kernel-uki-dtbloader`): a systemd-stub UKI with
+  `.dtbauto` device trees and a `.hwids` table from Fedora's `stubble` package, which `Conflicts:` with
+  `kernel-core` of the same version. Its `%posttrans` runs `kernel-install add` on `vmlinuz-dtbloader.efi`,
+  `20-grub.install` writes an ordinary BLS entry, and the stub replaces a DTB it did not choose with its own of the
+  same compatible.
 - The SP11 media install `kernel-core` instead (`KERNEL_PKGS`): this unit's SMBIOS hardware IDs match no stubble
   entry (`docs/hardware.md`), and Fedora documents `kernel-core` with `GRUB_DEVICETREE` as the manual path.
   `kernel-tools` and `kernel-tools-libs` track the kernel version too but own nothing in `/boot`.

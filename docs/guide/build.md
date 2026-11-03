@@ -6,7 +6,7 @@ What each step does underneath, its caches and the pitfalls: [`docs/pipeline.md`
 
 ## Requirements
 
-- A Fedora aarch64 distribution in WSL on the Surface (tested with Fedora 44).
+- A Fedora aarch64 distribution in WSL on the Surface (tested with Fedora 44 and 45).
 - Windows interop (`powershell.exe`).
 - `sudo`, passwordless for unattended runs.
 - 80 GiB free disk space (the kernel's mock buildroot takes about 40).
@@ -36,8 +36,8 @@ starts over on the next run. Two settings in `sp11.conf`, also accepted from the
 media:
 
 - `FEDORA_TARGET`: which Fedora 45 media to build from.
-  - `beta` (default): the Fedora 45 Beta, `releases/test/45_Beta/`.
-  - `ga`: `releases/45/`. It needs `FEDORA_COMPOSE=<n.m>` until the 45 GA compose is pinned in `sp11.conf`.
+  - `ga` (default): the Fedora 45 release, `releases/45/`, compose 1.4.
+  - `beta`: the Fedora 45 Beta, `releases/test/45_Beta/`, compose 1.3.
   - `nightly`: `development/45/`. It needs `FEDORA_COMPOSE=<stamp>`.
 
   Only Fedora 45 is supported: the kernel source RPM is pinned per release. A release other than the host's is
@@ -81,7 +81,7 @@ release.
    of the same packages, installs the support, iptsd and sensors RPMs, builds the live initramfs, adds the device
    tree, the kernel arguments and the console font to Fedora's own live GRUB menu, then assembles the ISO and
    implants the media-check checksum. The result is, for example,
-   `build/out/Fedora-Workstation-Live-45_Beta-1.3-SP11-7.2.15-300.sp11.1.fc45.aarch64.iso`, plus `.sha256`.
+   `build/out/Fedora-Workstation-Live-45-1.4-SP11-7.2.15-300.sp11.1.fc45.aarch64.iso`, plus `.sha256`.
 
 ## Checks
 

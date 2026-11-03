@@ -73,7 +73,7 @@ the pen daemon.
 ## Sensors stack
 
 ```bash
-FEDORA_TARGET=beta scripts/45-build-sensors-rpms.sh
+scripts/45-build-sensors-rpms.sh
 ```
 
 This builds `hexagonrpc` (from this project's fork, [`docs/guide/credits.md`](credits.md)), `libssc`,

@@ -305,3 +305,24 @@ One entry per round; the facts each established live in the topic notes.
 - The night of 2026-11-03 on battery with mobile data on: 29027 s with one sleep, 0.32 W, `ddr` 27253 of 28957 s
   (94 %), the ADSP 10 a second, woken by the power key with nothing in between; mobile data and Wi-Fi connected
   and pinging at the wake. The same as revision 9's night of 2026-10-31.
+
+## Fresh installation from the Fedora 45 release media 1.4 with 7.2.15 revision 1 (2026-11-03)
+
+- Installed: a fresh install from `Fedora-Workstation-Live-45-1.4` (Fedora's 45 release, in place of the 45 Beta
+  1.3) remastered with kernel `7.2.15-300.sp11.1`, support 3.9, iptsd 3.1.0-4, hexagonrpc 0.5.0-8, libssc
+  0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2 and sp11-sensors 1.15 (sha256 `41826984…`); the media check passed and
+  the installer opened in Firefox (owner). After the first-boot service, the boot entry and the command line carry
+  the 5G device tree and the four SP11 arguments.
+- Confirmed: `Enforcing`; the speakers' feedback lines and the microphone; the QSPI touch path, the touch
+  controller and its HID bridge; both DSPs answering, the CDSP again in a second boot; the five sensors' readings
+  with the proxy's orientation, light and compass; the pairings imported from the tarball, the Flex Keyboard and
+  the Slim Pen 2 connected; one deep sleep and resume; `no provider waits for sync_state`; the journal's errors only
+  the ADSP handover lines. By hand (owner): the live session (display, touch, pen, keyboard and touchpad, Wi-Fi),
+  the auto-rotate button, auto-rotation and automatic brightness, both cameras with the front camera's light in
+  GNOME Snapshot, battery, brightness and volume keys, the power modes, GPS near a window, mobile data, the wake's
+  checks.
+- Found: one CDSP assert (`sleep_statsi.c:537`, recovered in 0.14 s) 15 minutes into the boot, the known open
+  issue (`docs/sensors.md`, The CDSP asserts around stream changes); the touch controller's automatic recovery
+  twice in that boot (`recoveries=2`); `cam` is not on a fresh Workstation installation (`libcamera-tools`).
+- The ISO's second build (sha256 `dd3a8950…`), whose live entries boot without `quiet rhgb`, showed the boot
+  messages on the console and gave the live session's expected output (owner, later the same day).
