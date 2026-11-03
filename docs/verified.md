@@ -264,6 +264,19 @@ One entry per round; the facts each established live in the topic notes.
 - Confirmed: the modem `connected` again after the restart; after a wake ModemManager's sync 2.5 s and mobile
   data online 2.5 s after it, no probe, pings over `wwan0`; Wi-Fi online after 12.9 s.
 
+## Kernel 7.2.15 revision 1: the reversed USB-C plug (2026-11-03)
+
+- Installed: the kernel RPMs `7.2.15-300.sp11.1.fc45` (7.2.14 revision 2's 94 patches unchanged on Fedora's
+  `kernel-7.2.15-300.fc45`, plus 0095, the PS8830 retimer told of the connection 30 ms before its mode) with
+  support 3.9, `dnf install` next to revisions 1 and 2 of 7.2.14, dnf removing 7.2.11 revision 13; the 5G device
+  tree in the boot entry, `saved_entry` on the new kernel.
+- Confirmed: the USB 3 stick (SanDisk 3.2Gen1) at 5000 Mb/s in both ports turned over and the usual way (six
+  checks: port A and B each way, port A turned over after a wake and in a second boot), where every earlier kernel
+  found it only the usual way; the standard checks (the three PCIe links, the QSPI touch path, the touch
+  controller and its HID bridge, the speakers' feedback lines, both DSPs answering, the crypto engine's hashes,
+  the three cameras with the front camera's light); `no provider waits for sync_state`; the journal's errors only
+  the ADSP handover lines. By hand (owner): the files on the stick, the wake's checks, the round's checks.
+
 ## Kernel 7.2.14 revision 2 and sp11-iptsd 3.1.0-4: the wake (2026-11-02)
 
 - Installed: `sp11-iptsd-3.1.0-4.sp11` with `dnf upgrade` over 3.1.0-3 on 7.2.14 revision 1, then the kernel

@@ -11,10 +11,10 @@ removal, SELinux.
 - The result: Fedora's package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
-- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9, 7.2.11 and 7.2.14
-  checked). Fedora's own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in 7.2.9, 91 in
-  7.2.11, 95 in 7.2.14) shares only the media `Kconfig`, `Makefile` and `MAINTAINERS` with the patch set and is
-  applied after it.
+- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9, 7.2.11, 7.2.14 and
+  7.2.15 checked). Fedora's own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in
+  7.2.9, 91 in 7.2.11, 95 in 7.2.14, 94 in 7.2.15) shares only the media `Kconfig`, `Makefile` and `MAINTAINERS`
+  with the patch set and is applied after it.
 
 ### The builds, by revision
 
@@ -45,6 +45,7 @@ removal, SELinux.
 | 7.2.11 revision 13 | 2026-11-01 | `kernel-7.2.11-300.fc45` | A known country kept when the 11d scan reports none; the re-send at a radio's start |
 | 7.2.14 revision 1 | 2026-11-02 | `kernel-7.2.14-300.fc45` | Rebased onto `v7.2.14` |
 | 7.2.14 revision 2 | 2026-11-02 | `kernel-7.2.14-300.fc45` | The wake: no power-on in the touch resume callback, PCIe controllers resumed in parallel |
+| 7.2.15 revision 1 | 2026-11-03 | `kernel-7.2.15-300.fc45` | Rebased onto `v7.2.15`; the USB-C retimer told of the connection before its mode |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to
@@ -162,6 +163,10 @@ onto the new stable tag, whatever lies between (a stable tag contains every earl
   selected (the retimers' buses); a PMIC GPIO direction change clears the opposite buffer (the volume keys, the
   left retimer's reset and supplies, the panel's enable); the CCI accumulates its halt-acknowledge resets (the
   cameras' buses). Fedora's configuration enables `EROFS_FS_PAGE_CACHE_SHARE`.
+- 7.2.14 to 7.2.15 (7.2.15 revision 1): the 94 commits rebased unchanged, with 0095 added on top. None of the 12
+  stable commits touches a file of the series (a Bluetooth address fix, io_uring races at exec and fork, an
+  skbuff change Fedora's 7.2.14 patch already carried, the HID ambient-light sensor, SMB direct, kbuild). Fedora's
+  configuration changes only its toolchain values.
 
 ### Procedure
 

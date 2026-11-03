@@ -128,18 +128,26 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 ## USB-C data
 
 - Plugged one way (`normal` in `/sys/class/typec/portN/orientation`) a USB 3 stick (SanDisk 3.2Gen1) runs at
-  5000 Mb/s on both ports; turned over (`reverse`) no USB device appears within 10 s on either port, while the
-  Type-C class sees the partner and its orientation. Windows finds the stick both ways (7.2.11 revisions 5 to 7).
+  5000 Mb/s on both ports. Turned over (`reverse`) the stick was found on neither port up to 7.2.14 revision 2,
+  while the Type-C class saw the partner and its orientation and Windows ran it at USB 3 both ways: the PS8830
+  retimer must be told of the connection before its mode (below; patch 0095 from 7.2.15 revision 1).
 - Port 0 is `a600000.usb` behind the PS8830 retimer on `i2c@b8c000`, port 1 `a800000.usb` behind the one on
-  `i2c@b9c000` (both at address 0x08). A kprobe trace shows the reversed orientation reaching the retimer and the
-  QMP PHY, and the PHY rewriting its tables for it, so the switch lookup (patch 0083) is not the cause. The
-  trace's timestamps run 13 to 29 ms ahead of the journal's: order events within one source.
-- Reversed on revision 7: the retimer's register 0x00 reads 0x23 (connected, reversed, USB 3), the USB 3 root port
-  sits in `Polling` (receivers detected, link training failing; `U0` the usual way) and the USB 2 port is
-  unconnected. A port power cycle ends in `Polling` again; with the retimer's orientation bit cleared the port
-  falls back to `RxDetect`. So the retimer needs its reversed setting, and the link between the PHY, set to
-  reversed by the same orientation, and the retimer does not train: the PHY's lane setup for the reversed plug is
-  the lead.
+  `i2c@b9c000` (both at address 0x08). Reversed, the orientation reaches the retimer (its register 0x00 reads
+  0x23: connected, reversed, USB 3) and the QMP PHY (port select 3, its tables rewritten); the USB 3 root port
+  then sits in `Polling` and the USB 2 port stays unconnected: both ends present termination and nothing crosses
+  the retimer's second lane, so the link never trains.
+- Ruled out on the device (2026-11-03, one boot with `iomem=relaxed` and a tool writing the PHY, the controller
+  and the retimer through `/dev/mem` and I2C; `docs/verified.md`): the PHY left on its normal lane (the stick
+  falls back to USB 2), the PHY's port select written after the retimer as Windows does, Windows' PHY receiver and
+  transmitter values, a full PHY restart after the retimer, forcing USB 3 Gen 1, Windows' controller settings; with
+  its orientation bit cleared the retimer finds no pair (`RxDetect`), so it binds its lanes by that bit alone.
+- The cause: the kernel wrote the retimer's final configuration (0x23) as its first word after the reset, while
+  Windows writes 0x01 (connection present) first and the mode 30 ms later. Replaying the two writes on the live
+  retimer of a stuck port brought the link to `U0` and the stick to 5000 Mb/s within a second, on both ports, with
+  the PHY and the port untouched; the usual plug afterwards ran at 5000 Mb/s as before. Patch 0095 makes `ps883x`
+  write the two steps whenever the retimer comes out of reset (`docs/kernel-patches.md`). On 7.2.15 revision 1
+  the stick runs at 5000 Mb/s turned over and the usual way on both ports, after a wake and in a second boot
+  (2026-11-03).
 
 ## TPM
 

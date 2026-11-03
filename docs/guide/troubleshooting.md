@@ -19,8 +19,6 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
 
 - In the live session, audio and battery status are unavailable because the audio DSP stays off while running
   from USB-C (an ADSP restart resets the port). Both work once installed.
-- USB-C data works with the plug one way round; turned over, a USB 3 stick is not found on either port, while
-  Windows finds it both ways ([`docs/hardware.md`](../hardware.md), USB-C data).
 - Once in a boot, a few minutes after it, the compute DSP's firmware can report a `sleep_stats` fatal error.
   remoteproc restarts that DSP by itself, and nothing on Linux uses it.
 - GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from

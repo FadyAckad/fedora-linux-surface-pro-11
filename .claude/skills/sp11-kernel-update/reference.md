@@ -192,7 +192,7 @@ grep -E '^(CONFIG_|# CONFIG_)' payload/kernel-local | while IFS= read -r l; do g
 ```
 
 ```bash
-git -C "$R/linux" diff --name-only "v$NEW" HEAD | grep / | sed 's|/[^/]*$||' | sort -u | grep -vE '^(include|Documentation|arch/arm64/boot/dts)|^drivers/hid/bpf' | sed 's|$|/|' > "$R/build-targets.txt"; rm -rf "$R/kbuild/drivers" "$R/kbuild/sound" "$R/kbuild/net" "$R/kbuild/arch/arm64/boot/dts"
+git -C "$R/linux" diff --name-only "v$NEW" HEAD | grep / | sed 's|/[^/]*$||' | sort -u | grep -vE '^(include|Documentation|arch/arm64/boot/dts)|^drivers/hid/bpf' | sed 's|$|/|' | awk 'BEGIN {p = ""} {if (p != "" && index($0, p) == 1) next; print; p = $0}' > "$R/build-targets.txt"; rm -rf "$R/kbuild/drivers" "$R/kbuild/sound" "$R/kbuild/net" "$R/kbuild/arch/arm64/boot/dts"
 ```
 
 ```bash
@@ -202,6 +202,9 @@ make -C "$R/linux" O=../kbuild ARCH=arm64 -j"$(nproc)" prepare modules_prepare >
 Expected: the `olddefconfig` override warnings for the `kernel-local` symbols, no `LOST:` line; three `rc=0`, no
 `warning:` or `error:` line. `build-targets.txt` must list only kernel make targets: top-level files such as `MAINTAINERS` (touched since
 revision 6) are left out by the `grep /`; drop any other directory the series touches (tools, scripts) the same way.
+The `awk` keeps only the top-most directory of a nest: `drivers/pci/` and `drivers/pci/controller/dwc/` as two
+targets of one `make -j` race for `drivers/pci/controller/built-in.a` (`ar: ... No such file or directory`,
+`Error 123`), seen at 7.2.15.
 
 ## 4. Pins and build directory
 

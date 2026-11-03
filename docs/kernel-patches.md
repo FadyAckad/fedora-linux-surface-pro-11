@@ -23,7 +23,7 @@ after their trailers that names the source and the change.
 - Source: ooaklee's linux_ms_dev_kit-sp11 release `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (`ce78e6ebc3d7`) with the 7.2.5
   stable update (the v23.2 kernel of `docs/kernel.md`).
 - Result: 61 patches reproducing 70 of the 80 files they touch byte for byte from v23.2; the other 10 differ only
-  by the parts left out (below). In the numbering of the current branch `sp11/7.2.14`:
+  by the parts left out (below). In the numbering of the current branch `sp11/7.2.15`:
   - 0001–0041: jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses; 0014 lacks a
     jglathe-only X1P file, 0030 keeps only its Denali hunk.
   - 0042–0047: ooaklee's branch commits as they are (OLED link-rate quirk, dwc3 PHY re-init, platform profile).
@@ -183,6 +183,19 @@ after their trailers that names the source and the change.
 - Passed its device round on 2026-11-02 (`docs/sleep.md`, Wake) and pushed the same evening (head `1ca86c76`,
   tree `e42be2f1`, the tree the kernel was built from).
 
+### 7.2.15 revision 1: the rebase and the reversed USB-C plug
+
+- The 94 commits rebased unchanged onto `v7.2.15` (`docs/kernel.md`, Rebase to a new Fedora kernel).
+- 0095 (this repository): `ps883x_configure()` writes the PS8830 retimer's connection-status registers in two
+  steps when the retimer comes out of reset: `0x01` (connection present) and, 30 ms later, the configuration
+  (orientation and mode). Given the final word at once, the retimer brought up no USB 3 link with the plug
+  reversed on either port; the two-step write, replayed on the live retimer of a stuck port, trained the link
+  within a second (`docs/hardware.md`, USB-C data). Windows configures the chip the same way. A mode change on
+  an existing connection is written at once, as before.
+- Passed its device round on 2026-11-03: the stick at 5000 Mb/s turned over and the usual way on both ports, after
+  a wake and in a second boot (`docs/verified.md`). Pushed the same day (head `395b0aab`, tree `a90da6df`, the
+  tree the kernel was built from).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -241,6 +254,7 @@ The patches by number, with their origin and what each is needed for.
 | 0092 | ath12k: a known country kept when the 11d scan reports none, restored when a radio starts | this repository | the first Wi-Fi scan after a wake with the country known (`docs/hardware.md`, Wi-Fi) |
 | 0093 | MSHW0485 touch: no power-on in the resume callback; the recovery work powers the controller, once | this repository | 0.8 s less in a wake's resume phase (`docs/sleep.md`, Wake) |
 | 0094 | PCIe (qcom): the controllers suspend and resume asynchronously | this repository | the three links resumed side by side, about 0.65 s less in a wake |
+| 0095 | PS8830 retimer: the connection announced 30 ms before its mode | this repository | USB 3 with the plug reversed (`docs/hardware.md`, USB-C data) |
 
 ## Left out of v23.2
 
