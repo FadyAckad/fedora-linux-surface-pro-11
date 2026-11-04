@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # Step 3: build the SP11 kernel packages from Fedora's own kernel source RPM (KERNEL_SRPM, pinned in sp11.conf) with
-# the SP11 patch set (the kernel fork's pinned commits as step 10 writes them out, applied by kernel.spec as
+# the SP11 patch set (the pinned commits of the kernel fork, the submodule linux-sp11, as step 10 writes them out, applied by kernel.spec as
 # linux-kernel-test.patch) and configuration additions (payload/$KERNEL_CONFIG_FRAGMENT, kernel.spec's kernel-local),
 # under buildid .sp11.<KERNEL_SP11_REV>. The result is Fedora's kernel package family, built in a mock buildroot of
 # the target release; nothing else about Fedora's kernel changes.
@@ -15,7 +15,7 @@ mkdir -p "$KDIR"
 # rebuilt with another patch set or fragment would collide with the installed package instead of replacing it.
 REV_SHA=$(kernel_rev_sha256)
 [ "$REV_SHA" = "${KERNEL_SP11_REV_SHA256:-}" ] \
-  || die "payload/$KERNEL_CONFIG_FRAGMENT and KERNEL_PATCH_COMMIT do not match SP11 revision $KERNEL_SP11_REV (KERNEL_SP11_REV_SHA256 in sp11.conf); a changed patch set or fragment needs a new revision: set KERNEL_SP11_REV (1 for a new KERNEL_FEDORA_VERSION, the next number otherwise) and KERNEL_SP11_REV_SHA256=$REV_SHA"
+  || die "payload/$KERNEL_CONFIG_FRAGMENT and the linux-sp11 pin (${KERNEL_PATCH_COMMIT:0:12}) do not match SP11 revision $KERNEL_SP11_REV (KERNEL_SP11_REV_SHA256 in sp11.conf); a changed patch set or fragment needs a new revision: set KERNEL_SP11_REV (1 for a new KERNEL_FEDORA_VERSION, the next number otherwise) and KERNEL_SP11_REV_SHA256=$REV_SHA"
 
 [ -s "$SRPM_IN" ] || die "missing $SRPM_IN (run scripts/10-fetch-sources.sh)"
 verify_sha256 "$SRPM_IN" "$KERNEL_SRPM_SHA256"

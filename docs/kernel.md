@@ -6,8 +6,8 @@ removal, SELinux.
 ## Sources and packages
 
 - The inputs: Fedora's `kernel` source RPM for `FEDORA_RELEASE` (`KERNEL_SRPM`, sha256 pinned in `sp11.conf`), the
-  SP11 patch set (the commits `KERNEL_PATCH_BASE_COMMIT..KERNEL_PATCH_COMMIT` of the kernel fork
-  `KERNEL_PATCH_REPO`; manifest `docs/kernel-patches.md`) and the fragment `payload/kernel-local`.
+  SP11 patch set (the kernel fork's commits from `KERNEL_PATCH_BASE_COMMIT` to the gitlink of the submodule
+  `linux-sp11`; manifest `docs/kernel-patches.md`) and the fragment `payload/kernel-local`.
 - The result: Fedora's package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
@@ -59,8 +59,8 @@ switch).
 - The buildid slot, the spec's only edit: `# define buildid .local` becomes `%define buildid .sp11.<rev>`; step 20
   dies unless exactly one such line exists.
 - The patch slot `Patch999999: linux-kernel-test.patch` receives the series step 10 writes with `git format-patch`
-  from a shallow partial clone (about 5 MB); step 20 checks it against the pinned tree (`kernel_series_check` in
-  `lib.sh`) before concatenating it.
+  from the submodule `linux-sp11` (a shallow fetch of the pinned commit back to the base, 291 MB); step 20 checks
+  it against the pinned tree (`kernel_series_check` in `lib.sh`) before concatenating it.
 - The configuration slot `Source3001: kernel-local` is merged into every configuration; `process_configs.sh` fails
   on a symbol no configuration sets, so `kernel-local` sets the patch set's new symbols
   (`CONFIG_TOUCHSCREEN_MSHW0485`, `CONFIG_VIDEO_IMX681`, `CONFIG_VIDEO_VD55G0`) and every symbol Kconfig derives
@@ -180,12 +180,13 @@ onto the new stable tag, whatever lies between (a stable tag contains every earl
    CPS feedback port 13 (patch 0058).
 4. Compile on the host before the mock build: the directories the series touches and the DTBs, with Fedora's
    configuration plus `kernel-local` (under two minutes).
-5. Pin the patch set (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) and set `KERNEL_SP11_REV`: 1 for a new
-   Fedora kernel version, the next number otherwise.
-6. Build from the clone before the push: `KERNEL_PATCH_REPO=<clone>` for step 10 (a local clone takes 280 MB, not
-   5 MB); step 20's sync-state check then covers Fedora's new configuration.
-7. Push after the device test and never rewrite the branch (`sp11.conf` pins its commits); a re-signed copy with
-   the tested tree (`git rev-parse <head>^{tree}`) keeps the revision number.
+5. Pin the patch set: `KERNEL_PATCH_BASE_COMMIT` in `sp11.conf`, the rehearsal head as the gitlink of `linux-sp11`
+   (fetched from the scratch clone with `--depth=<commits + 1>`, checked out, `git add linux-sp11`; the branch line
+   of `.gitmodules`), and `KERNEL_SP11_REV`: 1 for a new Fedora kernel version, the next number otherwise.
+6. Build before the push: step 10 reads the submodule, so the rehearsal head builds without a push; step 20's
+   sync-state check then covers Fedora's new configuration.
+7. Push after the device test and never rewrite the branch (the gitlink pins its head); a re-signed copy with the
+   tested tree (`git rev-parse <head>^{tree}`) keeps the revision number.
 
 ## Install and removal
 

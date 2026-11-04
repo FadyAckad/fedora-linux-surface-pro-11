@@ -105,7 +105,8 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
 ## Quick start
 
 Requirements: a Fedora aarch64 distribution in WSL on the Surface, Windows interop (`powershell.exe`), `sudo`
-(passwordless for unattended runs), 80 GiB free disk space and internet access.
+(passwordless for unattended runs), 80 GiB free disk space and internet access. A plain `git clone` is enough: the
+build fetches the kernel fork's pinned commit into the submodule `linux-sp11` itself (about 290 MB).
 
 Once per unit, export its sensor registry from Windows (one UAC prompt):
 

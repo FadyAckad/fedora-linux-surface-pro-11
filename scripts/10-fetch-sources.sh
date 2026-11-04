@@ -16,28 +16,37 @@ verify_sha256 "$CACHE_DIR/$KERNEL_SRPM" "$KERNEL_SRPM_SHA256"
 # ...and Fedora's own kernel-core of that build, the reference step 20 compares the SP11 configuration with
 fetch "$KERNEL_STOCK_CORE_URL" "$CACHE_DIR/$KERNEL_STOCK_CORE_RPM"
 verify_sha256 "$CACHE_DIR/$KERNEL_STOCK_CORE_RPM" "$KERNEL_STOCK_CORE_SHA256"
-# ...and the SP11 patch set: the kernel fork's pinned commit with its history back to the pinned base, fetched without
-# file contents (a few MB) and deepened until the base is there; the series is written from it, git fetching the
-# contents of the files the patches touch on demand, and checked against the commit's tree. Lookups before and after
-# the fetch run with GIT_NO_LAZY_FETCH: in a partial clone, asking for a missing commit makes git fetch it with its
-# whole history (3 GB of Linux commits and trees).
+# ...and the SP11 patch set: the kernel fork, the submodule linux-sp11, pinned by its gitlink (KERNEL_PATCH_COMMIT).
+# Only that commit is fetched, with its history back to the pinned base (a shallow fetch, deepened until the base is
+# there; about 250 MB once), and checked out; the series is written from it and checked against the commit's tree.
+# A full clone, as `git submodule add --reference` leaves, passes without a fetch. The fork's history is 5 GB, which
+# `git submodule update` would fetch whole for a commit it lacks: .gitmodules sets update=none, so the generic
+# submodule commands skip it and no fetch of this repository recurses into it; this step owns it.
+kernel_patch_pin
 G="$KERNEL_PATCH_GIT"
-if [ ! -d "$G" ]; then
-  git init -q --bare "$G"
-  git -C "$G" config core.repositoryformatversion 1
-  git -C "$G" config extensions.partialClone origin
-  git -C "$G" remote add origin "$KERNEL_PATCH_REPO"
-  git -C "$G" config remote.origin.promisor true
-  git -C "$G" config remote.origin.partialclonefilter blob:none
+if [ ! -e "$G/.git" ]; then
+  log "initializing the submodule linux-sp11 (the kernel fork, shallow)"
+  git -C "$SP11_ROOT" submodule init -q -- linux-sp11 || die "cannot register the submodule linux-sp11"
+  url=$(git -C "$SP11_ROOT" config --get submodule.linux-sp11.url) || die "no URL registered for the submodule linux-sp11"
+  mkdir -p "$G" && git init -q "$G" && git -C "$G" remote add origin "$url" || die "cannot initialize $G"
 fi
-git -C "$G" remote set-url origin "$KERNEL_PATCH_REPO"
 depth=0
-until GIT_NO_LAZY_FETCH=1 git -C "$G" merge-base --is-ancestor "$KERNEL_PATCH_BASE_COMMIT" "$KERNEL_PATCH_COMMIT" 2>/dev/null; do
-  depth=$((depth + 64)); [ "$depth" -le 1024 ] || die "$KERNEL_PATCH_BASE_COMMIT is not an ancestor of $KERNEL_PATCH_COMMIT within 1024 commits"
-  git -C "$G" fetch -q --no-tags --filter=blob:none --depth="$depth" origin "$KERNEL_PATCH_COMMIT" \
-    || die "cannot fetch $KERNEL_PATCH_COMMIT from $KERNEL_PATCH_REPO"
+until git -C "$G" merge-base --is-ancestor "$KERNEL_PATCH_BASE_COMMIT" "$KERNEL_PATCH_COMMIT" 2>/dev/null; do
+  depth=$((depth + 64)); [ "$depth" -le 1024 ] || die "$KERNEL_PATCH_BASE ($KERNEL_PATCH_BASE_COMMIT) is not an ancestor of ${KERNEL_PATCH_COMMIT:0:12} within 1024 commits"
+  [ "$depth" -gt 64 ] || log "fetching the pinned fork commit ${KERNEL_PATCH_COMMIT:0:12} back to $KERNEL_PATCH_BASE"
+  git -C "$G" fetch -q --no-tags --depth="$depth" origin "$KERNEL_PATCH_COMMIT" \
+    || die "cannot fetch $KERNEL_PATCH_COMMIT from $(git -C "$G" remote get-url origin)"
 done
-n=$(GIT_NO_LAZY_FETCH=1 git -C "$G" rev-list --count "$KERNEL_PATCH_BASE_COMMIT..$KERNEL_PATCH_COMMIT")
+head=$(git -C "$G" rev-parse -q --verify HEAD 2>/dev/null || true)
+if [ -z "$head" ]; then
+  git -C "$G" checkout -q --detach "$KERNEL_PATCH_COMMIT" || die "cannot check out $KERNEL_PATCH_COMMIT in $G"
+  # its .git into the superproject's, as `git submodule add` lays it out
+  git -C "$SP11_ROOT" submodule absorbgitdirs -- linux-sp11 >/dev/null 2>&1 || warn "linux-sp11/.git stays a directory (git submodule absorbgitdirs failed)"
+elif [ "$head" != "$KERNEL_PATCH_COMMIT" ]; then
+  die "linux-sp11 is checked out at ${head:0:12}, the index pins ${KERNEL_PATCH_COMMIT:0:12}: 'git -C linux-sp11 checkout --detach ${KERNEL_PATCH_COMMIT:0:12}' follows the pin, 'git add linux-sp11' pins the checkout (a changed patch set needs a new KERNEL_SP11_REV)"
+fi
+git -C "$G" diff --quiet HEAD -- || die "linux-sp11 has uncommitted changes; the patch set is read from commits only"
+n=$(git -C "$G" rev-list --count "$KERNEL_PATCH_BASE_COMMIT..$KERNEL_PATCH_COMMIT")
 if [ ! -f "$KERNEL_PATCH_SERIES/.complete" ] || [ "${FORCE:-0}" = 1 ]; then
   rm -rf "$KERNEL_PATCH_SERIES"; mkdir -p "$KERNEL_PATCH_SERIES"
   git -C "$G" format-patch -q --no-signature --no-renames -o "$KERNEL_PATCH_SERIES" \
@@ -46,7 +55,7 @@ if [ ! -f "$KERNEL_PATCH_SERIES/.complete" ] || [ "${FORCE:-0}" = 1 ]; then
   kernel_series_check || die "the SP11 series does not rebuild the tree of $KERNEL_PATCH_COMMIT"
   touch "$KERNEL_PATCH_SERIES/.complete"
 fi
-log "SP11 patch set: $n commits, $KERNEL_PATCH_BASE..${KERNEL_PATCH_COMMIT:0:12}"
+log "SP11 patch set: $n commits, $KERNEL_PATCH_BASE..${KERNEL_PATCH_COMMIT:0:12}$([ -f "$(git -C "$G" rev-parse --git-path shallow)" ] && echo ' (shallow)')"
 
 ## Audio release (ooaklee FullIO v19c)
 AUDIO_DIR="$CACHE_DIR/$AUDIO_RELEASE_TAG"; mkdir -p "$AUDIO_DIR"

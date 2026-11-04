@@ -16,12 +16,18 @@ What each file is, for a user: `docs/guide/layout.md`. What matters to the pipel
   interconnect users all have a driver (`docs/kernel.md`).
 - `payload/`: the support RPM's payload, installed under `/usr/libexec/sp11`, `/etc/grub.d` and `/usr/lib/...`
   (the modem rule and GNSS feed in 5G builds only); `kernel-local`, a build input of step 20 and part of
-  `KERNEL_SP11_REV` (the patch set itself is the kernel fork's, pinned by `KERNEL_PATCH_*`); `sensors/`
+  `KERNEL_SP11_REV` (the patch set itself is the kernel fork's, the submodule `linux-sp11` below); `sensors/`
   (`sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the libssc and iio-sensor-proxy patches, the
   unpackaged posture probe); `camera/` (the unpackaged raw-capture probe); `README-iso.txt.in`, the note inside
   the ISO.
-- `build/`, git-ignored: `cache/` (downloads, source RPMs, checkouts, `rpm-deps/`, the fork's partial clone
-  `kernel-patches.git`, its series `kernel-patches/<commit>/`), `kernel/` (step 20's tree and logs; the build runs
+- `linux-sp11/`: the kernel fork as a submodule, checked out at the pinned commit. The gitlink in the index is the
+  pinned head (`KERNEL_PATCH_COMMIT`, read by `lib.sh`), `sp11.conf` pins the base. Step 10 owns it: a fresh
+  checkout gets only the pinned commit back to the base (a shallow fetch by commit id, deepened by 64 until the
+  base is an ancestor; 291 MB and 91 s on 2026-11-04), and the checkout must be the pin and clean. `.gitmodules`
+  sets `update = none` and `fetchRecurseSubmodules = false`: `git submodule update` skips it and no `git fetch` of
+  this repository descends into it, since either would pull the fork's whole history (5 GB) for a missing commit.
+- `build/`, git-ignored: `cache/` (downloads, source RPMs, checkouts, `rpm-deps/`, the patch series
+  `kernel-patches/<commit>/` step 10 writes from the submodule), `kernel/` (step 20's tree and logs; the build runs
   in `/var/lib/mock/<MOCK_CONFIG>-sp11-kernel`), `work/iso/` (the live root, root-owned), `rpms/`, `out/` (the
   ISO and the pairing tarball), `bt-pairings/`, `sensors/` and `hardware.env` (per-unit, private).
 
@@ -94,7 +100,7 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
   description and die when the cached RPM of the same version was built from other inputs, `FORCE=1` or not. The
   hash covers repo-relative paths, so a payload rename invalidates it too.
 - Kernel revision pins: `KERNEL_SP11_REV_SHA256` in `sp11.conf` pins each revision's content (`kernel_rev_sha256`
-  over the revision number, the effective `kernel-local` lines and the two pinned commits); step 20 dies when
+  over the revision number, the effective `kernel-local` lines, the base commit and the gitlink); step 20 dies when
   either differs from the pin and prints the value to set after a bump.
 - `IIO_SENSOR_PROXY_SRPM` pins the iio-sensor-proxy source RPM by URL and checksum, like the kernel's, to Koji's
   unsigned copy (Koji drops superseded builds' signed copies; the payloads are equal); a newer build changes the
@@ -139,9 +145,9 @@ one release's set.
 - Under `set -e -o pipefail`, `var=$(ls pattern | head -1)` exits the script silently when the glob does not
   match, like any `var=$(... | ...)` with a failing member (`grep` on no match, `find` on a missing directory);
   append `|| true` inside the substitution.
-- A partial clone (`extensions.partialClone`) fetches every missing object it is asked about, with its whole
-  history: a `merge-base` probe pulled 3 GB of Linux commits, a plain `write-tree` the whole kernel tree. The
-  lookups run with `GIT_NO_LAZY_FETCH=1` and the series check uses `write-tree --missing-ok`.
+- A shallow submodule: `git fetch --depth=N <repo> <commit>` fetches just that history, and `git fetch` takes a
+  full commit id or a ref, never an abbreviated id. A plain `git fetch` or `git submodule update --checkout` in
+  `linux-sp11` pulls the fork's whole history for a commit it lacks (step 10 and `.gitmodules` keep that out).
 - `bash -n A B C` parses only `A`; syntax-check files one at a time.
 - `grep -v -q PATTERN FILE` cannot assert absence; use `! grep -q`.
 - `findmnt -R DIR` lists submounts only when DIR itself is a mount point; `mounts_under` in `lib.sh` matches the

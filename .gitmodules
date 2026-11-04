@@ -1,0 +1,7 @@
+[submodule "linux-sp11"]
+	path = linux-sp11
+	url = https://github.com/FadyAckad/linux-sp11.git
+	branch = sp11/7.2.15
+	shallow = true
+	update = none
+	fetchRecurseSubmodules = false

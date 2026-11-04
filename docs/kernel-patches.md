@@ -1,10 +1,10 @@
 # SP11 patch set
 
-The SP11 patch set is the branch `sp11/<version>` of the project's kernel fork (`KERNEL_PATCH_REPO` in `sp11.conf`):
+The SP11 patch set is the branch `sp11/<version>` of the project's kernel fork (the submodule `linux-sp11`):
 one commit per patch, with its original author, on the stable tag whose tree Fedora's source tarball carries. The
 pipeline:
 
-1. `sp11.conf` pins the base and the head commit (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`).
+1. `sp11.conf` pins the base commit (`KERNEL_PATCH_BASE_COMMIT`); the submodule's gitlink pins the head.
 2. Step 10 writes the pinned commits out as a series; step 20 checks it against the pinned tree and feeds it to
    `kernel.spec`'s `linux-kernel-test.patch` slot (`docs/kernel.md`).
 3. `payload/kernel-local` sets the patch set's three new symbols and enables two drivers Fedora leaves out.

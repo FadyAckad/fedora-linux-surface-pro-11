@@ -12,10 +12,10 @@ Fedora kernel, set `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE`, the source 
 stay cached, the dnf downloads are fetched again, and the ISO layout is read from each ISO. Other values a new
 release can touch, each of which stops the build rather than guessing:
 
-- a new kernel: the patch set has to be rebased onto its stable tag on a new branch of the kernel fork, and
-  `KERNEL_PATCH_BASE_COMMIT` and `KERNEL_PATCH_COMMIT` set to the new commits; how to do that, including a build
-  from a local clone before the branch is pushed, is in [`docs/kernel.md`](../kernel.md). A new symbol has to be set
-  in `payload/kernel-local`, because Fedora's configuration checks refuse an unset one;
+- a new kernel: the patch set has to be rebased onto its stable tag on a new branch of the kernel fork,
+  `KERNEL_PATCH_BASE_COMMIT` set to the tag's commit and the submodule `linux-sp11` moved to the new head; how to
+  do that, including a build before the branch is pushed, is in [`docs/kernel.md`](../kernel.md). A new symbol
+  has to be set in `payload/kernel-local`, because Fedora's configuration checks refuse an unset one;
 - a new Fedora:
   - the iio-sensor-proxy source RPM of that release (`IIO_SENSOR_PROXY_SRPM` with its Koji URL and checksum).
     Koji's copies are unsigned, so check it against Fedora's signed copy first, as the kernel skill's

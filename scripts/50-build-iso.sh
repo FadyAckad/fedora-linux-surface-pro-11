@@ -10,6 +10,7 @@
 # Needs sudo (ownership/xattrs in the extracted root, chroot for dracut).
 . "$(dirname "$0")/lib.sh"
 require_cmd xorriso fsck.erofs mkfs.erofs dump.erofs blkid rpm depmod lsinitrd fdtget sha256sum implantisomd5 checkisomd5
+kernel_patch_pin
 load_hardware
 
 ISO="$CACHE_DIR/$FEDORA_ISO_NAME"; [ -s "$ISO" ] || die "missing $ISO (run scripts/10-fetch-sources.sh)"

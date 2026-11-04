@@ -59,9 +59,10 @@ release.
    supported models and writes `build/hardware.env`. The SKU decides the device tree (the 5G SKU's carries its
    modem) and whether the support RPM carries the modem's files.
 3. `scripts/10-fetch-sources.sh` downloads and verifies the sources: the Fedora ISO, Fedora's kernel and
-   iio-sensor-proxy source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11 patch set from the
-   kernel fork's pinned commit, the pinned checkouts (iptsd, OE, hexagonrpc, libssc) and the Bluetooth helper
-   source, plus the runtime packages the live root and the sensors stack need, with dnf.
+   iio-sensor-proxy source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11 patch set (the kernel
+   fork's pinned commit, fetched into the submodule `linux-sp11` without the fork's history: about 290 MB, once; a
+   plain `git clone` of this repository is enough), the pinned checkouts (iptsd, OE, hexagonrpc, libssc) and the
+   Bluetooth helper source, plus the runtime packages the live root and the sensors stack need, with dnf.
 4. `scripts/20-build-kernel.sh` rebuilds Fedora's kernel source RPM into Fedora's kernel packages, in a mock
    buildroot of the target release, with the patch set, `payload/kernel-local` and the buildid `.sp11.<revision>`.
    `sp11.conf` pins the content of the declared revision (`KERNEL_SP11_REV_SHA256`): a changed patch set or

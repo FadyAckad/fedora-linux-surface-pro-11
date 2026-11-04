@@ -16,9 +16,12 @@ OUT_DIR="$BUILD_DIR/out"
 HARDWARE_ENV="$BUILD_DIR/hardware.env"
 PAYLOAD_DIR="$SP11_ROOT/payload"
 SPEC_DIR="$SP11_ROOT/rpm"
-# The SP11 patch set: a partial clone of the kernel fork's pinned commits, and the series step 10 writes from it.
-KERNEL_PATCH_GIT="$CACHE_DIR/kernel-patches.git"
-KERNEL_PATCH_SERIES="$CACHE_DIR/kernel-patches/$KERNEL_PATCH_COMMIT"
+# The SP11 patch set: the kernel fork, the submodule linux-sp11. The pinned head is the gitlink in the index (what a
+# commit of this repository records), not whatever the submodule has checked out; step 10 fetches it, checks the
+# checkout against it and writes the series. Empty outside a git checkout: kernel_patch_pin refuses then.
+KERNEL_PATCH_GIT="$SP11_ROOT/linux-sp11"
+KERNEL_PATCH_COMMIT=$(git -C "$SP11_ROOT" rev-parse -q --verify ':linux-sp11' 2>/dev/null || true)
+KERNEL_PATCH_SERIES="$CACHE_DIR/kernel-patches/${KERNEL_PATCH_COMMIT:-unpinned}"
 # Anaconda drop-in step 50 writes into a live root that has slitherer, so the installer opens in Firefox; step 60
 # checks it.
 ANACONDA_WEBUI_DROPIN="etc/anaconda/conf.d/90-sp11-webui.conf"
@@ -313,11 +316,17 @@ inputs_sha256() {
   } | sha256sum | cut -d' ' -f1
 }
 
+# kernel_patch_pin — refuse to go on without the pinned fork commit (a tarball of the repository has no index).
+kernel_patch_pin() {
+  [ -n "$KERNEL_PATCH_COMMIT" ] || die "no pinned kernel fork commit: linux-sp11 is not a submodule in this checkout's index"
+}
+
 # kernel_rev_sha256 — the content of the SP11 kernel revision: its number, the fragment's effective lines (as
-# config_fragment_holds reads them) and the patch set's base and head commits (a commit id fixes the tree and the
-# history behind it). Comments do not count. sp11.conf pins it as KERNEL_SP11_REV_SHA256; step 20 compares, so neither
-# the inputs nor the number can change alone.
+# config_fragment_holds reads them) and the patch set's base commit and pinned head (a commit id fixes the tree and
+# the history behind it). Comments do not count. sp11.conf pins it as KERNEL_SP11_REV_SHA256; step 20 compares, so
+# neither the inputs nor the number can change alone.
 kernel_rev_sha256() {
+  kernel_patch_pin
   {
     printf 'KERNEL_SP11_REV=%s\n' "$KERNEL_SP11_REV"
     grep -E '^(CONFIG_[A-Za-z0-9_]+=|# CONFIG_[A-Za-z0-9_]+ is not set$)' "$PAYLOAD_DIR/$KERNEL_CONFIG_FRAGMENT" || true
@@ -326,16 +335,14 @@ kernel_rev_sha256() {
 }
 
 # kernel_series_check — the written series, applied to the base commit's tree the way kernel.spec applies it (all
-# patches as one input to `git apply`), gives exactly the pinned commit's tree. Uses a throwaway index; works offline
-# once step 10 has fetched the contents of the files the patches touch, and never fetches (GIT_NO_LAZY_FETCH): the
-# partial clone holds only those contents, and `write-tree --missing-ok` does not ask for the rest of the kernel tree.
+# patches as one input to `git apply`), gives exactly the pinned commit's tree. Uses a throwaway index and works
+# offline: the submodule holds every object of the commits step 10 fetched.
 kernel_series_check() {
   local idx tree=""
-  local -x GIT_NO_LAZY_FETCH=1
   idx=$(mktemp -u "$WORK_DIR/kernel-series.XXXXXX.idx")
   if GIT_INDEX_FILE=$idx git -C "$KERNEL_PATCH_GIT" read-tree "$KERNEL_PATCH_BASE_COMMIT" \
      && cat "$KERNEL_PATCH_SERIES"/*.patch | GIT_INDEX_FILE=$idx git -C "$KERNEL_PATCH_GIT" apply --cached --whitespace=nowarn; then
-    tree=$(GIT_INDEX_FILE=$idx git -C "$KERNEL_PATCH_GIT" write-tree --missing-ok)
+    tree=$(GIT_INDEX_FILE=$idx git -C "$KERNEL_PATCH_GIT" write-tree)
   fi
   rm -f "$idx"
   [ -n "$tree" ] && [ "$tree" = "$(git -C "$KERNEL_PATCH_GIT" rev-parse "$KERNEL_PATCH_COMMIT^{tree}")" ]

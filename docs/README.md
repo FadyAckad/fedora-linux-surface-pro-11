@@ -25,7 +25,8 @@ Read the note named below before working on its area.
   sleep or power.
 - `docs/kernel.md`: Fedora's kernel rebuilt with the SP11 patch set: `kernel.spec`'s slots, the revision table and
   `KERNEL_SP11_REV`, the configuration, sync state and the CDSP, the rebase procedure, install and removal,
-  SELinux. Read before touching steps 10 and 20, `payload/kernel-local`, the `KERNEL_PATCH_*` pins or SELinux.
+  SELinux. Read before touching steps 10 and 20, `payload/kernel-local`, the kernel pins (the base commit in
+  `sp11.conf`, the `linux-sp11` gitlink) or SELinux.
 - `docs/kernel-patches.md`: the patch manifest: each revision's provenance, every patch with its origin and
   purpose, what was left out of v23.2, the planned patch for the power key's waking press.
 - `docs/fedora-media.md`: the live media, GRUB, Anaconda and the installer's viewer, kernel-install and BLS

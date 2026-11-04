@@ -11,7 +11,7 @@ FR=45 REV=1             # FEDORA_RELEASE; the new KERNEL_SP11_REV (1 for a new k
 FORK=""                 # the path of the maintainer's full clone of the kernel fork; ask for it
 R=build/rebase          # scratch area inside the git-ignored build/
 KOJI=https://kojipkgs.fedoraproject.org/packages/kernel/$NEW/$REL.fc$FR
-PIN=$(git show HEAD:sp11.conf | sed -n 's/^KERNEL_PATCH_COMMIT="\([0-9a-f]\{40\}\)".*/\1/p')   # the committed pin
+PIN=$(git rev-parse HEAD:linux-sp11)   # the committed pin: the submodule's gitlink
 ```
 
 In a worktree, prepare `build/` (section 4) before the downloads of section 1.
@@ -208,6 +208,15 @@ targets of one `make -j` race for `drivers/pci/controller/built-in.a` (`ar: ... 
 
 ## 4. Pins and build directory
 
+The submodule at the rehearsal head, pinned in the index and named in `.gitmodules`. Only the series' commits are
+fetched: a plain fetch there would pull the fork's whole history (5 GB).
+
+```bash
+N=$(git -C "$R/linux" rev-list --count "v$NEW..HEAD"); git -C linux-sp11 fetch -q --no-tags --depth=$((N + 1)) "$PWD/$R/linux" HEAD && git -C linux-sp11 checkout -q --detach FETCH_HEAD && git add linux-sp11 && git config -f .gitmodules submodule.linux-sp11.branch "sp11/$NEW" && git submodule status
+```
+
+Expected: ` <rehearsal head> linux-sp11 (...)`, the head the scratch clone is detached at.
+
 The revision hash for `KERNEL_SP11_REV_SHA256`, after the other `sp11.conf` edits:
 
 ```bash
@@ -233,10 +242,11 @@ Expected: the live root's kernel (the previous revision) and support RPM; no moc
 ## 5. Build and verify
 
 ```bash
-KERNEL_PATCH_REPO="$PWD/$R/linux" scripts/10-fetch-sources.sh > "build/logs/step10-$NEW-rev$REV.log" 2>&1; echo "step 10 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step10-$NEW-rev$REV.log" | grep -E 'SP11 patch set|all sources present|ERROR' 
+scripts/10-fetch-sources.sh > "build/logs/step10-$NEW-rev$REV.log" 2>&1; echo "step 10 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step10-$NEW-rev$REV.log" | grep -E 'SP11 patch set|all sources present|ERROR' 
 ```
 
-Expected: `step 10 rc=0`, `SP11 patch set: <n> commits, v<new>..<head>` and `all sources present`.
+Expected: `step 10 rc=0`, `SP11 patch set: <n> commits, v<new>..<head>` (with ` (shallow)` when the submodule is)
+and `all sources present`.
 
 ```bash
 setsid nohup bash -c './scripts/20-build-kernel.sh; echo "STEP20-DONE rc=$?"' > "build/logs/step20-$NEW-rev$REV.log" 2>&1 < /dev/null & disown
@@ -294,14 +304,18 @@ Expected: only modules that Fedora's configuration change or the stable update i
 The pushed head and its tree:
 
 ```bash
-REPO=$(bash -c '. ./sp11.conf; echo "$KERNEL_PATCH_REPO"'); git ls-remote "$REPO" "refs/heads/sp11/$NEW"
+REPO=$(git config -f .gitmodules submodule.linux-sp11.url); git ls-remote "$REPO" "refs/heads/sp11/$NEW"
 ```
 
-Put that commit in `KERNEL_PATCH_COMMIT`, then `kernel_rev_sha256` (section 4) into `KERNEL_SP11_REV_SHA256`, the
-revision number unchanged, and:
+Fetch that commit into the submodule and pin it (the rehearsal's commits stay in the submodule's repository,
+unreferenced), then `kernel_rev_sha256` (section 4) into `KERNEL_SP11_REV_SHA256`, the revision number unchanged:
 
 ```bash
-scripts/10-fetch-sources.sh 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'SP11 patch set|ERROR'; git -C build/cache/kernel-patches.git rev-parse "$(sed -n 's/^KERNEL_PATCH_COMMIT="\([0-9a-f]\{40\}\)".*/\1/p' sp11.conf)^{tree}"; git -C "$R/linux" rev-parse 'HEAD^{tree}'
+PUSHED=<the pushed head>; N=$(git -C "$R/linux" rev-list --count "v$NEW..HEAD"); git -C linux-sp11 fetch -q --no-tags --depth=$((N + 1)) origin "$PUSHED" && git -C linux-sp11 checkout -q --detach "$PUSHED" && git add linux-sp11 && git rev-parse :linux-sp11
+```
+
+```bash
+scripts/10-fetch-sources.sh 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'SP11 patch set|ERROR'; git -C linux-sp11 rev-parse 'HEAD^{tree}'; git -C "$R/linux" rev-parse 'HEAD^{tree}'
 ```
 
 ```bash

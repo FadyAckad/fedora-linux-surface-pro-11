@@ -15,8 +15,8 @@ says only what concretely works. Update the guide whose procedure or result chan
 - `payload/`: payload of the support RPM (`payload/15-sp11-surface.install` is the kernel-install plugin), the
   kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files, the libssc and
   iio-sensor-proxy patches and the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture
-  probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), pinned in
-  `sp11.conf`.
+  probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), the
+  submodule `linux-sp11`: its gitlink pins the head, `sp11.conf` the base; step 10 fetches only the pinned commit.
 - `docs/`: the working notes, indexed in `docs/README.md`; `docs/guide/`: the user guides. `build/` (git-ignored):
   caches, work trees, RPMs and output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
@@ -43,12 +43,12 @@ says only what concretely works. Update the guide whose procedure or result chan
 Rationale and the enforcement (content pins and input hashes since 2026-09-22) in `docs/pipeline.md`.
 
 - Support payload: `VERSION=` in `scripts/30-build-support-rpm.sh`.
-- `payload/kernel-local` or `KERNEL_PATCH_COMMIT` (new commits on the kernel fork): `KERNEL_SP11_REV` and
+- `payload/kernel-local` or the `linux-sp11` gitlink (new commits on the kernel fork): `KERNEL_SP11_REV` and
   `KERNEL_SP11_REV_SHA256` in `sp11.conf` (step 20 prints the value to set). A new Fedora kernel:
   `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and its lines in the `KERNEL_SRPM_SHA256` and
   `KERNEL_STOCK_CORE_SHA256` case tables, plus the patch set rebased on a new fork branch
-  (`KERNEL_PATCH_BASE_COMMIT`, `KERNEL_PATCH_COMMIT`) under revision 1: the revision restarts with every Fedora
-  kernel version (`docs/kernel.md`). A pushed fork branch is never rewritten.
+  (`KERNEL_PATCH_BASE_COMMIT`, the gitlink, the branch line of `.gitmodules`) under revision 1: the revision
+  restarts with every Fedora kernel version (`docs/kernel.md`). A pushed fork branch is never rewritten.
 - In `sp11.conf`: `IPTSD_RPM_RELEASE` (the iptsd spec or `payload/iptsd/`), `HEXAGONRPC_RPM_RELEASE` (the number,
   for the spec, its payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec or its patches in
   `payload/sensors/libssc/`),

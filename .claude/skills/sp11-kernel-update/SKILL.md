@@ -47,7 +47,8 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
 ## 2. Rebase rehearsal
 
 1. Scratch clone of the maintainer's fork clone under the checkout's git-ignored `build/rebase/` (not `/tmp`, a
-   6 GB tmpfs), with the fork commits' identity, signing off, detached at `KERNEL_PATCH_COMMIT`.
+   6 GB tmpfs), with the fork commits' identity, signing off, detached at the pinned commit (the `linux-sp11`
+   gitlink; `KERNEL_PATCH_COMMIT` once `lib.sh` is sourced).
 2. Survey first: the files the series touches, every stable commit of `v<old>..v<new>` that touches them and the
    release that brought it, and which SP11 patch each one meets.
 3. `git rebase --empty=drop --onto v<new> v<old>`; commits whose content is upstream drop out by themselves.
@@ -75,16 +76,18 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 ## 4. Pins and build directory
 
 1. `sp11.conf`: `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE`, a line in the `KERNEL_SRPM_SHA256` case table
-   (and its `known:` list) and one in `KERNEL_STOCK_CORE_SHA256`'s, `KERNEL_PATCH_BASE_COMMIT` (the tag's commit),
-   `KERNEL_PATCH_COMMIT` (the rehearsal head for now, `# sp11/<new>, <n> commits`), `KERNEL_SP11_REV` 1 (it
-   restarts with every Fedora kernel version), and `KERNEL_SP11_REV_SHA256` as `kernel_rev_sha256` prints it.
+   (and its `known:` list) and one in `KERNEL_STOCK_CORE_SHA256`'s, `KERNEL_PATCH_BASE_COMMIT` (the tag's commit)
+   and `KERNEL_SP11_REV` 1 (it restarts with every Fedora kernel version). The submodule `linux-sp11` at the
+   rehearsal head for now: fetched from the scratch clone with `--depth=<commits + 1>`, checked out, staged with
+   `git add linux-sp11`, and `branch = sp11/<new>` in `.gitmodules`. Then `KERNEL_SP11_REV_SHA256` as
+   `kernel_rev_sha256` prints it.
 2. In a worktree `build/` starts empty: hard-link the main checkout's caches, copy its git pins, link the support
    RPM and hard-link its live root (`sudo cp -al`) for step 36. The kernel's mock root is shared by all checkouts:
    no other kernel build may run.
 
 ## 5. Build and verify
 
-1. Step 10 from the rehearsal clone: `KERNEL_PATCH_REPO=<clone> scripts/10-fetch-sources.sh`.
+1. Step 10, which reads the submodule at the rehearsal head: `scripts/10-fetch-sources.sh`.
 2. Step 20 detached (`setsid nohup`, 60 to 80 minutes); wait for its completion marker or the end of its process,
    not for error-looking lines in mock's `build.log`. Its checks on the packages must pass.
 3. Step 36, with `SUPPORT_PREVIOUS_RPM` set to the current support RPM: the packages install next to the previous
@@ -120,8 +123,9 @@ five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the fork steps,
 
 1. The maintainer pushes `sp11/<new>` and sends its head; its tree must be the tested one, every commit signed, and
    authors, dates and messages those of the tested series.
-2. Pin that head in `KERNEL_PATCH_COMMIT`, set `KERNEL_SP11_REV_SHA256` to the value `kernel_rev_sha256` prints and
-   keep the revision number; step 10 (now from GitHub) and step 20 (accepts the cached packages, reruns its checks).
+2. Fetch that head into `linux-sp11` from GitHub (`--depth=<commits + 1>`), check it out, `git add linux-sp11`, set
+   `KERNEL_SP11_REV_SHA256` to the value `kernel_rev_sha256` prints and keep the revision number; step 10 and
+   step 20 (accepts the cached packages, reruns its checks).
 3. `README.md`, `docs/guide/design.md`, `docs/guide/build.md` and `docs/verified.md` from the device results.
 4. Ask whether the ISO should get the new kernel.
 5. One commit message for the maintainer: an imperative subject of at most about 65 characters, one to three
@@ -130,9 +134,9 @@ five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the fork steps,
 ## Pitfalls
 
 - `git commit` in the middle of a conflicted rebase makes the current user the author of the rebased commit.
-- A partial clone fetches a missing object with its whole history on first use: lookups there run with
-  `GIT_NO_LAZY_FETCH=1` (`docs/pipeline.md`, Shell pitfalls).
-- A local clone as `KERNEL_PATCH_REPO` ignores the blob filter: the cache takes about 280 MB instead of 5 MB.
+- The submodule `linux-sp11` is shallow and `.gitmodules` keeps the generic submodule commands off it: fetch a
+  head into it with `--depth=<commits + 1>` (a full commit id or a ref; `git fetch` rejects an abbreviated id). A
+  plain `git fetch` or `git submodule update --checkout` there pulls the fork's whole history (5 GB).
 - `pkill -f PATTERN` also kills the shell whose command line contains PATTERN: stop processes by PID.
 - `git hash-object --stdin-paths` inside `build/` resolves paths against this repository: compare the tarball with
   `git archive` and `diff -r` instead.
