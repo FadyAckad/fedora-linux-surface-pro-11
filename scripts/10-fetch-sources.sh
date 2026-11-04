@@ -91,9 +91,12 @@ for pkg in $LIVE_EXTRA_PKGS; do
     ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --arch=aarch64 "$pkg" ) || die "dnf download $pkg failed"
   fi
 done
-## Sensors stack (scripts/45): pinned upstream checkouts, Fedora's iio-sensor-proxy source RPM (pinned in sp11.conf,
-## rebuilt with its SSC drivers), and the runtime dependencies the live root may lack (steps 50 and 46 add them).
-git_pin "$HEXAGONRPC_REPO" "$HEXAGONRPC_COMMIT" "$CACHE_DIR/hexagonrpc"
+## Sensors stack (scripts/45): hexagonrpc from the project's fork, the submodule hexagonrpc pinned by its gitlink
+## (HEXAGONRPC_COMMIT); only that commit is fetched, under the rules of linux-sp11 above (this step owns it, the
+## generic submodule commands skip it). Then libssc's pinned upstream checkout, Fedora's iio-sensor-proxy source RPM
+## (pinned in sp11.conf, rebuilt with its SSC drivers), and the runtime dependencies the live root may lack (steps 50
+## and 46 add them).
+submodule_pin hexagonrpc "$HEXAGONRPC_COMMIT"
 git_pin "$LIBSSC_REPO" "$LIBSSC_COMMIT" "$CACHE_DIR/libssc"
 fetch "$IIO_SENSOR_PROXY_SRPM_URL" "$CACHE_DIR/$IIO_SENSOR_PROXY_SRPM"
 verify_sha256 "$CACHE_DIR/$IIO_SENSOR_PROXY_SRPM" "$IIO_SENSOR_PROXY_SRPM_SHA256"

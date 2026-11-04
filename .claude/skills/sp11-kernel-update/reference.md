@@ -226,7 +226,7 @@ bash -c '. scripts/lib.sh; kernel_rev_sha256'
 A worktree's `build/`, from the main checkout's (hard links, so nothing is downloaded or copied twice):
 
 ```bash
-MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/build; mkdir -p build/cache build/rpms build/work/iso build/logs; find "$MAIN/cache" -maxdepth 1 -type f -exec ln -f {} build/cache/ \; ; cp -al "$MAIN/cache/sp11-audio-v19c" "$MAIN/cache/wifi" "$MAIN/cache/rpm-deps" build/cache/; cp -a "$MAIN/cache/iptsd" "$MAIN/cache/oe" "$MAIN/cache/hexagonrpc" "$MAIN/cache/libssc" build/cache/; ln -f "$MAIN"/rpms/sp11-surface-support-*.rpm build/rpms/
+MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/build; mkdir -p build/cache build/rpms build/work/iso build/logs; find "$MAIN/cache" -maxdepth 1 -type f -exec ln -f {} build/cache/ \; ; cp -al "$MAIN/cache/sp11-audio-v19c" "$MAIN/cache/wifi" "$MAIN/cache/rpm-deps" build/cache/; cp -a "$MAIN/cache/iptsd" "$MAIN/cache/oe" "$MAIN/cache/libssc" build/cache/; ln -f "$MAIN"/rpms/sp11-surface-support-*.rpm build/rpms/
 ```
 
 ```bash

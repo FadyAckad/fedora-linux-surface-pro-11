@@ -7,7 +7,8 @@ grep -q '^ID=fedora' /etc/os-release || die "this build expects a Fedora host (f
 as_root true || die "sudo is required"
 
 # The kernel's mock buildroot (/var/lib/mock, the same WSL disk) takes about 40 GiB on top of the ISO work tree.
-free_gib=$(df -Pk "$BUILD_DIR" | awk 'NR==2{print int($4/1024/1024)}')
+# No awk before the install below: the stock Fedora WSL image has no gawk.
+free_gib=$(( $(df -k --output=avail "$BUILD_DIR" | tail -n 1) / 1048576 ))
 [ "$free_gib" -ge 80 ] || die "need at least 80 GiB free under $BUILD_DIR (have ${free_gib} GiB)"
 
 PKGS=(

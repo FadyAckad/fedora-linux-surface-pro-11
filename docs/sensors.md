@@ -95,10 +95,11 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
 
 ### hexagonrpc
 
-- `hexagonrpc` 0.5.0 from the project's fork `HEXAGONRPC_REPO` (github.com/FadyAckad/hexagonrpc), branch
-  `sp11-sensors` = upstream 598b591 plus five commits, pinned by `HEXAGONRPC_COMMIT`, which must sit on the pushed
-  branch (nothing keeps a commit no branch contains). Release `<n>.git<hash>.sp11` (`HEXAGONRPC_RPM_RELEASE`): the
-  number must rise with every change, rpm compares `git<hash>` as a string.
+- `hexagonrpc` 0.5.0 from the project's fork (github.com/FadyAckad/hexagonrpc), the submodule `hexagonrpc`: branch
+  `sp11-sensors` = upstream 598b591 plus five commits, pinned by the submodule's gitlink (`HEXAGONRPC_COMMIT`, read
+  from the index by `sp11.conf`; step 10 fetches only that commit), which must sit on the pushed branch (nothing
+  keeps a commit no branch contains). Release `<n>.git<hash>.sp11` (`HEXAGONRPC_RPM_RELEASE`): the number must
+  rise with every change, rpm compares `git<hash>` as a string.
 - The fork adds write support for mapped directories (`apps_std` `fopen` in write modes, `fwrite`, `fsync`,
   `fremove`, `ftrunc`, `frename`), answers unsupported requests with `AEE_EUNSUPPORTED` instead of quitting,
   fetches input buffers over 256 bytes with `adsp_listener_get_in_bufs2`, and maps the persist tree (Stack).
@@ -302,3 +303,5 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   evening: the daemon ran through 15 quick wakes. The old proxy's 45 s stop traced to a pending open.
 - 2026-10-23: GeoClue's compass source refused by SELinux and, behind it, by polkit; 1.13 allows both.
 - 2026-10-24: the proxy's five denials at every start traced to gvfs's GIO module; 1.15 loads no GIO module.
+- 2026-11-04: the hexagonrpc fork became the submodule `hexagonrpc`; its gitlink is the pin, step 10 fetches only
+  that commit and step 45 archives it (the release string is unchanged).

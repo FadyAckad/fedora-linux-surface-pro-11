@@ -2,7 +2,7 @@
 # Step 4d: build the sensors stack, which step 50 installs into the live root for the installed system (inert on the
 # live media, which runs without the ADSP). The accelerometer, gyroscope, magnetometer and light sensor of the
 # Surface Pro 11 sit behind the ADSP's Snapdragon Sensor Core, so nothing here touches the kernel. Four RPMs:
-#   hexagonrpc        hexagonrpcd from the project's fork (HEXAGONRPC_REPO): serves the DSP's sensor framework its
+#   hexagonrpc        hexagonrpcd from the project's fork (the submodule hexagonrpc): serves the DSP's sensor framework its
 #                     configuration and registry over FastRPC
 #   libssc (+devel)   upstream QMI client library and ssccli, with the project's patches (payload/sensors/libssc/)
 #   iio-sensor-proxy  Fedora's own source RPM of the target release, rebuilt with -Dssc-support=enabled and the
@@ -68,12 +68,13 @@ if [ "${FORCE:-0}" != 1 ] && chain_current && sensors_current; then
   log "sensors RPMs already built for Fedora $FEDORA_RELEASE (FORCE=1 to rebuild)"; exit 0
 fi
 
-## 1. Sources: pinned checkouts (git archive; hexagonrpc from the project's fork) plus this repo's packaging
-##    additions, and Fedora's iio-sensor-proxy sources out of its source RPM.
+## 1. Sources: the pinned commits (git archive; hexagonrpc from the submodule, the project's fork) plus this repo's
+##    packaging additions, and Fedora's iio-sensor-proxy sources out of its source RPM.
 rm -rf "$SRC"; mkdir -p "$SRC"
-[ "$(git -C "$CACHE_DIR/hexagonrpc" rev-parse HEAD 2>/dev/null)" = "$HEXAGONRPC_COMMIT" ] || die "hexagonrpc checkout is not at $HEXAGONRPC_COMMIT (run scripts/10-fetch-sources.sh)"
+[ -n "$HEXAGONRPC_COMMIT" ] || die "no pinned hexagonrpc commit: hexagonrpc is not a submodule in this checkout's index"
+[ "$(git -C "$HEXAGONRPC_GIT" rev-parse HEAD 2>/dev/null)" = "$HEXAGONRPC_COMMIT" ] || die "the submodule hexagonrpc is not at $HEXAGONRPC_COMMIT (run scripts/10-fetch-sources.sh)"
 [ "$(git -C "$CACHE_DIR/libssc" rev-parse HEAD 2>/dev/null)" = "$LIBSSC_COMMIT" ] || die "libssc checkout is not at $LIBSSC_COMMIT (run scripts/10-fetch-sources.sh)"
-git -C "$CACHE_DIR/hexagonrpc" archive --format=tar.gz --prefix="hexagonrpc-$HEXAGONRPC_COMMIT/" -o "$SRC/hexagonrpc-$HEXAGONRPC_COMMIT.tar.gz" HEAD
+git -C "$HEXAGONRPC_GIT" archive --format=tar.gz --prefix="hexagonrpc-$HEXAGONRPC_COMMIT/" -o "$SRC/hexagonrpc-$HEXAGONRPC_COMMIT.tar.gz" HEAD
 git -C "$CACHE_DIR/libssc" archive --format=tar.gz --prefix="libssc-$LIBSSC_COMMIT/" -o "$SRC/libssc-$LIBSSC_COMMIT.tar.gz" HEAD
 install -m 0644 "$PAYLOAD_DIR/sensors/hexagonrpc.sysusers.conf" "$PAYLOAD_DIR/sensors/60-hexagonrpc-fastrpc.rules" "$SRC/"
 install -m 0644 "$PAYLOAD_DIR"/sensors/libssc/*.patch "$SRC/"   # applied by rpm/libssc.spec.in (%autosetup -p1)

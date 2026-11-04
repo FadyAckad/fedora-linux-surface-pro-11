@@ -17,6 +17,8 @@ says only what concretely works. Update the guide whose procedure or result chan
   iio-sensor-proxy patches and the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture
   probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), the
   submodule `linux-sp11`: its gitlink pins the head, `sp11.conf` the base; step 10 fetches only the pinned commit.
+  The hexagonrpc fork is the submodule `hexagonrpc` under the same scheme (its gitlink is the pin step 45 builds
+  from).
 - `docs/`: the working notes, indexed in `docs/README.md`; `docs/guide/`: the user guides. `build/` (git-ignored):
   caches, work trees, RPMs and output; see `docs/pipeline.md`.
 - `.claude/skills/sp11-kernel-update/`: the update to a new Fedora kernel as a Claude Code skill (`SKILL.md`, every
@@ -50,7 +52,7 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   (`KERNEL_PATCH_BASE_COMMIT`, the gitlink, the branch line of `.gitmodules`) under revision 1: the revision
   restarts with every Fedora kernel version (`docs/kernel.md`). A pushed fork branch is never rewritten.
 - In `sp11.conf`: `IPTSD_RPM_RELEASE` (the iptsd spec or `payload/iptsd/`), `HEXAGONRPC_RPM_RELEASE` (the number,
-  for the spec, its payload or the pinned commit), `LIBSSC_RPM_RELEASE` (the libssc spec or its patches in
+  for the spec, its payload or the `hexagonrpc` gitlink), `LIBSSC_RPM_RELEASE` (the libssc spec or its patches in
   `payload/sensors/libssc/`),
   `IIO_SENSOR_PROXY_RPM_SUFFIX` (its template or its patches in `payload/sensors/iio-sensor-proxy/`; for a new SRPM
   its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum, and `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`),

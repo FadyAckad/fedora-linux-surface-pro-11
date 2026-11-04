@@ -5,3 +5,10 @@
 	shallow = true
 	update = none
 	fetchRecurseSubmodules = false
+[submodule "hexagonrpc"]
+	path = hexagonrpc
+	url = https://github.com/FadyAckad/hexagonrpc.git
+	branch = sp11-sensors
+	shallow = true
+	update = none
+	fetchRecurseSubmodules = false

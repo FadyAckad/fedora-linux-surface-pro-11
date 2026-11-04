@@ -20,12 +20,14 @@ What each file is, for a user: `docs/guide/layout.md`. What matters to the pipel
   (`sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the libssc and iio-sensor-proxy patches, the
   unpackaged posture probe); `camera/` (the unpackaged raw-capture probe); `README-iso.txt.in`, the note inside
   the ISO.
-- `linux-sp11/`: the kernel fork as a submodule, checked out at the pinned commit. The gitlink in the index is the
-  pinned head (`KERNEL_PATCH_COMMIT`, read by `lib.sh`), `sp11.conf` pins the base. Step 10 owns it: a fresh
-  checkout gets only the pinned commit back to the base (a shallow fetch by commit id, deepened by 64 until the
-  base is an ancestor; 291 MB and 91 s on 2026-11-04), and the checkout must be the pin and clean. `.gitmodules`
-  sets `update = none` and `fetchRecurseSubmodules = false`: `git submodule update` skips it and no `git fetch` of
-  this repository descends into it, since either would pull the fork's whole history (5 GB) for a missing commit.
+- `linux-sp11/` and `hexagonrpc/`: the kernel fork and the hexagonrpc fork as submodules, checked out at the
+  pinned commits. The gitlink in the index is the pin: `KERNEL_PATCH_COMMIT`, read by `lib.sh`, with the base
+  pinned in `sp11.conf`; `HEXAGONRPC_COMMIT`, read by `sp11.conf` into the release string. Step 10 owns them: a
+  fresh checkout gets only the pinned commit (`linux-sp11` back to the base: a shallow fetch by commit id,
+  deepened by 64 until the base is an ancestor, 291 MB and 91 s on 2026-11-04; `hexagonrpc` one commit), and a
+  checkout must be the pin and clean. `.gitmodules` sets `update = none` and `fetchRecurseSubmodules = false` on
+  both: `git submodule update` skips them and no `git fetch` of this repository descends into them, which for
+  the kernel fork would pull its whole history (5 GB) for a missing commit.
 - `build/`, git-ignored: `cache/` (downloads, source RPMs, checkouts, `rpm-deps/`, the patch series
   `kernel-patches/<commit>/` step 10 writes from the submodule), `kernel/` (step 20's tree and logs; the build runs
   in `/var/lib/mock/<MOCK_CONFIG>-sp11-kernel`), `work/iso/` (the live root, root-owned), `rpms/`, `out/` (the
@@ -136,7 +138,8 @@ one release's set.
   `sp11-iptsd` on the host; the kernel and the sensors chain always build in mock.
 - No Docker: the kernel and the cross-release packages build in mock buildroots of the target release; the
   kernel's root needs about 40 GiB on the same disk, hence the 80 GiB check in step 0.
-- `00-setup-host.sh` installs every tool, even those the stock WSL image lacks.
+- `00-setup-host.sh` installs every tool, even those the stock WSL image lacks; its checks before the install
+  use none of them (the stock Fedora 45 WSL image has no gawk, 2026-11-04).
 - A long build must outlive the Claude Code session that starts it: run it under `setsid nohup`, watch its log.
 
 ## Shell pitfalls

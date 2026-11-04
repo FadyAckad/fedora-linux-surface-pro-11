@@ -22,6 +22,8 @@ SPEC_DIR="$SP11_ROOT/rpm"
 KERNEL_PATCH_GIT="$SP11_ROOT/linux-sp11"
 KERNEL_PATCH_COMMIT=$(git -C "$SP11_ROOT" rev-parse -q --verify ':linux-sp11' 2>/dev/null || true)
 KERNEL_PATCH_SERIES="$CACHE_DIR/kernel-patches/${KERNEL_PATCH_COMMIT:-unpinned}"
+# The hexagonrpc fork, the submodule hexagonrpc, pinned the same way (HEXAGONRPC_COMMIT, read by sp11.conf).
+HEXAGONRPC_GIT="$SP11_ROOT/hexagonrpc"
 # Anaconda drop-in step 50 writes into a live root that has slitherer, so the installer opens in Firefox; step 60
 # checks it.
 ANACONDA_WEBUI_DROPIN="etc/anaconda/conf.d/90-sp11-webui.conf"
@@ -94,6 +96,35 @@ git_pin() {
   git -C "$dir" fetch -q --depth 1 origin "$commit"
   git -C "$dir" checkout -q FETCH_HEAD
   [ "$(git -C "$dir" rev-parse HEAD)" = "$commit" ] || die "checkout of $repo@$commit failed"
+}
+
+# submodule_pin NAME COMMIT — the submodule NAME (under the repository root) checked out at COMMIT, its gitlink in
+# the index: an empty directory is registered and gets only that commit (a shallow fetch by commit id); a checkout
+# at another commit or with uncommitted changes dies, since the pin is the index's, not the checkout's. .gitmodules
+# sets update = none on these submodules, so the generic commands leave them to the step that calls this.
+# linux-sp11 needs its history back to the base and has its own loop in step 10.
+submodule_pin() {
+  local name=$1 commit=$2 dir="$SP11_ROOT/$1" url head
+  [ -n "$commit" ] || die "no pinned commit for $name: it is not a submodule in this checkout's index"
+  if [ ! -e "$dir/.git" ]; then
+    log "initializing the submodule $name (shallow)"
+    git -C "$SP11_ROOT" submodule init -q -- "$name" || die "cannot register the submodule $name"
+    url=$(git -C "$SP11_ROOT" config --get "submodule.$name.url") || die "no URL registered for the submodule $name"
+    mkdir -p "$dir" && git init -q "$dir" && git -C "$dir" remote add origin "$url" || die "cannot initialize $dir"
+  fi
+  git -C "$dir" cat-file -e "$commit^{commit}" 2>/dev/null \
+    || git -C "$dir" fetch -q --no-tags --depth=1 origin "$commit" \
+    || die "cannot fetch $commit from $(git -C "$dir" remote get-url origin)"
+  head=$(git -C "$dir" rev-parse -q --verify HEAD 2>/dev/null || true)
+  if [ -z "$head" ]; then
+    git -C "$dir" checkout -q --detach "$commit" || die "cannot check out $commit in $dir"
+    # its .git into the superproject's, as `git submodule add` lays it out
+    git -C "$SP11_ROOT" submodule absorbgitdirs -- "$name" >/dev/null 2>&1 || warn "$name/.git stays a directory (git submodule absorbgitdirs failed)"
+  elif [ "$head" != "$commit" ]; then
+    die "$name is checked out at ${head:0:12}, the index pins ${commit:0:12}: 'git -C $name checkout --detach ${commit:0:12}' follows the pin, 'git add $name' pins the checkout"
+  fi
+  git -C "$dir" diff --quiet HEAD -- || die "$name has uncommitted changes; the sources are read from the pinned commit only"
+  log "$name @ ${commit:0:12}$([ -f "$(git -C "$dir" rev-parse --git-path shallow)" ] && echo ' (shallow)')"
 }
 
 # The device tree for a SKU: the 5G SKU's carries its modem, the others keep the OLED tree (sp11.conf).

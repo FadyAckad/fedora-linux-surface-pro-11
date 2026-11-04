@@ -6,3 +6,4 @@ hardware.env
 sp11-bt-pairings.tar.gz
 *.iso
 *.rpm
+.claude/worktrees/
