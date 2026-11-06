@@ -326,3 +326,15 @@ One entry per round; the facts each established live in the topic notes.
   twice in that boot (`recoveries=2`); `cam` is not on a fresh Workstation installation (`libcamera-tools`).
 - The ISO's second build (sha256 `dd3a8950…`), whose live entries boot without `quiet rhgb`, showed the boot
   messages on the console and gave the live session's expected output (owner, later the same day).
+
+## Kernel 7.2.15 revision 2: the boot hang in dracut-initqueue (2026-11-06)
+
+- Installed: the kernel RPMs `7.2.15-300.sp11.2.fc45` (revision 1's 95 patches plus 0096, the QRTR-over-glink
+  driver's send lock released before a failed open's unregistration), `dnf install` next to revision 1; the 5G
+  device tree in the boot entry, `saved_entry` on the new kernel.
+- Confirmed: fourteen boots in a row ended the initqueue at 1.8 to 7.1 s with the root switched by 7.3 s, where
+  three of the twenty boots before had sat 212 s (the CDSP's IPCRTR open still fails with `-121` at 6.6 s, now
+  without consequence); after them a battery reading, Wi-Fi connected and the five sensors' readings; the standard
+  checks (the speakers' feedback lines, the microphone, the QSPI touch path, both DSPs answering, the crypto
+  engine's hashes, the three cameras listed); one deep sleep and resume; `no provider waits for sync_state`; the
+  journal's errors only the ADSP handover lines. No line came back for the by-hand checks or the shutdown.

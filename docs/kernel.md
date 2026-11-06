@@ -46,6 +46,7 @@ removal, SELinux.
 | 7.2.14 revision 1 | 2026-11-02 | `kernel-7.2.14-300.fc45` | Rebased onto `v7.2.14` |
 | 7.2.14 revision 2 | 2026-11-02 | `kernel-7.2.14-300.fc45` | The wake: no power-on in the touch resume callback, PCIe controllers resumed in parallel |
 | 7.2.15 revision 1 | 2026-11-03 | `kernel-7.2.15-300.fc45` | Rebased onto `v7.2.15`; the USB-C retimer told of the connection before its mode |
+| 7.2.15 revision 2 | 2026-11-06 | `kernel-7.2.15-300.fc45` | The QRTR-over-glink probe no longer deadlocks when its channel open fails |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to

@@ -196,6 +196,28 @@ after their trailers that names the source and the change.
   a wake and in a second boot (`docs/verified.md`). Pushed the same day (head `395b0aab`, tree `a90da6df`, the
   tree the kernel was built from).
 
+### 7.2.15 revision 2: the QRTR probe deadlock
+
+- 0096 (this repository): `qcom_smd_qrtr_probe()` (0006's version of `net/qrtr/smd.c`) holds its send lock only
+  across the endpoint registration and the channel open, no longer through the unregistration a failed open
+  does. Held there, it deadlocked with a QRTR broadcast of the same moment: the name server, holding
+  `qrtr_node_lock` and the node's `ep_lock`, blocked in the send on the lock; the probe then blocked in
+  `qrtr_endpoint_unregister()` on `ep_lock`; every QRTR user queued behind `qrtr_node_lock`, and the glink edge's
+  work behind the probed device's lock.
+- The window is the 5 s the CDSP's IPCRTR open takes to time out in the initramfs (the CDSP announces the channel
+  and never acknowledges the open; `failed to create endpoint`, `rpmsg_dev_probe: failed: -121`, the reason the
+  initqueue ends at 7.1 s rather than 2.8 s in most boots). Three boots of 2026-11-05/06 had an ADSP service
+  announced inside it: `dracut-initqueue` gave udev's queue up after 120 s, udevd survived its SIGKILL, the root
+  was switched at 212 s, and the system ran without battery, Wi-Fi and sensors and could not shut down; the
+  stacks of the stuck tasks (`/proc/<pid>/stack`, `sysrq w`) named the locks. With the lock released, a blocked
+  sender finds no channel, drops its packet and the probe fails with `-121` as in the boots without a broadcast.
+- Left as they are: the CDSP's unanswered open (5 s per boot that announces the channel early, no CDSP QRTR) and
+  the name server's blocking send under `qrtr_node_lock`.
+- Passed its device round on 2026-11-06: fourteen boots in a row ended the initqueue at 1.8 to 7.1 s (the CDSP's
+  open still fails with `-121` in the 6.6 s boots, now without consequence), then the standard checks and a deep
+  sleep (`docs/verified.md`). Pushed the same day (head `7a8c230b`, tree `085f9693`, the tree the kernel was
+  built from).
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -204,7 +226,7 @@ The patches by number, with their origin and what each is needed for.
 |---|---|---|---|
 | 0001 | EFI stub: signal the before-ExitBootServices event group | Johan Hovold (T14s workaround, applies to every arm64 machine) | boot (kept until a boot without it is tested) |
 | 0002, 0003 | UCSI connector worker and pmic_glink altmode worker on freezable workqueues | Abel Vesa | USB-C across suspend |
-| 0004–0006 | rpmsg announce order, an rpmsg helper to open an endpoint during probe (needed by 0006), QRTR SMD open/close races | Stephan Gerhold | ADSP services (audio, battery, sensors) |
+| 0004–0006 | rpmsg announce order, an rpmsg helper to open an endpoint during probe (needed by 0006), QRTR SMD open/close races | Stephan Gerhold | ADSP services (audio, battery, sensors). 0006's probe holds its send lock from the endpoint registration through a failed channel open into the unregistration; a QRTR broadcast in that window deadlocks with it (the CDSP's IPCRTR open times out after 5 s in the initramfs): three boots of 2026-11-05/06 waited 212 s in dracut-initqueue, udevd unkillable, and ran without battery, Wi-Fi and sensors, every QRTR user blocked, until a long power press; fixed by 0096 |
 | 0007 | x1e80100 machine driver match data (Dell XPS 13 channel map) | Abel Vesa | prerequisite of 0054 |
 | 0008 | qcom_battmgr request input checks | Jens Glathe | battery |
 | 0009 | WCN7850 Bluetooth: drop the unused baud-rate event | Cheng Jiang | Bluetooth |
@@ -255,6 +277,7 @@ The patches by number, with their origin and what each is needed for.
 | 0093 | MSHW0485 touch: no power-on in the resume callback; the recovery work powers the controller, once | this repository | 0.8 s less in a wake's resume phase (`docs/sleep.md`, Wake) |
 | 0094 | PCIe (qcom): the controllers suspend and resume asynchronously | this repository | the three links resumed side by side, about 0.65 s less in a wake |
 | 0095 | PS8830 retimer: the connection announced 30 ms before its mode | this repository | USB 3 with the plug reversed (`docs/hardware.md`, USB-C data) |
+| 0096 | QRTR SMD: the probe's send lock released before a failed open's unregistration | this repository | boots that sat 212 s in dracut-initqueue and ran without battery, Wi-Fi and sensors (0006's deadlock) |
 
 ## Left out of v23.2
 

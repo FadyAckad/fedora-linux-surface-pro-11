@@ -69,6 +69,10 @@ Systems running an older build of the RPMs can show these; the release named fix
   Settings, Display & Monitor) avoids it.
 - `hexagonrpcd-adsp-sensorspd.service` listed as failed (`start-limit-hit`) after many sleeps in one boot, the
   sensors still working: fixed in `sp11-sensors` 1.12 (2026-10-08).
+- A boot that sat minutes in `dracut-initqueue` and came up without battery reading, Wi-Fi and sensors, and
+  then would not shut down (three of twenty boots): fixed in kernel 7.2.15 revision 2 (2026-11-06), a lock-order
+  deadlock in the QRTR driver's start-up ([`docs/kernel-patches.md`](../kernel-patches.md), 7.2.15 revision 2).
+  Until then only a long press of the power button ended such a boot.
 - GeoClue without a heading from the compass: `sp11-sensors` 1.13 (2026-10-23). Five SELinux denials logged by
   iio-sensor-proxy at every start, the sensors working regardless: `sp11-sensors` 1.15 (2026-10-24).
 - Upgrading `iio-sensor-proxy` from 3.9-3.sp11.1 can pause `dnf` for about 45 s and leave an `iio-sensor-proxy`
