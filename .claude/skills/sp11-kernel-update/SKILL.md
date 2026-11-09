@@ -18,8 +18,9 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
 ## Rules
 
 - Never commit, push or create a branch, in this repository or in the kernel fork. Rehearse the rebase in a scratch
-  clone on a detached HEAD; the maintainer creates `sp11/<new>` from the series (`git am`, signed), pushes it and
-  commits this repository. Commits prepared for the maintainer carry no `Co-Authored-By` trailer.
+  clone on a detached HEAD; the maintainer signs the series (in place in the submodule, or `git am` of the tarball),
+  pushes `sp11/<new>` and commits this repository. Commits prepared for the maintainer carry no `Co-Authored-By`
+  trailer. No full clone of the fork is made: the submodule and kernel.org's tags serve every step.
 - Rebase straight from the pinned base to the new stable tag. A stable tag contains every earlier one of its series
   and Fedora's source RPM of a version is complete on its own, so an intermediate version brings the same conflicts
   plus a kernel nobody runs; build one only to bisect a regression the device test finds.
@@ -32,8 +33,8 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
 
 1. Bodhi lists Fedora's kernel updates for `FEDORA_RELEASE`: take the version and release of the newest `stable`
    one, unless the maintainer named a version.
-2. The stable tags of the pinned and the new version: the fork clone's must equal kernel.org's. A new tag the clone
-   lacks goes into the scratch clone (section 2) from kernel.org, and the fork steps fetch it first.
+2. The stable tags of the pinned and the new version at kernel.org: the old one's id is `KERNEL_PATCH_BASE_COMMIT`,
+   the new one's becomes it. Both come into the scratch clone (section 2) from kernel.org.
 3. Download Fedora's source RPM and stock `kernel-core` from Koji into `build/cache/` (in a worktree, set up
    `build/` first, section 4), check them against Fedora's signed copies, and record the sha256 of the files the
    pipeline downloads.
@@ -46,9 +47,11 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
 
 ## 2. Rebase rehearsal
 
-1. Scratch clone of the maintainer's fork clone under the checkout's git-ignored `build/rebase/` (not `/tmp`, a
-   6 GB tmpfs), with the fork commits' identity, signing off, detached at the pinned commit (the `linux-sp11`
-   gitlink; `KERNEL_PATCH_COMMIT` once `lib.sh` is sourced).
+1. Scratch clone of the submodule `linux-sp11` (shared) under the checkout's git-ignored `build/rebase/` (not
+   `/tmp`, a 6 GB tmpfs), with the identity of the maintainer's own patches, signing off, detached at the pinned
+   commit (the `linux-sp11` gitlink; `KERNEL_PATCH_COMMIT` once `lib.sh` is sourced); the new tag fetched from
+   kernel.org with `--shallow-exclude=v<old>`. That fetch cuts every history chain behind a merge of excluded
+   history, so the surveys run in a second repository fetched by date (`--shallow-since`) into an empty one.
 2. Survey first: the files the series touches, every stable commit of `v<old>..v<new>` that touches them and the
    release that brought it, and which SP11 patch each one meets.
 3. `git rebase --empty=drop --onto v<new> v<old>`; commits whose content is upstream drop out by themselves.
@@ -61,8 +64,13 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
 6. A clean textual merge is not a correct one. Read every stable commit that touches an SP11 file next to the SP11
    code it meets: a removed label or function still referenced (7.2.6's `spi_geni_init()` lost `out_pm`), a changed
    check an SP11 path depends on (7.2.6's SoundWire `pn >= maxport` refused the CPS feedback port 13), new guards,
-   runtime-PM or locking patterns. Then scan the stable changes of the subsystems the SP11 relies on (list in
-   reference.md) for behaviour changes and note what the device test has to cover.
+   runtime-PM or locking patterns, a macro the new base's headers now define (7.3's `geni-se.h`). Compare every
+   touched file's tested change with its effective change on the new base: a patch "carried as validated" can
+   revert upstream work it was extracted over (7.3.3: deleted tracepoints, the WSA macro's PM-clock conversion), and
+   a fix the series carries in one form may have landed upstream in another (7.3.3: the DMIC divider, derived
+   twice).
+   Then scan the stable changes of the subsystems the SP11 relies on (list in reference.md) for behaviour changes
+   and note what the device test has to cover.
 7. A needed fix is a new commit at the end of the series: the maintainer as author, as with the POS switch; a
    kernel-style message (75 columns, `Fixes:`); `scripts/checkpatch.pl --strict` clean but for the missing
    `Signed-off-by`, which is the maintainer's to add.
@@ -122,8 +130,9 @@ five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the fork steps,
 ## 8. After the device test and the push
 
 1. The maintainer pushes `sp11/<new>` and sends its head; its tree must be the tested one, every commit signed, and
-   authors, dates and messages those of the tested series.
-2. Fetch that head into `linux-sp11` from GitHub (`--depth=<commits + 1>`), check it out, `git add linux-sp11`, set
+   authors, dates and messages those of the tested series (the maintainer's own patches plus a sign-off).
+2. Pin that head: when the maintainer signed in place in this checkout's submodule, its HEAD already is the head
+   (`git add linux-sp11`); otherwise fetch it from GitHub (`--depth=<commits + 1>`) and check it out first. Set
    `KERNEL_SP11_REV_SHA256` to the value `kernel_rev_sha256` prints and keep the revision number; step 10 and
    step 20 (accepts the cached packages, reruns its checks).
 3. `README.md`, `docs/guide/design.md`, `docs/guide/build.md` and `docs/verified.md` from the device results.
@@ -140,6 +149,9 @@ five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the fork steps,
 - `pkill -f PATTERN` also kills the shell whose command line contains PATTERN: stop processes by PID.
 - `git hash-object --stdin-paths` inside `build/` resolves paths against this repository: compare the tarball with
   `git archive` and `diff -r` instead.
+- In a shallow clone a boundary commit has no parents: `git show` and `git blame` treat it as a root and print the
+  whole tree (64 MB from one `git show`); check `git log -1 --format=%P` first, or read the commit in the
+  date-fetched repository. `git log -- FILE` lists such roots as if they touched the file: `--min-parents=1`.
 - Koji's `packages/` files are unsigned; the signed copies are under `data/signed/<key id>/`. rpm 6 keeps keys in a
   keystore, so `rpm --dbpath <dir> --import` followed by `-K` reports `NOKEY`: use `rpmkeys --root <dir>`.
 - An interrupted compile check leaves objects whose warnings the next log lacks: delete the touched directories'

@@ -56,8 +56,9 @@ check_kernel_rpms() {
     done
     # The front camera's privacy LED (revision 7): the V4L2 core lights it while the IMX681 streams.
     grep -F 'led-names = "privacy";' <<<"$dts" >/dev/null || die "$dtb gives the front camera no privacy LED"
-    # PCIe 5, the modem's, is enabled in the 5G tree only.
-    pcie5=$(fdtget -t s "$MOD/dtb/$dtb" /soc@0/pci@1c00000 status 2>/dev/null || true)
+    # PCIe 5, the modem's, is enabled in the 5G tree only (the node is pcie@1c00000 since 7.3, pci@1c00000 before).
+    pcie5=$(fdtget -t s "$MOD/dtb/$dtb" /soc@0/pcie@1c00000 status 2>/dev/null \
+            || fdtget -t s "$MOD/dtb/$dtb" /soc@0/pci@1c00000 status 2>/dev/null || true)
     if [ "$dtb" = "$SP11_DTB_5G" ]; then
       [ "$pcie5" = okay ] || die "$dtb does not enable PCIe 5 (the modem)"
     else

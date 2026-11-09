@@ -56,7 +56,7 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   2026-10-29). A country from user space (`iw reg set`) reaches ath12k only with
   `ATH_REG_DYNAMIC_USER_REG_HINTS`, which needs `CFG80211_CERTIFICATION_ONUS`; Fedora sets neither. The driver
   keeps the country its 11d scan found (`ar->alpha2`) across the firmware's restart but re-sent it only after a
-  crash recovery. 7.2.11 revision 9 (patch 0092) sent it when the radio started, and the first scan after a wake
+  crash recovery. 7.2.11 revision 9 (patch 0083) sent it when the radio started, and the first scan after a wake
   still ran over the world list (15 s, `DE` by the chip's own scan 7 s in; 2026-10-31): `ath12k_regd_update` applies
   one answer per `regd_updated` cycle, and the interfaces added right after the start re-apply the rules last
   received, so the firmware's answer loses the race unless it is in first (the night's wake: an 8.4 s scan, online
@@ -79,9 +79,10 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - PCIe L1.2 (7.2.11 revision 5, 2026-10-28): the Wi-Fi (`0004:01:00.0`) and NVMe (`0006:01:00.0`) functions
   report snoop and no-snoop latencies of 0 ns (nothing programs them on Qualcomm hosts), below the links'
   `LTR1.2_Threshold` (76800 ns Wi-Fi, 136192 ns NVMe), so the links enter L1.1 and almost never L1.2
-  (`/sys/kernel/debug/pci@1c08000/link_transition_count`: 42408 against 49 entries since boot). Clearing `LTR_EN`
-  on the Wi-Fi function (a proposed quirk) or setting the threshold to 0 on both ends (as Windows does) turned every
-  L1.1 entry into L1.2 (about 11000 per 2 minutes; the NVMe link 3 to 6) with no warning and no lost connection,
+  (`/sys/kernel/debug/pci@1c08000/link_transition_count`, `pcie@1c08000` since 7.3: 42408 against 49 entries since
+  boot). Clearing `LTR_EN` on the Wi-Fi function (a proposed quirk) or setting the threshold to 0 on both ends (as
+  Windows does) turned every L1.1 entry into L1.2 (about 11000 per 2 minutes; the NVMe link 3 to 6) with no warning
+  and no lost connection,
   but the draw with the screen on stayed within 15 mW (6.95 to 6.97 W per 2-minute window). Neither is carried.
 
 ## Bluetooth address
@@ -94,7 +95,7 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 ## Pen
 
 - Unmodified upstream iptsd 3.1.0 (`a83bc1232f7096f8b33b50fdbda249cd640de670`); the build needs cmake for meson to
-  find Microsoft.GSL. It runs on the HIDRAW bridge of `mshw0485_touch` (patch 0050), `hidraw` parent
+  find Microsoft.GSL. It runs on the HIDRAW bridge of `mshw0485_touch` (patch 0044), `hidraw` parent
   `001C:045E:0C83.*`, as `sp11-iptsd@dev-hidrawN.service` started by udev; the kernel's "Microsoft Surface G6 Pen"
   input device is silent by design.
 - The sleep hook (`payload/iptsd/sp11-iptsd-sleep`, from 3.1.0-4) stops the running instances before a sleep;
@@ -105,8 +106,8 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 
 - Supplies (`sp11-diag`): `ADP1` (Mains, the Surface Aggregator's `surface_charger`), `qcom-battmgr-ac`, `-bat`,
   `-usb` and `-wls` (pmic_glink's battery manager) and per USB-C connector `ucsi-source-psy-pmic_glink.ucsi.0N`
-  (USB); `surface_battery` loads but patch 0055 keeps it from binding.
-- Since 7.2.11 revision 2 (patches 0075 to 0077) the battery has `capacity` and UPower takes its percentage from
+  (USB); `surface_battery` loads but patch 0049 keeps it from binding.
+- Since 7.2.11 revision 2 (patches 0069 to 0071) the battery has `capacity` and UPower takes its percentage from
   it; a full battery on external power reads `Full`; unplugging or plugging in a USB-C charger sends a `change`
   uevent for `qcom-battmgr-usb`, and UPower's `on-battery` follows at once.
 - Before revision 2: UPower computed the percentage, 100 % on the charger read `Not charging` (shown as
@@ -116,7 +117,7 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 
 ## Video codec
 
-- Iris (7.2.11 revision 7, patch 0089): `qcom-iris-decoder` and `qcom-iris-encoder` appear as V4L2 devices, and
+- Iris (7.2.11 revision 7, patch 0080): `qcom-iris-decoder` and `qcom-iris-encoder` appear as V4L2 devices, and
   GStreamer 1.28.7 registers `v4l2vp9dec`, `v4l2h264dec`, `v4l2h265dec`, `v4l2av1dec`, `v4l2h264enc` and
   `v4l2h265enc`. A 720p VP9 clip (profile 0) decoded in hardware to the same 120 frames as libvpx in 0.44 s; a
   VP9 clip without an explicit format comes out as 12-bit 4:4:4 (profile 3).
@@ -130,7 +131,7 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - Plugged one way (`normal` in `/sys/class/typec/portN/orientation`) a USB 3 stick (SanDisk 3.2Gen1) runs at
   5000 Mb/s on both ports. Turned over (`reverse`) the stick was found on neither port up to 7.2.14 revision 2,
   while the Type-C class saw the partner and its orientation and Windows ran it at USB 3 both ways: the PS8830
-  retimer must be told of the connection before its mode (below; patch 0095 from 7.2.15 revision 1).
+  retimer must be told of the connection before its mode (below; patch 0086 from 7.2.15 revision 1).
 - Port 0 is `a600000.usb` behind the PS8830 retimer on `i2c@b8c000`, port 1 `a800000.usb` behind the one on
   `i2c@b9c000` (both at address 0x08). Reversed, the orientation reaches the retimer (its register 0x00 reads
   0x23: connected, reversed, USB 3) and the QMP PHY (port select 3, its tables rewritten); the USB 3 root port
@@ -144,7 +145,7 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - The cause: the kernel wrote the retimer's final configuration (0x23) as its first word after the reset, while
   Windows writes 0x01 (connection present) first and the mode 30 ms later. Replaying the two writes on the live
   retimer of a stuck port brought the link to `U0` and the stick to 5000 Mb/s within a second, on both ports, with
-  the PHY and the port untouched; the usual plug afterwards ran at 5000 Mb/s as before. Patch 0095 makes `ps883x`
+  the PHY and the port untouched; the usual plug afterwards ran at 5000 Mb/s as before. Patch 0086 makes `ps883x`
   write the two steps whenever the retimer comes out of reset (`docs/kernel-patches.md`). On 7.2.15 revision 1
   the stick runs at 5000 Mb/s turned over and the usual way on both ports, after a wake and in a second boot
   (2026-11-03).

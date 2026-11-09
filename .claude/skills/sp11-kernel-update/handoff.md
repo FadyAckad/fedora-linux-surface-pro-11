@@ -4,8 +4,8 @@ The folder (location and naming in `CLAUDE.local.md`) holds the five `KERNEL_PKG
 `.sha256` each (`sha256sum <rpm> > <rpm>.sha256`), `sp11-dsp-ping.py` from this skill's directory, the series as
 `sp11-<new>-series.tar.gz` (`git format-patch --no-signature v<new>..<head>`, packed without a directory), and the
 three files below. Before handing over, apply the tarball with `git am` onto `v<new>` in a throwaway clone
-(`git clone --shared --no-checkout <fork clone>`, detached at the tag, signing off): 58 commits and one whitespace
-warning for 7.2.7 (74 commits since revision 9), and the rehearsal's tree.
+(`git clone --shared --no-checkout linux-sp11`, detached at the tag's commit, signing off): 58 commits and one
+whitespace warning for 7.2.7 (74 commits since revision 9, 88 at 7.3.3), and the rehearsal's tree.
 
 The folder, `README.txt` and the steps files follow the hand-off standard
 ([sp11-handoff](../sp11-handoff/SKILL.md)): a `#` title with topic, version and date; an intro (what changed, what
@@ -42,9 +42,10 @@ Cover, in this order, and keep the commands exactly as below:
    two-finger scrolling, pen inking.
 9. DSPs: `ls -l /dev/fastrpc-*`, `sudo timeout 20 python3 ./sp11-dsp-ping.py 10 1` and `... 5 1` —
    `/dev/fastrpc-adsp` and `/dev/fastrpc-cdsp`; both `answered`.
-10. Crypto engine: `grep -E '^driver +: .*-qce$' /proc/crypto` and
-    `sudo journalctl -k -b --no-pager | grep -E 'alg: |qce'` — `sha256-qce` and `hmac-sha256-qce`, nothing with
-    `aes`; no `self-tests ... failed`.
+10. Crypto engine (disabled since 7.3.3 revision 1): `cat /proc/device-tree/soc@0/crypto@1dfa000/status; echo;
+    grep -c -- '-qce' /proc/crypto` — `disabled`, `0`. (Up to 7.2.15: `grep -E '^driver +: .*-qce$' /proc/crypto`
+    listed `sha256-qce` and `hmac-sha256-qce`, nothing with `aes`, and the kernel log had no
+    `self-tests ... failed`.)
 11. Cameras, as your user with no application using a camera (`cam` from `libcamera-tools`): `cam -l`, then
     `F=$(cam -l 2>/dev/null | sed -n 's/^\([0-9]*\): .*camera@1a)$/\1/p'); echo "front=$F"`,
     `cam -c "$F" -C300 >/dev/null 2>&1 & sleep 4; cat /sys/class/leds/white:camera-indicator/brightness; wait` and
@@ -71,19 +72,20 @@ by-hand check. Compare its `recent journal errors` section with the previous rou
 
 ## `sp11-fork-<new>-steps.md` (in WSL, after the device test)
 
-Intro: the branch is created like the previous ones, `git am` onto the stable tag with one signed commit per patch;
-the kernel under test was built from exactly these patches; the pushed head's tree must be `<tree>`, so nothing is
-rebuilt; which patches carry the maintainer as author. Steps:
+Intro: the series sits in the checkout's submodule `linux-sp11` exactly as built (authors and dates kept, unsigned,
+the maintainer's own new patches without a sign-off); the steps sign it in place and push the new branch, with no
+clone of the fork; the pushed head's tree must be `<tree>`, so nothing is rebuilt. Steps (7.3.3 revision 1):
 
-1. `mkdir -p ~/sp11-<new>-series && tar -xzf <folder>/sp11-<new>-series.tar.gz -C ~/sp11-<new>-series` and
-   `ls ~/sp11-<new>-series | wc -l` — `<n>`.
-2. `cd <fork clone> && git status --short && git rev-parse 'v<new>^{commit}'` — no status lines; the tag's commit.
-   When the clone lacks the tag, `git fetch --no-tags <kernel.org stable URL> refs/tags/v<new>:refs/tags/v<new>`
-   before the `rev-parse` — `* [new tag]`.
-3. `git switch -c sp11/<new> v<new>` and `git am ~/sp11-<new>-series/*.patch` — the new branch; `<n>` `Applying:`
-   lines and the known whitespace warnings; the signing key asks for its passphrase.
-4. `git rev-parse 'HEAD^{tree}'` and `git log --format=%G? v<new>..HEAD | sort | uniq -c` — `<tree>`; `<n> G`.
-5. `git push -u origin sp11/<new>` and `git rev-parse HEAD` — `[new branch]`; the head to pin.
+1. `cd <checkout>/linux-sp11 && git status --short | head -n 3; git rev-parse HEAD 'HEAD^{tree}';
+   git rev-list --count <base commit>..HEAD` — no status line; the rehearsal head, `<tree>`, `<n>`.
+2. `git rebase --exec 'git commit --amend --no-edit -S' <base commit>` — `Successfully rebased and updated detached
+   HEAD.` (the signing key asks for its passphrase, once with the agent).
+3. For each of the maintainer's own new patches (here the last): `git commit --amend -s -S --no-edit` and
+   `git log -1 --format='%h %G? %an %s%n%b' | tail -n 3` — the subject with `G` and `Signed-off-by: ...` last.
+4. `git rev-parse 'HEAD^{tree}'; git log --format=%G? <base commit>..HEAD | sort | uniq -c` — `<tree>`; `<n> G`.
+5. `git push git@github.com:<fork>.git HEAD:refs/heads/sp11/<new> && git rev-parse HEAD` — `* [new branch]`; the
+   head to pin. Fallback, should the shallow repository refuse to push: the tarball with `git am -S` (`-s` for the
+   maintainer's own patches) onto `v<new>` in a clone of the fork, then the same push.
 
 Send back: the output, and the head commit.
 

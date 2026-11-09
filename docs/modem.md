@@ -21,12 +21,12 @@ mobile data on 2026-10-29 with a nano-SIM.
 
 ## Device tree
 
-- `x1e80100-microsoft-denali-oled-5g.dts` (patch 0078, 7.2.11 revision 3): the OLED tree plus the CRD's PCIe 5
+- `x1e80100-microsoft-denali-oled-5g.dts` (patch 0072, 7.2.11 revision 3): the OLED tree plus the CRD's PCIe 5
   block: `vreg_wwan` on TLMM 221 (on at boot), `pcie5` and `pcie5_phy` with `vreg_l3i_0p8` and `vreg_l3e_1p2`,
   reset on TLMM 149, CLKREQ# on 150; no wake pin; the OLED tree's compatibles, model "(OLED, 5G)".
 - Up to revision 8 `vreg_wwan` (`SDX_VPH_PWR`) is also PCIe 5's `vddpe-3v3` supply, and the qcom driver switches
   its supplies off when a sleep takes the link down (host deinit): from 7.2.11 revision 4 to 8 the modem is off in
-  a deep sleep. From revision 9 (patch 0091) the supply is `regulator-always-on` and no longer PCIe 5's, so the
+  a deep sleep. From revision 9 (patch 0082) the supply is `regulator-always-on` and no longer PCIe 5's, so the
   modem keeps its power through the sleep (Across a sleep).
 - The build gives the tree to the 5G SKU only (`docs/hardware.md`): `SP11_DTB` follows the SKU in `load_hardware`,
   and step 20 checks that PCIe 5 is enabled in the 5G tree and disabled in the OLED tree. A `build/hardware.env`
@@ -73,7 +73,7 @@ mobile data on 2026-10-29 with a nano-SIM.
   `mhi_swip0` on `IP_SW0`): the connection came up with the carrier's addresses but carried nothing. The modem
   forwarded none of the packets it took (ModemManager's counters: 48 bytes per connection), and the NTBs it sent
   ended as IPv4 header errors (`IpInHdrErrors`; an NTB starts with `NCMH`).
-- From revision 8 (patch 0090) the modem's IDs get the generic channel set with the data channels named
+- From revision 8 (patch 0081) the modem's IDs get the generic channel set with the data channels named
   `IP_HW0_MBIM`, for `mhi_wwan_mbim`, without `IP_SW0`: one network device, `wwan0`. ModemManager 1.24.2 lists
   `wwan0 (net), wwan0mbim0 (mbim)` and connects session 0 on `wwan0`. Its driver check for MBIM data ports knows
   only `cdc_mbim` and `mhi_net`, but no connect path calls it; upstream (c3ef78cc, 1.25.95-dev) accepts
@@ -100,13 +100,13 @@ mobile data on 2026-10-29 with a nano-SIM.
   panel reads the switch from the default APN profile's `autoconnect` and writes it back on every change
   (gnome-control-center, `panels/wwan/cc-wwan-data.c`). A SIM with a PIN asks for it again.
 - Revision 5 powers a busy modem down for a suspend started within 15 s of a wake instead of aborting the suspend
-  (patch 0082, `docs/sleep.md`).
+  (patch 0073, `docs/sleep.md`).
 - Kept powered through the sleep (a test tree, 2026-10-29: `vreg_wwan` with `regulator-always-on` and no longer
   PCIe 5's `vddpe-3v3-supply`; the link still goes down) the modem resumed without a reset or new ports:
   ModemManager's probe answered after 3.4 s, registration after 15.7 s (the 10 s wait included), mobile data
   after 16.7 s. In a 10-minute sleep `ddr` counted 569 of 608 s (579 of 619 s with the modem off), `cxsd` 0 in
   both; the battery's reading moved by the same 0.511 Wh in both runs, too coarse for the modem's own draw.
-  7.2.11 revision 9 (patch 0091) makes this the 5G tree's wiring.
+  7.2.11 revision 9 (patch 0082) makes this the 5G tree's wiring.
 - ModemManager's quick suspend/resume (`--test-quick-suspend-resume`, a systemd drop-in on its unit) keeps the
   modem object across a sleep: terse mode at the suspend, a state sync at the resume instead of the re-probe and
   its 10 s wait. With revision 9 (2026-10-31): the sync done 1.4 s after the wake, NetworkManager's profile

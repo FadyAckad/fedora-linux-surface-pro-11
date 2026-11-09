@@ -21,6 +21,10 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   from USB-C (an ADSP restart resets the port). Both work once installed.
 - Once in a boot, a few minutes after it, the compute DSP's firmware can report a `sleep_stats` fatal error.
   remoteproc restarts that DSP by itself, and nothing on Linux uses it.
+- Since kernel 7.3.3 revision 2, opening the cover does not wake the tablet from sleep; press the power key.
+  Kernel 7.3 routes the cover switch's wake interrupt through another interrupt controller, where a sleep started
+  with the cover open ended at once; revision 2 keeps that path off as 7.2 did, and the cover's wake went with it
+  ([`docs/sleep.md`](../sleep.md)).
 - GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from
   windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
   ([`docs/gnss.md`](../gnss.md)).

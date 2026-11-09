@@ -17,7 +17,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Component | Version |
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
-| Kernel | Fedora's `kernel-7.2.15-300.fc45`, SP11 revision 2 (`7.2.15-300.sp11.2.fc45.aarch64`) |
+| Kernel | Fedora's `kernel-7.3.3-300.fc45`, SP11 revision 2 (`7.3.3-300.sp11.2.fc45.aarch64`) |
 | Support RPM (`sp11-surface-support`) | 3.9 |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -25,13 +25,14 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 ## What works
 
 Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). Every row was confirmed on 2026-11-02 on a Fedora
-45 Workstation installation running the versions above (GPS on 2026-10-23); on 2026-11-03 a fresh installation from
-the ISO built that day from the 45 release media 1.4 confirmed the rows from boot to suspend again, Flatpak, the
-Windows entry and USB-C aside.
+45 Workstation installation running kernel 7.2.15 and the other versions above; on 2026-11-03 a fresh installation
+from the ISO built that day from the 45 release media 1.4 confirmed the rows from boot to suspend again, Flatpak,
+the Windows entry and USB-C aside. Kernel 7.3.3 (revisions 1 and 2, 2026-11-08 and 09) confirmed every row in
+use again, with the standard checks, the microphone, GPS, mobile data and a night's sleep.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
-| Feature | Fedora 45 Workstation, Fedora's 7.2.15-300 (sp11.2) |
+| Feature | Fedora 45 Workstation, Fedora's 7.3.3-300 (sp11.2) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Display with GPU acceleration | ✅ |
@@ -66,6 +67,8 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
 
 - GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
   minutes ([`docs/gnss.md`](docs/gnss.md)).
+- Since kernel 7.3.3 revision 2 opening the cover does not wake the tablet; the power key does
+  ([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 - Asleep, the tablet drew 0.33 W over 8 hours with kernel revision 5 or later, against 0.85 W before. From
   revision 9 the modem keeps its power through the sleep at no measurable cost (0.32 W), and with support 3.9
   mobile data is back within 2 s of a wake; from revision 13 Wi-Fi is back about 13 s after a wake instead of
@@ -128,8 +131,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45-1.4-SP11-7.2.15-300.sp11.2.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.2.15-300.sp11.2.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+`Fedora-Workstation-Live-45-1.4-SP11-7.3.3-300.sp11.2.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.3-300.sp11.2.fc45.aarch64.iso`, with a `.sha256` beside it. Then
 write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
 ## Reporting results

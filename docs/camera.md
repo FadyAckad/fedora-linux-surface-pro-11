@@ -9,7 +9,7 @@ what the device has shown.
   bus 1 at `0x1a` and CAMSS port 2 (CSIPHY2); the rear camera, an OmniVision OV13858 (4224x3136 RAW10, four D-PHY
   lanes) on CCI0 bus 1 at `0x10` and port 1; the IR camera, an ST VD55G0 (644x604 `Y10P`, one D-PHY lane) on CCI0
   bus 0 at `0x60` and port 0, lit by the PM8550 flash controller's current sinks 1 and 4 (600 mA ceiling).
-- The front camera's light: a GPIO LED on TLMM GPIO 225, active high (patch 0071), given to the IMX681 as its
+- The front camera's light: a GPIO LED on TLMM GPIO 225, active high (patch 0065), given to the IMX681 as its
   `privacy` LED. The IMX681 driver registers with `v4l2_async_register_subdev_sensor()`, so the V4L2 core takes the
   LED, locks its sysfs control (a write returns `EBUSY`) and lights it while the sensor streams; step 20 checks
   the link in the built device tree. The pin is one of the two TLMM outputs of Windows' camera device `CAMP`
@@ -20,24 +20,24 @@ what the device has shown.
 - Mainline 7.2 has CAMSS for the X1E80100, the camera clock controller and the CCI driver, and Fedora builds them
   (`VIDEO_QCOM_CAMSS`, `I2C_QCOM_CCI`, `CLK_X1E80100_CAMCC`, `VIDEO_OV13858`, `LEDS_QCOM_FLASH`); still missing in
   7.3: CAMSS C-PHY, the camera nodes of `hamoa.dtsi` and of the Denali board, and the IMX681 and VD55G0 drivers.
-- Revision 6 carries them as 0059–0070 (`docs/kernel-patches.md`): turbineBMW's camera branch, their OV13858 retry
+- Revision 6 carries them as 0053–0064 (`docs/kernel-patches.md`): turbineBMW's camera branch, their OV13858 retry
   of the first register write after power-up and ooaklee's IMX681 exposure fix; `kernel-local` adds
-  `VIDEO_IMX681=m` and `VIDEO_VD55G0=m`. Revisions 8 and 9 change the IMX681 and OV13858 drivers (0072 to 0074);
+  `VIDEO_IMX681=m` and `VIDEO_VD55G0=m`. Revisions 8 and 9 change the IMX681 and OV13858 drivers (0066 to 0068);
   the other driver files equal turbineBMW's 7.3 port.
 - The camera nodes add two users of the providers that must reach `sync_state` (`docs/kernel.md`): the camera clock
   controller on the RPMh power domains and CAMSS on the interconnect; step 20 finds a driver for both in Fedora's
   packages, and `sp11-diag`'s sync line shows whether they bind.
-- The IMX681 frame length (0072): the sensor ignores the standard register `0x0340` and takes a 24-bit frame
+- The IMX681 frame length (0066): the sensor ignores the standard register `0x0340` and takes a 24-bit frame
   length at `0x033d` (3554 lines in the mode table) and the exposure at `0x0229`, at most the frame length less 8
   lines; a line takes 9.38 us (`sp11-camera-probe front --frame-length`). The driver had assumed 2708 lines of
-  12.3 us and left a quarter of each frame's exposure unused. 0072 writes `0x033d`, keeps 3554 lines as the
+  12.3 us and left a quarter of each frame's exposure unused. 0066 writes `0x033d`, keeps 3554 lines as the
   shortest frame, lets the exposure reach 3546 lines at 30 fps and reports the line as 5144 pixels of the
   548.57 MHz CSI-2 pixel rate, so the frame duration libcamera derives is the sensor's.
-- The OV13858 pixel rate (0073): the Surface Pro 11 mode put its 592.8 MHz link frequency first in the driver's
+- The OV13858 pixel rate (0067): the Surface Pro 11 mode put its 592.8 MHz link frequency first in the driver's
   menu, whose second entry gave the pixel rate's minimum, 432 instead of 216 MHz, so the 270 MHz modes (among them
-  GNOME Snapshot's 2112x1188) reported half the `ExposureTime`; 0073 takes the minimum from the lowest link
+  GNOME Snapshot's 2112x1188) reported half the `ExposureTime`; 0067 takes the minimum from the lowest link
   frequency. The picture does not change: libcamera 0.7.2 uses the pixel rate only for that metadata.
-- The IMX681 control lock (0074): the controls are applied at stream start under the control handler's lock,
+- The IMX681 control lock (0068): the controls are applied at stream start under the control handler's lock,
   which `__v4l2_ctrl_handler_setup()` expects and `.s_stream` does not hold.
 
 ## libcamera

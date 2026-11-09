@@ -11,10 +11,11 @@ removal, SELinux.
 - The result: Fedora's package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
-- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9, 7.2.11, 7.2.14 and
-  7.2.15 checked). Fedora's own `patch-7.2-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in 7.2.8, 63 in
-  7.2.9, 91 in 7.2.11, 95 in 7.2.14, 94 in 7.2.15) shares only the media `Kconfig`, `Makefile` and `MAINTAINERS`
-  with the patch set and is applied after it.
+- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9, 7.2.11, 7.2.14,
+  7.2.15 and 7.3.3 checked). Fedora's own `patch-<x.y>-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in
+  7.2.8, 63 in 7.2.9, 91 in 7.2.11, 95 in 7.2.14, 94 in 7.2.15, 79 in 7.3.3) is applied before the series and
+  shares only `MAINTAINERS` with it since 7.3.3 (up to 7.2.15 also the media `Kconfig` and `Makefile`, for the
+  IMX471 driver that 7.3 has).
 
 ### The builds, by revision
 
@@ -47,10 +48,13 @@ removal, SELinux.
 | 7.2.14 revision 2 | 2026-11-02 | `kernel-7.2.14-300.fc45` | The wake: no power-on in the touch resume callback, PCIe controllers resumed in parallel |
 | 7.2.15 revision 1 | 2026-11-03 | `kernel-7.2.15-300.fc45` | Rebased onto `v7.2.15`; the USB-C retimer told of the connection before its mode |
 | 7.2.15 revision 2 | 2026-11-06 | `kernel-7.2.15-300.fc45` | The QRTR-over-glink probe no longer deadlocks when its channel open fails |
+| 7.3.3 revision 1 | 2026-11-08 | `kernel-7.3.3-300.fc45` | Rebased onto `v7.3.3` (nine patches now upstream dropped); the crypto engine's node disabled |
+| 7.3.3 revision 2 | 2026-11-09 | `kernel-7.3.3-300.fc45` | GPIO wake interrupts kept off the PDC: a suspend with the lid open no longer wakes at once |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to
-12 passed but for the country re-send, which the sleep's 11d result defeated until revision 13); the fork branch
+12 passed but for the country re-send, which the sleep's 11d result defeated until revision 13; 7.3.3 revision 1
+but for a suspend started with the cover open, which revision 2 holds); the fork branch
 head and tree of each is in `docs/kernel-patches.md`. Before 2026-09-23 the project built ooaklee's v23 kernel as
 `kernel-sp11` (`7.2.5-jg-0sp11v23.2-qcom-x1e`), with revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode
 switch).
@@ -97,8 +101,9 @@ plus the `kernel-local` lines; the patch set's modules and parameters.
 ## Configuration
 
 - Fedora's configuration (`CONFIG_LSM="lockdown,yama,integrity,selinux,bpf,landlock,ipe"`, zboot `vmlinuz`) has
-  what the SP11 needs beyond the patch set, except the two drivers of "Sync state and the CDSP": the Surface
-  Aggregator stack (patch 0055 keeps `BATTERY_SURFACE` from binding), pmic_glink's battmgr and UCSI, PAS remoteproc,
+  what the SP11 needs beyond the patch set, except the video clock controller of "Sync state and the CDSP": the
+  Surface Aggregator stack (patch 0049 keeps `BATTERY_SURFACE` from binding), pmic_glink's battmgr and UCSI, PAS
+  remoteproc,
   pd-mapper, FastRPC, QRTR, ath12k, `BT_QCA`, the X1E audio, GPI DMA, `SPI_QCOM_GENI`, `HIDRAW=y`, `KEYBOARD_GPIO`,
   `PINCTRL_QCOM_SPMI_PMIC` and the camera stack but its two new sensors (`docs/camera.md`).
 - `ARM_SCMI_CPUFREQ=m` does not load on its own (modpost cannot generate SCMI-bus aliases); the support RPM loads it
@@ -110,14 +115,15 @@ plus the `kernel-local` lines; the patch set's modules and parameters.
   X1E tree, with the 7.2.5 update and the POS patch) by mapping the built DTB's enabled compatibles to modules and
   sources and compile-checking the result before the mock build; a file comparison misses prerequisite commits.
   The patches and what was left out: `docs/kernel-patches.md`.
-- SKU-specific code: patch 0042 (the OLED link-rate quirk) matches `DMI_PRODUCT_NAME` exactly against "Microsoft
+- SKU-specific code: patch 0036 (the OLED link-rate quirk) matches `DMI_PRODUCT_NAME` exactly against "Microsoft
   Surface Pro, 11th Edition" and never applies on the 5G SKU, whose panel works without it; everything else keys on
   the `microsoft,denali` compatible of both SKUs. ooaklee's ADSP attach series is left out: mainline's PAS driver
   (`lite_pas_id` 0x1f, `lite_dtb_pas_id` 0x29, `qcom_pas_load`) itself restarts the UEFI-started ADSP with the full
   firmware.
-- Carried as validated, not cleaned up: `gpi.c`, `spi-geni-qcom.c`, the AudioReach files and `lpass-wsa-macro.c`
-  are 7.1-based copies missing some 7.2 changes; ooaklee's re-lift onto 7.2.2 lost touch, pen and the right
-  speaker, so a clean-up needs its own revision and device test.
+- Carried as validated, not cleaned up: `gpi.c` and the AudioReach files are 7.1-based copies missing some 7.2
+  changes; ooaklee's re-lift onto 7.2.2 lost touch, pen and the right speaker, so a clean-up needs its own
+  revision and device test. The 7.3.3 rebase put `spi-geni-qcom.c` and `lpass-wsa-macro.c` back on upstream's
+  code (Rebase to a new Fedora kernel).
 
 ## Sync state and the CDSP
 
@@ -127,7 +133,7 @@ No listed feature uses the CDSP, but its fault showed that the boot votes were n
   has its driver bound; until then Linux keeps the boot votes (rails at their highest level, interconnects at full
   bandwidth, sleep included) and, with `DRIVER_DEFERRED_PROBE_TIMEOUT=-1`, neither forces the sync nor prints
   `sync_state() pending`. Fedora lacked two users' drivers: the video clock controller (`SM_VIDEOCC_8550`, on
-  `rpmhpd`) and the crypto engine (`CRYPTO_DEV_QCE`, on `aggre2_noc` and `mc_virt`).
+  `rpmhpd`) and, up to 7.2.15, the crypto engine (`CRYPTO_DEV_QCE`, on `aggre2_noc` and `mc_virt`).
 - The symptom: the CDSP enters its first sleep 20 ms after it starts and never wakes: FastRPC's channel open times
   out (`failed to create endpoint`, error -12, no `/dev/fastrpc-cdsp`) and `/sys/kernel/debug/qcom_stats/cdsp`
   stays at `Count: 0`; a restart lasts until the next sleep.
@@ -136,10 +142,13 @@ No listed feature uses the CDSP, but its fault showed that the boot votes were n
   devices they wait for. Whether a DSP is awake: a QMI ping over QRTR (the kernel-update skill's
   `sp11-dsp-ping.py`; CDSP node 10, ADSP node 5). Forcing the sync: write `1` without a newline to `state_synced`;
   the stuck CDSP answers at once.
-- The fix in `kernel-local`: both drivers, the crypto engine limited to its hashes (`CRYPTO_DEV_QCE_ENABLE_SHA`)
-  because its AES XTS and CTR fail the kernel's self-tests at boot; dm-crypt never uses the engine (it masks
-  `CRYPTO_ALG_ALLOCATES_MEMORY`, which the engine's ciphers set). The CDSP's `sleep_stats` assert around sensor
-  stream changes is a known, separate issue (`docs/sensors.md`, Known issues).
+- The fix: `kernel-local` enables the video clock controller's driver. Up to 7.2.15 it enabled the crypto engine's
+  too, limited to its hashes (`CRYPTO_DEV_QCE_ENABLE_SHA`: its AES XTS and CTR fail the kernel's self-tests, and
+  dm-crypt never used the engine). 7.3 marks that driver `BROKEN` (`df373d39c6f0`: the engine is shared with the
+  secure world and the driver races with it), so from 7.3.3 revision 1 patch 0088 disables the crypto node in the
+  Denali tree: a disabled node is no user of the interconnect, and the engine casts no vote at all (`docs/sleep.md`
+  has its 394 MB/s vote of 7.2.11). The CDSP's `sleep_stats` assert around sensor stream changes is a known,
+  separate issue (`docs/sensors.md`, Known issues).
 
 ## Rebase to a new Fedora kernel
 
@@ -168,17 +177,35 @@ onto the new stable tag, whatever lies between (a stable tag contains every earl
   stable commits touches a file of the series (a Bluetooth address fix, io_uring races at exec and fork, an
   skbuff change Fedora's 7.2.14 patch already carried, the HID ambient-light sensor, SMB direct, kbuild). Fedora's
   configuration changes only its toolchain values.
+- 7.2.15 to 7.3.3 (7.3.3 revision 1, the first new kernel version): 434 stable commits touch files of the series.
+  Nine patches are upstream and dropped, three adapted, one added (`docs/kernel-patches.md`). Two adaptations
+  undo artefacts of the extraction: the QSPI touch patch had deleted 7.2's SPI tracepoints and defined register
+  offsets 7.3's `geni-se.h` names (`SE_DMA_TX_IRQ_EN_SET`, not `_EN`); the audio patch had reverted the WSA
+  macro's PM-clock conversion, so every tested kernel ran that macro on the old clock handling, and its functional
+  change now sits on upstream's PM-clock driver. One semantic clash: 7.3's Denali tree asks for a 2.4 MHz DMIC
+  rate (`35ce3c571297`) where the audio patch doubled the VA macro's base rate for the same /4 divider, and both
+  together gave /8; the doubling is dropped. Fedora's configuration: `CRYPTO_DEV_QCE` is gone (the driver is
+  `BROKEN`, Sync state and the CDSP), `QCOM_PAS` and `QCOM_PAS_TEE` split the PAS firmware authentication,
+  `HW_RANDOM_QCOM` replaces `CRYPTO_DEV_QCOM_RNG`, modules are signed with `MODULE_SIG_KEY_TYPE_MLDSA_87`. To
+  watch on the device: the deepest CPU idle state and `rpmhpd` skipping retention (sleep power), ath12k's 64
+  commits (Wi-Fi), `qca_set_bdaddr()` waiting for the right event (the Bluetooth address), fastrpc's polling mode
+  (the sensors), `q6apm`'s graph start count and the SoundWire port exhaustion check (audio). 7.3 renames the
+  `pci@` nodes to `pcie@` (labels unchanged); step 20's PCIe 5 check reads either name since this update.
 
 ### Procedure
 
 1. Pin Fedora's kernel in `sp11.conf`: `KERNEL_FEDORA_VERSION`, `KERNEL_FEDORA_RELEASE` and the two checksum lines
    (source RPM, stock `kernel-core`).
-2. Rebase a detached copy of `sp11/<old>` onto the new tag in a fork clone, resolve the conflicts and note each
+2. Rebase a detached copy of `sp11/<old>` onto the new tag in a scratch clone of the submodule (no full clone of
+   the fork: the tag comes from kernel.org with `--shallow-exclude=v<old>`), resolve the conflicts and note each
    adaptation as `[sp11: ...]` after the trailers; `git rebase --continue` keeps the author, `git commit` does not.
+   `--shallow-exclude` cuts every chain behind a merge of excluded history (a sixth of 7.3's commits), and a cut
+   commit shows as a root whose `git show` is the whole tree: the survey of upstream commits runs in a second
+   repository fetched with `--shallow-since`, which cuts by date and loses nothing.
 3. Review: a clean merge is not a correct one; read every stable change to a file the series touches and compare
    the branches with `git range-diff`. At 7.2.6 `spi_geni_init()` lost its `out_pm` label, and the QSPI path's
    `goto out_pm` merged but did not compile; 7.2.6's SoundWire check `pn >= maxport` merged cleanly but refused the
-   CPS feedback port 13 (patch 0058).
+   CPS feedback port 13 (patch 0052).
 4. Compile on the host before the mock build: the directories the series touches and the DTBs, with Fedora's
    configuration plus `kernel-local` (under two minutes).
 5. Pin the patch set: `KERNEL_PATCH_BASE_COMMIT` in `sp11.conf`, the rehearsal head as the gitlink of `linux-sp11`

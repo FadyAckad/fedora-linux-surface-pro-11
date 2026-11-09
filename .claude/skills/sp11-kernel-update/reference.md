@@ -8,7 +8,7 @@ with every kernel version since 7.2.11.
 OLD=7.2.5 OLDREL=300    # KERNEL_FEDORA_VERSION and KERNEL_FEDORA_RELEASE as pinned before the update
 NEW=7.2.7 REL=300       # the new Fedora kernel and its release
 FR=45 REV=1             # FEDORA_RELEASE; the new KERNEL_SP11_REV (1 for a new kernel version)
-FORK=""                 # the path of the maintainer's full clone of the kernel fork; ask for it
+KORG=https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git   # where the stable tags come from
 R=build/rebase          # scratch area inside the git-ignored build/
 KOJI=https://kojipkgs.fedoraproject.org/packages/kernel/$NEW/$REL.fc$FR
 PIN=$(git rev-parse HEAD:linux-sp11)   # the committed pin: the submodule's gitlink
@@ -26,25 +26,13 @@ curl -s "https://bodhi.fedoraproject.org/updates/?packages=kernel&releases=F$FR&
 
 Expected: lines like `kernel-7.2.7-300.fc45 stable 2026-09-23 00:15:11`; take the newest `stable` one.
 
-The stable tags, at kernel.org and in the fork clone:
+The stable tags at kernel.org (no clone of the fork is needed; the tags come into the scratch clone of section 2):
 
 ```bash
-git ls-remote https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git "refs/tags/v$OLD^{}" "refs/tags/v$NEW^{}"
+git ls-remote "$KORG" "refs/tags/v$OLD^{}" "refs/tags/v$NEW^{}"; grep -n '^KERNEL_PATCH_BASE_COMMIT=' sp11.conf
 ```
 
-```bash
-git -C "$FORK" rev-parse "v$OLD^{commit}" "v$NEW^{commit}"
-```
-
-Expected: the same two commit ids. A tag the clone lacks (`unknown revision`; 7.2.8) stays out of the maintainer's
-clone: make the scratch clone of section 2 now, fetch the tag into it from kernel.org (a few seconds), and use
-`$R/linux` in place of `$FORK` for the tarball check below; the fork steps fetch it first (handoff.md):
-
-```bash
-git -C "$R/linux" fetch --no-tags https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git "refs/tags/v$NEW:refs/tags/v$NEW" && git -C "$R/linux" rev-parse "v$NEW^{commit}"
-```
-
-Expected: `* [new tag] v<new> -> v<new>`, then kernel.org's commit id.
+Expected: `v$OLD`'s id equals `KERNEL_PATCH_BASE_COMMIT`; `v$NEW`'s id becomes it in section 4.
 
 Fedora's source RPM and stock `kernel-core`, and their sha256 for `sp11.conf`:
 
@@ -74,14 +62,15 @@ grep -cE '^# define buildid \.local$|^Patch999999: linux-kernel-test\.patch$|^So
 ```
 
 ```bash
-git -C "$FORK" diff --name-only "v$OLD" "$PIN" | sort > "$R/series-files.txt"; grep '^diff --git' "$R/srpm-$NEW-$REL"/patch-*-redhat.patch | awk '{print $3}' | sed 's|^a/||' | sort -u > "$R/redhat-files.txt"; wc -l < "$R/series-files.txt"; comm -12 "$R/series-files.txt" "$R/redhat-files.txt"
+git -C linux-sp11 diff --name-only "$(sed -n 's/^KERNEL_PATCH_BASE_COMMIT="\([0-9a-f]*\)".*/\1/p' sp11.conf)" "$PIN" | sort > "$R/series-files.txt"; grep '^diff --git' "$R/srpm-$NEW-$REL"/patch-*-redhat.patch | awk '{print $3}' | sed 's|^a/||' | sort -u > "$R/redhat-files.txt"; wc -l < "$R/series-files.txt"; comm -12 "$R/series-files.txt" "$R/redhat-files.txt"
 ```
 
-Expected: `4`; the number of files the series touches (80 at 7.2.5, 100 since revision 6), and no file both touch
-but `MAINTAINERS`, `drivers/media/i2c/Kconfig` and `drivers/media/i2c/Makefile` (revision 6). kernel.spec applies
-the series after Fedora's patch, so prove it on a copy of Fedora's tarball: `git --work-tree=. apply` of
-`patch-<x.y>-redhat.patch`, then of the series (`git format-patch --stdout v<new>..HEAD`); the first build of
-revision 6 stopped in `%prep` on exactly this.
+Expected: `4`; the number of files the series touches (80 at 7.2.5, 100 since revision 6, 118 at 7.2.15), and no
+file both touch but `MAINTAINERS` (up to 7.2.15 also `drivers/media/i2c/Kconfig` and `Makefile`, for the IMX471
+driver 7.3 has). kernel.spec applies the series after Fedora's patch, so prove it on the copy of Fedora's tarball
+the tarball check below unpacks: `git apply` (outside a repository it is a patch tool) of
+`patch-<x.y>-redhat.patch`, then `git apply --check` of the rebased series (`git format-patch -o <dir>
+v<new>..HEAD`, section 7); the first build of revision 6 stopped in `%prep` on exactly this.
 
 Fedora's configuration change between the two stock `kernel-core` packages (the old one is in the cache of the
 checkout that built the pinned revision):
@@ -100,7 +89,7 @@ NTFS driver); no `kernel-local symbol changed` line.
 Fedora's tarball against the tag (under a minute on an idle host, several while a build runs):
 
 ```bash
-T=$R/tarcheck; rm -rf "$T"; mkdir -p "$T/tag"; tar -xf "$R/srpm-$NEW-$REL/linux-$NEW.tar.xz" -C "$T"; git -C "$FORK" archive "v$NEW" | tar -x -C "$T/tag"
+T=$R/tarcheck; rm -rf "$T"; mkdir -p "$T/tag"; tar -xf "$R/srpm-$NEW-$REL/linux-$NEW.tar.xz" -C "$T"; git -C "$R/linux" archive "v$NEW" | tar -x -C "$T/tag"
 diff -r --no-dereference "$T/linux-$NEW" "$T/tag" > /dev/null && echo "same content"; diff <(cd "$T/linux-$NEW" && find . | sort) <(cd "$T/tag" && find . | sort) > /dev/null && echo "same entries"; diff <(cd "$T/linux-$NEW" && find . -type f -perm -u+x | sort) <(cd "$T/tag" && find . -type f -perm -u+x | sort) > /dev/null && echo "same executables"; rm -rf "$T"
 ```
 
@@ -108,22 +97,45 @@ Expected: `same content`, `same entries`, `same executables`.
 
 ## 2. Rebase rehearsal
 
-The scratch clone, detached at the pinned head, with the fork commits' identity and without signing:
+The scratch clone: a shared clone of the submodule (step 10 initialized it, shallow, back past the base), detached
+at the pinned head, with the identity of the maintainer's own patches (read from the pinned head) and without
+signing; the old tag named locally, the new tag and the release tags of its series fetched from kernel.org without
+the history the base already has (7.3.3 from 7.2.15: 17 k commits, 220 MB, under a minute):
 
 ```bash
-git clone -q --shared --no-checkout "$FORK" "$R/linux" && git -C "$R/linux" config user.name "$(git -C "$FORK" config user.name)" && git -C "$R/linux" config user.email "$(git -C "$FORK" config user.email)" && git -C "$R/linux" config commit.gpgsign false && git -C "$R/linux" checkout -q --detach "$PIN"
+git clone -q --shared --no-checkout "$PWD/linux-sp11" "$R/linux" && git -C "$R/linux" config user.name "$(git -C linux-sp11 log -1 --format=%an "$PIN")" && git -C "$R/linux" config user.email "$(git -C linux-sp11 log -1 --format=%ae "$PIN")" && git -C "$R/linux" config commit.gpgsign false && git -C "$R/linux" checkout -q --detach "$PIN" && git -C "$R/linux" tag "v$OLD" "$(sed -n 's/^KERNEL_PATCH_BASE_COMMIT="\([0-9a-f]*\)".*/\1/p' sp11.conf)"
 ```
+
+```bash
+git -C "$R/linux" fetch --no-tags --shallow-exclude="v$OLD" "$KORG" "refs/tags/v$NEW:refs/tags/v$NEW" "refs/tags/v${NEW%.*}:refs/tags/v${NEW%.*}" && git -C "$R/linux" rev-parse "v$NEW^{commit}"
+```
+
+Expected: `* [new tag]` lines and kernel.org's id of `v$NEW`. This clone has the complete *tree* of every commit
+(the rebase, the compile check and `git archive` are right), but not the complete *history*: `--shallow-exclude`
+cuts every chain behind a merge of excluded history (a maintainer's back-merge of a `-rc` tag), a sixth of 7.3's
+commits, and a cut commit is a root whose `git show` prints the whole tree (64 MB). The surveys below therefore run
+in a second repository, fetched by date into an empty one (`--shallow-since` into an existing shallow clone fails
+with `error in object: unshallow`); the date lies before the new series' merge window (7.3: 2026-06-01; 20 k
+commits, 400 MB, a few minutes). The series comes in from the submodule; the stale shallow entry of the submodule's
+boundary is removed because the new repository has its parent:
+
+```bash
+git init -q "$R/linux2" && git -C "$R/linux2" fetch --no-tags --shallow-since=<date> "$KORG" "refs/tags/v$NEW:refs/tags/v$NEW" "refs/tags/v$OLD:refs/tags/v$OLD" "refs/tags/v${NEW%.*}:refs/tags/v${NEW%.*}" && git -C "$R/linux2" fetch -q --no-tags "$PWD/linux-sp11" HEAD:refs/heads/series && for s in $(cat "$R/linux2/.git/shallow"); do p=$(git -C "$R/linux2" cat-file commit "$s" 2>/dev/null | awk '/^parent/ {print $2}' | head -1); [ -n "$p" ] && git -C "$R/linux2" cat-file -e "$p" 2>/dev/null && sed -i "/^$s\$/d" "$R/linux2/.git/shallow"; done; git -C "$R/linux2" rev-list --count "v$OLD..series"; git -C "$R/linux2" rev-list --count "v$OLD..v$NEW"
+```
+
+Expected: the series' commit count and the stable range's (7.2.15 to 7.3.3: 20994). `--min-parents=1` keeps the
+remaining date-cut roots out of every survey.
 
 The stable commits that touch the series' files, each with the first release that has it:
 
 ```bash
-cd "$R/linux" && git log --no-merges --format='%h %s' "v$OLD..v$NEW" -- $(cat ../series-files.txt) > ../stable-touching.txt; while read -r c s; do echo "$(git tag --contains "$c" --list "v${NEW%.*}.*" --sort=v:refname | head -1) $c $s"; done < ../stable-touching.txt; cd - > /dev/null
+cd "$R/linux2" && git log --no-merges --min-parents=1 --format='%h %s' "v$OLD..v$NEW" -- $(cat ../series-files.txt) > ../stable-touching.txt; while read -r c s; do echo "$(git tag --contains "$c" --list "v${NEW%.*}*" --sort=v:refname | head -1) $c $s"; done < ../stable-touching.txt; cd - > /dev/null
 ```
 
 Which SP11 patch each of them meets (number in the old series, subject, stable commit, shared files):
 
 ```bash
-cd "$R/linux" && git log --reverse --format=%H "v$OLD..$PIN" > ../series-commits.txt; n=0; while read -r c; do n=$((n + 1)); f=$(git diff-tree --no-commit-id --name-only -r "$c" | sort); while read -r s rest; do common=$(comm -12 <(echo "$f") <(git diff-tree --no-commit-id --name-only -r "$s" | sort) | tr '\n' ' '); [ -n "$common" ] && printf '%04d %s <-> %s %s: %s\n' "$n" "$(git log -1 --format=%s "$c" | cut -c1-50)" "$s" "${rest:0:40}" "$common"; done < ../stable-touching.txt; done < ../series-commits.txt; cd - > /dev/null
+cd "$R/linux2" && git log --reverse --format=%H "v$OLD..series" > ../series-commits.txt; n=0; while read -r c; do n=$((n + 1)); f=$(git diff-tree --no-commit-id --name-only -r "$c" | sort); while read -r s rest; do common=$(comm -12 <(echo "$f") <(git diff-tree --no-commit-id --name-only -r "$s" | sort) | tr '\n' ' '); [ -n "$common" ] && printf '%04d %s <-> %s %s: %s\n' "$n" "$(git log -1 --format=%s "$c" | cut -c1-50)" "$s" "${rest:0:40}" "$common"; done < ../stable-touching.txt; done < ../series-commits.txt; cd - > /dev/null
 ```
 
 The rebase (it stops at each conflict):
@@ -165,11 +177,16 @@ git -C "$R/linux" range-diff "v$OLD..$PIN" "v$NEW..HEAD" > "$R/range-diff.txt"; 
 Expected: `<` lines only for the dropped patches and `>` only for new ones; in the range-diff, `!` for every
 adapted patch, and a partly upstream patch as a `<` and `>` pair.
 
+A clean textual merge of a carried patch can hide a reversion: compare each touched file's tested change
+(`git diff v$OLD $PIN -- FILE`) with its effective change on the new base (`git diff v$NEW -- FILE` in `$R/linux`)
+by their `+`/`-` lines; the 7.3.3 rebase found two extraction artefacts this way (deleted tracepoints, a reverted
+PM-clock conversion) and a semantic clash (the DMIC divider derived twice).
+
 The stable changes of the subsystems the SP11 relies on (read the list; 236 commits from 7.2.5 to 7.2.7, before the
-camera paths were added):
+camera paths were added; 1670 from 7.2.15 to 7.3.3):
 
 ```bash
-git -C "$R/linux" log --no-merges --format='%h %s' "v$OLD..v$NEW" -- drivers/remoteproc drivers/misc/fastrpc.c drivers/soc/qcom drivers/pmdomain/qcom drivers/interconnect/qcom drivers/clk/qcom drivers/pinctrl/qcom drivers/net/wireless/ath/ath12k drivers/bluetooth drivers/platform/surface drivers/usb/dwc3 drivers/usb/typec drivers/power/supply/qcom_battmgr.c drivers/gpu/drm/msm drivers/iommu/arm drivers/cpufreq drivers/firmware/arm_scmi drivers/firmware/qcom drivers/spi/spi-geni-qcom.c drivers/dma/qcom sound/soc/qcom sound/soc/codecs/wsa884x.c 'sound/soc/codecs/lpass-*' drivers/soundwire drivers/hid drivers/input drivers/nvme drivers/pci/controller/dwc net/qrtr drivers/rpmsg drivers/thermal/qcom drivers/iio drivers/phy/qualcomm drivers/crypto/qce drivers/media/platform/qcom/camss drivers/media/i2c drivers/media/v4l2-core drivers/i2c/busses/i2c-qcom-cci.c drivers/leds drivers/regulator arch/arm64/boot/dts/qcom/hamoa.dtsi arch/arm64/boot/dts/qcom/x1-microsoft-denali.dtsi > "$R/stable-relevant.txt"; wc -l < "$R/stable-relevant.txt"
+git -C "$R/linux2" log --no-merges --min-parents=1 --format='%h %s' "v$OLD..v$NEW" -- drivers/remoteproc drivers/misc/fastrpc.c drivers/soc/qcom drivers/pmdomain/qcom drivers/interconnect/qcom drivers/clk/qcom drivers/pinctrl/qcom drivers/net/wireless/ath/ath12k drivers/bluetooth drivers/platform/surface drivers/usb/dwc3 drivers/usb/typec drivers/power/supply/qcom_battmgr.c drivers/gpu/drm/msm drivers/iommu/arm drivers/cpufreq drivers/firmware/arm_scmi drivers/firmware/qcom drivers/spi/spi-geni-qcom.c drivers/dma/qcom sound/soc/qcom sound/soc/codecs/wsa884x.c 'sound/soc/codecs/lpass-*' drivers/soundwire drivers/hid drivers/input drivers/nvme drivers/pci/controller/dwc net/qrtr drivers/rpmsg drivers/thermal/qcom drivers/iio drivers/phy/qualcomm drivers/crypto/qce drivers/media/platform/qcom/camss drivers/media/i2c drivers/media/v4l2-core drivers/i2c/busses/i2c-qcom-cci.c drivers/leds drivers/regulator arch/arm64/boot/dts/qcom/hamoa.dtsi arch/arm64/boot/dts/qcom/x1-microsoft-denali.dtsi drivers/bus/mhi drivers/pci/pcie drivers/pci/pci.c drivers/tty/serial/qcom_geni_serial.c drivers/power/sequencing drivers/input/touchscreen drivers/base/platform.c > "$R/stable-relevant.txt"; wc -l < "$R/stable-relevant.txt"
 ```
 
 A new fix: edit the files in `$R/linux`, write the message to `$R/msg-fix.txt`, then commit it on top with the
@@ -200,8 +217,9 @@ make -C "$R/linux" O=../kbuild ARCH=arm64 -j"$(nproc)" prepare modules_prepare >
 ```
 
 Expected: the `olddefconfig` override warnings for the `kernel-local` symbols, no `LOST:` line; three `rc=0`, no
-`warning:` or `error:` line. `build-targets.txt` must list only kernel make targets: top-level files such as `MAINTAINERS` (touched since
-revision 6) are left out by the `grep /`; drop any other directory the series touches (tools, scripts) the same way.
+`warning:` or `error:` line. `build-targets.txt` must list only kernel make targets: top-level files such as
+`MAINTAINERS` (touched since revision 6) are left out by the `grep /`; drop any other directory the series touches
+(tools, scripts) the same way.
 The `awk` keeps only the top-most directory of a nest: `drivers/pci/` and `drivers/pci/controller/dwc/` as two
 targets of one `make -j` race for `drivers/pci/controller/built-in.a` (`ar: ... No such file or directory`,
 `Error 123`), seen at 7.2.15.
@@ -307,11 +325,13 @@ The pushed head and its tree:
 REPO=$(git config -f .gitmodules submodule.linux-sp11.url); git ls-remote "$REPO" "refs/heads/sp11/$NEW"
 ```
 
-Fetch that commit into the submodule and pin it (the rehearsal's commits stay in the submodule's repository,
-unreferenced), then `kernel_rev_sha256` (section 4) into `KERNEL_SP11_REV_SHA256`, the revision number unchanged:
+When the maintainer signed the series in place in this checkout's submodule and pushed from there (handoff.md), the
+submodule's HEAD is the pushed head: `git add linux-sp11` pins it. Otherwise fetch the pushed commit into the
+submodule (the rehearsal's commits stay in its repository, unreferenced). Then `kernel_rev_sha256` (section 4) into
+`KERNEL_SP11_REV_SHA256`, the revision number unchanged:
 
 ```bash
-PUSHED=<the pushed head>; N=$(git -C "$R/linux" rev-list --count "v$NEW..HEAD"); git -C linux-sp11 fetch -q --no-tags --depth=$((N + 1)) origin "$PUSHED" && git -C linux-sp11 checkout -q --detach "$PUSHED" && git add linux-sp11 && git rev-parse :linux-sp11
+PUSHED=<the pushed head>; N=$(git -C "$R/linux" rev-list --count "v$NEW..HEAD"); [ "$(git -C linux-sp11 rev-parse HEAD)" = "$PUSHED" ] || { git -C linux-sp11 fetch -q --no-tags --depth=$((N + 1)) origin "$PUSHED" && git -C linux-sp11 checkout -q --detach "$PUSHED"; }; git add linux-sp11 && git rev-parse :linux-sp11
 ```
 
 ```bash
@@ -325,14 +345,14 @@ scripts/20-build-kernel.sh 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'already b
 Expected: `SP11 patch set: <n> commits, v<new>..<head>`; two equal tree ids; `kernel RPMs already built: ...
 checking them` and step 20's configuration line, no `ERROR`.
 
-The pushed branch in the fork clone, read-only: signatures, and authors, dates and messages against the tested
-series:
+The pushed branch in the submodule, read-only: signatures, and authors, dates and messages against the tested
+series (the maintainer's own new patches gain a `Signed-off-by` line, nothing else may differ):
 
 ```bash
-git -C "$FORK" log --format=%G? "v$NEW..sp11/$NEW" | sort | uniq -c; diff <(git -C "$FORK" log --reverse --format='%an <%ae>|%ad|%s%n%b' --date=raw "v$NEW..sp11/$NEW") <(git -C "$R/linux" log --reverse --format='%an <%ae>|%ad|%s%n%b' --date=raw "v$NEW..HEAD") > /dev/null && echo "same authors, dates and messages"
+BASE=$(sed -n 's/^KERNEL_PATCH_BASE_COMMIT="\([0-9a-f]*\)".*/\1/p' sp11.conf); git -C linux-sp11 log --format=%G? "$BASE..HEAD" | sort | uniq -c; diff <(git -C linux-sp11 log --reverse --format='%an <%ae>|%ad|%s%n%b' --date=raw "$BASE..HEAD") <(git -C "$R/linux" log --reverse --format='%an <%ae>|%ad|%s%n%b' --date=raw "v$NEW..HEAD")
 ```
 
-Expected: `<n> G`; `same authors, dates and messages`. Then remove the rehearsal's series from
+Expected: `<n> G`; only `Signed-off-by` lines in the diff. Then remove the rehearsal's series from
 `build/cache/kernel-patches/` (every directory but the pinned commit's). Before handing over the commit message,
 check that the change set applies onto the main checkout as it is now (it may have moved since the worktree was
 made; the new skill or other untracked files come on top):

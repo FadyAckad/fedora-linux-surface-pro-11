@@ -14,17 +14,11 @@ CONFIG_TOUCHSCREEN_MSHW0485=m
 CONFIG_VIDEO_IMX681=m
 CONFIG_VIDEO_VD55G0=m
 
-# Drivers for two devices the X1E80100 device tree enables and Fedora leaves out: the video clock controller (a user
-# of the RPMh power domains) and the crypto engine (a user of the interconnect). Until every user of a power domain
-# or interconnect provider has its driver, the provider never reaches sync_state and Linux keeps its boot-time
-# maximum votes on every rail and bus, sleep votes included; under the held rail votes the CDSP never wakes from its
-# first sleep. Step 20 checks that every such user has a driver. The crypto engine only needs to bind, so it offers
-# its hashes alone: its AES XTS and CTR fail the kernel's self-tests (XTS refuses equal key halves), and the CPU's
-# crypto extensions outrank it for everything else.
+# The driver of a device the X1E80100 device tree enables and Fedora leaves out: the video clock controller, a user
+# of the RPMh power domains. Until every user of a power domain or interconnect provider has its driver, the
+# provider never reaches sync_state and Linux keeps its boot-time maximum votes on every rail and bus, sleep votes
+# included; under the held rail votes the CDSP never wakes from its first sleep. Step 20 checks that every such
+# user has a driver. The crypto engine, the other such user up to kernel 7.2, is disabled by the SP11 device tree
+# since 7.3 marked its driver BROKEN (it races with the secure world): a disabled node binds nothing and votes for
+# nothing.
 CONFIG_SM_VIDEOCC_8550=m
-CONFIG_CRYPTO_DEV_QCE=m
-CONFIG_CRYPTO_DEV_QCE_SHA=y
-# CONFIG_CRYPTO_DEV_QCE_ENABLE_ALL is not set
-# CONFIG_CRYPTO_DEV_QCE_ENABLE_SKCIPHER is not set
-CONFIG_CRYPTO_DEV_QCE_ENABLE_SHA=y
-# CONFIG_CRYPTO_DEV_QCE_ENABLE_AEAD is not set

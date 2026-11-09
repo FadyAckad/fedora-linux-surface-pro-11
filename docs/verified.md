@@ -9,8 +9,9 @@ From 7.2.11 revision 1 on, every kernel round confirmed this set unless its entr
 
 - the boot entry with the unit's device tree and the SP11 arguments, SELinux `Enforcing`;
 - the speaker stage with VI+CPS feedback at every playback, the QSPI touch path;
-- both DSPs over FastRPC (the CDSP again in a second boot), the crypto engine's two hashes (idle as `suspended`
-  from revision 4), no provider waiting for `sync_state`;
+- both DSPs over FastRPC (the CDSP again in a second boot), no provider waiting for `sync_state`; up to 7.2.15 the
+  crypto engine's two hashes (idle as `suspended` from revision 4), from 7.3.3 revision 1 its node disabled and
+  no `-qce` algorithm;
 - the three cameras listed and the front camera's light;
 - the five sensors' readings and the proxy's orientation, light and compass;
 - a deep sleep and resume; the bound devices and the kinds of kernel warning those of the previous revision.
@@ -338,3 +339,30 @@ One entry per round; the facts each established live in the topic notes.
   checks (the speakers' feedback lines, the microphone, the QSPI touch path, both DSPs answering, the crypto
   engine's hashes, the three cameras listed); one deep sleep and resume; `no provider waits for sync_state`; the
   journal's errors only the ADSP handover lines. No line came back for the by-hand checks or the shutdown.
+
+## Kernel 7.3.3 revision 1: the first 7.3 kernel (2026-11-08)
+
+- Installed: the kernel RPMs `7.3.3-300.sp11.1.fc45` (Fedora's `kernel-7.3.3-300.fc45` with 88 patches: 7.2.15
+  revision 2's 96 less nine that 7.3 carries, three adapted, plus 0088, the crypto engine's node disabled),
+  `dnf install` next to 7.2.15 revision 2; the 5G device tree in the boot entry, `saved_entry` on the new kernel.
+- Confirmed: the standard checks, with the crypto node `disabled` and no `-qce` algorithm in place of the engine's
+  hashes; the microphone clear at its normal pitch; mobile data connected and GNSS fixes in GNOME Maps (owner);
+  Wi-Fi and mobile data back after a wake; the CDSP answering in a second boot. New in the kernel log: a `Timeout
+  waiting for L2 entry` from the Wi-Fi link at each suspend, one SoundWire `bus clsh detected` at a playback
+  start, QRTR `failed to announce new service` lines at each resume.
+- Found: a suspend started with the cover open ended after 2 s, woken by the cover switch's interrupt (twice from
+  the Power menu); with the cover closed a suspend held 82 s and opening the cover woke it. Revision 2 below.
+
+## Kernel 7.3.3 revision 2: the cover switch's wake path (2026-11-09)
+
+- Installed: the kernel RPMs `7.3.3-300.sp11.2.fc45` (revision 1 plus 0089, the GPIO wake interrupts kept off the
+  PDC), `dnf install` next to revision 1 (dnf removed 7.2.15 revision 1, the oldest of four kernels).
+- Confirmed: a suspend from the Power menu with the cover open held 68 s and the power key woke it; a suspend with
+  the cover closed held 78 s; Wi-Fi and mobile data connected after both; the speakers' feedback line, the QSPI
+  touch path and the CDSP answering; the night: 8 h 1 min asleep at 0.25 W (35.95 to 33.93 Wh, 70 to 67 %), the
+  memory in its low-power state 27112 of 28883 s, one suspend entry and exit, no wake in the night; mobile data
+  connected after the morning wake, Wi-Fi still connecting 8 s after it (it takes about 13 s).
+- By hand (owner): the feature table's rows in use passed on revisions 1 and 2 (Wi-Fi, the Bluetooth keyboard and
+  pen, battery, brightness, volume keys, keyboard and touchpad, rotation, power modes, a USB 3 stick both ways
+  round).
+- Found: opening the cover no longer wakes the system; the power key does. Accepted for now (`docs/sleep.md`).

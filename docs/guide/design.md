@@ -3,13 +3,14 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.2.15-300.fc45` source RPM with Fedora's configuration, rebuilt with the 96 patches of
-  the branch `sp11/7.2.15` of the project's kernel fork, the submodule `linux-sp11` (on the stable tag `v7.2.15`,
-  pinned by commit; SP11 revision 2 of 7.2.15) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md);
+- Kernel: Fedora's `kernel-7.3.3-300.fc45` source RPM with Fedora's configuration, rebuilt with the 89 patches of
+  the branch `sp11/7.3.3` of the project's kernel fork, the submodule `linux-sp11` (on the stable tag `v7.3.3`,
+  pinned by commit; SP11 revision 2 of 7.3.3) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md);
   each patch, its authors and what it is needed for: [`docs/kernel-patches.md`](../kernel-patches.md).
-  - `kernel-local` enables the patch set's touch driver and two camera sensor drivers, and two drivers Fedora's
-    configuration leaves out, the video clock controller and the crypto engine: without them Linux never lowers
-    the power-rail and bus votes it takes at boot, and the compute DSP never wakes from sleep.
+  - `kernel-local` enables the patch set's touch driver and two camera sensor drivers, and one driver Fedora's
+    configuration leaves out, the video clock controller: without it Linux never lowers the power-rail and bus
+    votes it takes at boot, and the compute DSP never wakes from sleep. The crypto engine, the other such device
+    up to kernel 7.2, has its device-tree node disabled since 7.3 marks its driver broken.
   - The patches are ooaklee's Surface Pro 11 work from linux_ms_dev_kit-sp11 v23 with the X1E fixes from jglathe's
     tree that act on this machine, turbineBMW's camera branch, three changes from mainline 7.3 for deep sleep, five
     Adreno fixes and a Type-C fix carried from their postings, and this repository's own commits; that tree's Ubuntu
