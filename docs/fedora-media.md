@@ -43,9 +43,20 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
   `/usr/lib/grub/arm64-efi/*.mod`.
 - GRUB has no text-scale setting (`gfxterm` sizes its cell from the loaded PF2 font), so only a large font keeps
   the menu legible at the panel's native mode. Step 30 builds `sp11-console.pf2` with
-  `grub2-mkfont -s "$GRUB_FONT_SIZE"` from DejaVu Sans Mono; at 40 pt the cell is 24x48 px, 120x40 characters at
-  2880x1920. DejaVu's Bitstream-Vera licence needs the extra `License:` term and a font name without "Bitstream"
-  or "Vera".
+  `grub2-mkfont -s "$GRUB_FONT_SIZE"` from DejaVu Sans Mono; at size 32 (pixels per em, support 3.10) the cell is
+  19x38 px, 151x50 characters at 2880x1920. DejaVu's Bitstream-Vera licence needs the extra `License:` term and a
+  font name without "Bitstream" or "Vera".
+- `gfxterm`'s cell is as high as the font's tallest glyph (PF2 `MAXH`) with the baseline `ASCE` rows below its
+  top, and rows a glyph draws outside its cell are lost. grub2-mkfont takes `ASCE` and `DESC` from the highest and
+  lowest glyph of the whole face: at size 40 (support up to 3.9) 42 and 15 against a cell of 48, so the menu
+  showed no underscore and cut every descender (the device, 2026-11-10). Step 30 builds the font twice, the
+  second time with the `--asce` and `--desc` that `scripts/grub-font-cell.py` reads from the first, and refuses a
+  font whose menu glyphs leave the cell.
+- GRUB's drawing can be checked on the host: the ISO's `grubaa64.efi` as `EFI/BOOT/BOOTAA64.EFI` beside a
+  `grub.cfg` and the font on a `fat:` drive, under `qemu-system-aarch64 -M virt` with EDK2's `QEMU_EFI.fd` and
+  `-device ramfb` (its GOP offers at most 1024x768; the host has no `virtio-gpu-pci`), a `usb-kbd` for `send-key`
+  and QMP `screendump`. Both fonts drew there as on the device: size 40 with the fault, size 32 complete
+  (2026-11-10).
 - `00_header` honours `GRUB_FONT`: a single `if loadfont <path>` replaces its own font search, so exactly one font
   is loaded. The result (grub2 2.12-76.fc45; the same branch in 2.12-81, the 45 1.4 image's) is
   `if loadfont /grub2/fonts/sp11-console.pf2` and `set gfxmode=2880x1920,auto`. The font file must be under

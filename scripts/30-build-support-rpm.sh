@@ -10,19 +10,20 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.9"
+VERSION="3.10"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
-# file directly under payload/ except the ISO templates and the kernel config fragment, the spec, and the sp11.conf
-# values that reach sp11.env, the UCM matcher and microphone gain, the board data and the font. Recorded in the
-# RPM's description.
+# file directly under payload/ except the ISO templates and the kernel config fragment, the spec, the font's cell
+# helper, and the sp11.conf values that reach sp11.env, the UCM matcher and microphone gain, the board data and the
+# font. Recorded in the RPM's description.
+FONT_CELL="$(dirname "$0")/grub-font-cell.py"
 support_inputs() {
   printf '%s\n' "SP11_DTB=$SP11_DTB" "SP11_ARGS_INSTALLED=$SP11_ARGS_INSTALLED" \
     "SP11_ARGS_LIVE_ONLY=$SP11_ARGS_LIVE_ONLY" "GRUB_GFXMODE_VALUE=$GRUB_GFXMODE_VALUE" \
     "GRUB_TIMEOUT_VALUE=$GRUB_TIMEOUT_VALUE" "GRUB_FONT_FILE=$GRUB_FONT_FILE" "GRUB_FONT_SIZE=$GRUB_FONT_SIZE" \
     "GRUB_FONT_NAME=$GRUB_FONT_NAME" "UCM_SP11_REGEX=$UCM_SP11_REGEX" "WIFI_BOARD_ENTRY=$WIFI_BOARD_ENTRY" \
     "AUDIO_RELEASE_TAG=$AUDIO_RELEASE_TAG" "UCM_MIC_GAIN=$UCM_MIC_GAIN" "BT_HELPER_SHA256=$BT_HELPER_SHA256" \
-    | inputs_sha256 "$SPEC_DIR/sp11-surface-support.spec.in" \
+    | inputs_sha256 "$SPEC_DIR/sp11-surface-support.spec.in" "$FONT_CELL" \
         $(find "$PAYLOAD_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort)
 }
 INPUTS=$(support_inputs)
@@ -135,13 +136,19 @@ chmod 0600 "$STAGE/etc/sp11/bluetooth-address"
 FONT_TTF=$(ls /usr/share/fonts/*/DejaVuSansMono.ttf 2>/dev/null | head -1 || true)
 [ -n "$FONT_TTF" ] || die "DejaVuSansMono.ttf not found; run scripts/00-setup-host.sh (dejavu-sans-mono-fonts)"
 FONT_OUT="$STAGE/usr/share/sp11/fonts/$GRUB_FONT_FILE"; install -d "$(dirname "$FONT_OUT")"
-grub2-mkfont -s "$GRUB_FONT_SIZE" -n "$GRUB_FONT_NAME" -o "$FONT_OUT" "$FONT_TTF" \
-  || die "grub2-mkfont failed on $FONT_TTF"
+# gfxterm's cell is as high as the font's tallest glyph, with the baseline at the font's ascent. grub2-mkfont takes
+# ascent and descent from the whole face's extremes, which puts the baseline below the cell's line box (at size 40
+# the underscore was not drawn and the descenders were cut). The first run yields the cell, the second is built
+# with the ascent and descent that fit it; the check refuses a font whose menu glyphs leave the cell.
+mkfont() { grub2-mkfont -s "$GRUB_FONT_SIZE" -n "$GRUB_FONT_NAME" "$@" "$FONT_TTF" || die "grub2-mkfont failed on $FONT_TTF"; }
+mkfont -o "$SDIR/font-probe.pf2"
+FONT_METRICS=$(python3 -I "$FONT_CELL" metrics "$SDIR/font-probe.pf2") || die "cannot read the cell of $GRUB_FONT_FILE"
+read -r FONT_ASCENT FONT_DESCENT <<<"$FONT_METRICS"
+mkfont --asce "$FONT_ASCENT" --desc "$FONT_DESCENT" -o "$FONT_OUT"
 [ -s "$FONT_OUT" ] || die "grub2-mkfont produced an empty $GRUB_FONT_FILE"
-# PF2 starts with the section header FILE + a 4-byte length + the magic PFF2.
-[ "$(dd if="$FONT_OUT" bs=1 count=4 skip=8 status=none)" = PFF2 ] || die "$FONT_OUT is not a PF2 font"
+FONT_CELL_SIZE=$(python3 -I "$FONT_CELL" check "$FONT_OUT") || die "$GRUB_FONT_FILE does not fit gfxterm's cell"
 chmod 0644 "$FONT_OUT"
-log "GRUB console font: $GRUB_FONT_FILE, ${GRUB_FONT_SIZE}pt from ${FONT_TTF##*/} ($(du -h "$FONT_OUT" | cut -f1))"
+log "GRUB console font: $GRUB_FONT_FILE, size $GRUB_FONT_SIZE from ${FONT_TTF##*/}, cell $FONT_CELL_SIZE px, ascent $FONT_ASCENT, descent $FONT_DESCENT ($(du -h "$FONT_OUT" | cut -f1))"
 
 ## 6. Boot policy: kernel-install plugin, first-boot finalizer, dracut policy, UCM apply helper
 install -m 0755 "$PAYLOAD_DIR/sp11-ucm-apply" "$STAGE/usr/libexec/sp11/sp11-ucm-apply"

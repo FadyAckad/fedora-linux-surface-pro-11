@@ -85,7 +85,7 @@ assert_policy() {
   check as_root grep -qx 'GRUB_TERMINAL_OUTPUT="gfxterm"' "$cfg"
   check as_root grep -qx "GRUB_TIMEOUT=$GRUB_TIMEOUT_VALUE" "$cfg"
   check as_root grep -qx "GRUB_FONT=\"/boot/grub2/fonts/$GRUB_FONT_FILE\"" "$cfg"
-  check as_root test -s "$M/boot/grub2/fonts/$GRUB_FONT_FILE"
+  check as_root cmp -s "$M/usr/share/sp11/fonts/$GRUB_FONT_FILE" "$M/boot/grub2/fonts/$GRUB_FONT_FILE"
   if [ "$what" = update ]; then
     check as_root grep -qx "  set gfxmode=$GRUB_GFXMODE_VALUE" "$menu"
     check as_root grep -qx "if loadfont /grub2/fonts/$GRUB_FONT_FILE ; then" "$menu"
@@ -197,7 +197,8 @@ as_root chroot "$M" /usr/libexec/sp11/sp11-grub-defaults || die "the installed h
 as_root install -d "$M/var/lib/sp11"; echo stale | as_root tee "$M/var/lib/sp11/first-boot.done" >/dev/null
 as_root sed -i -e 's|^GRUB_GFXMODE=.*|GRUB_GFXMODE=640x480|' -e 's|^GRUB_FONT=.*|GRUB_FONT=|' \
                -e 's|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=99|' "$M/etc/default/grub"
-as_root rm -f "$M/boot/grub2/fonts/$GRUB_FONT_FILE"
+# An earlier build's font in /boot, as on a system that upgrades: the helper has to replace it with the package's.
+echo stale | as_root tee "$M/boot/grub2/fonts/$GRUB_FONT_FILE" >/dev/null
 as_root chroot "$M" /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 \
   || die "grub2-mkconfig failed while staging the pre-upgrade state"
 as_root grep -qx 'GRUB_GFXMODE=640x480' "$M/etc/default/grub" || die "pre-upgrade state not staged"

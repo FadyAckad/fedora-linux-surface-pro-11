@@ -29,11 +29,12 @@ bullet is in the working note it names.
   SP11 audio patches). The live media adds `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas`,
   the same page's advice for booting from USB-C, because restarting the ADSP resets the port; the installed system
   drops them. [`docs/hardware.md`](../hardware.md).
-- GRUB: `gfxterm` at the panel's native `2880x1920,auto` with a 40 pt DejaVu Sans Mono PF2 font, built with
-  `grub2-mkfont` and shipped in the support RPM (`/usr/share/sp11/fonts/sp11-console.pf2`, named by `GRUB_FONT`),
-  since GRUB has no text-scale setting and sizes its character cell from the loaded font. The live menu is Fedora's
-  own with the device tree and the kernel arguments added to each entry. Installed menu order: Fedora entries,
-  Windows Boot Manager, UEFI Firmware Settings. [`docs/fedora-media.md`](../fedora-media.md).
+- GRUB: `gfxterm` at the panel's native `2880x1920,auto` with a DejaVu Sans Mono PF2 font of size 32 (151x50
+  characters), built with `grub2-mkfont` to fit GRUB's character cell and shipped in the support RPM
+  (`/usr/share/sp11/fonts/sp11-console.pf2`, named by `GRUB_FONT`), since GRUB has no text-scale setting and sizes
+  its character cell from the loaded font. The live menu is Fedora's own with the device tree and the kernel
+  arguments added to each entry. Installed menu order: Fedora entries, Windows Boot Manager, UEFI Firmware Settings.
+  [`docs/fedora-media.md`](../fedora-media.md).
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` finds the ESP holding `EFI/Microsoft/Boot/bootmgfw.efi` (a
   separate Windows ESP is fine) and adds a chainload entry. Fedora's aarch64 GRUB image lacks the `chain` module,
   and Fedora's os-prober cannot find Windows on aarch64, so the module is copied from `grub2-efi-aa64-modules` to

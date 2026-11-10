@@ -18,7 +18,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
 | Kernel | Fedora's `kernel-7.3.3-300.fc45`, SP11 revision 2 (`7.3.3-300.sp11.2.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.9 |
+| Support RPM (`sp11-surface-support`) | 3.10 |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
 

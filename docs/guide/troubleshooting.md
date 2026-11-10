@@ -82,6 +82,9 @@ Systems running an older build of the RPMs can show these; the release named fix
 - Upgrading `iio-sensor-proxy` from 3.9-3.sp11.1 can pause `dnf` for about 45 s and leave an `iio-sensor-proxy`
   core dump: the old proxy does not stop in time and systemd aborts it. The reboot after the install brings up the
   new one.
+- The GRUB menu and its editor showing no underscores and letters cut off at the bottom: fixed in support RPM
+  3.10 (2026-11-10), whose smaller console font fits GRUB's character cell
+  ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and modules).
 
 ## The power button under KDE Plasma
 

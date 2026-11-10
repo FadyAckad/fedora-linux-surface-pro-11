@@ -12,8 +12,9 @@ What each file is, for a user: `docs/guide/layout.md`. What matters to the pipel
 - `scripts/NN-*.sh`: the pipeline steps, idempotent; `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30,
   40, 45 and 50, then steps 35 and 46, which need step 50's live root (steps 30 and 45 run them when it exists).
   Outside the pipeline: `70-export-bt-pairings.sh` (`docs/hardware.md`), `75-export-sensor-registry.sh`
-  (`docs/sensors.md`) and `sync-state-drivers.py`, step 20's check that the Denali device trees' rail and
-  interconnect users all have a driver (`docs/kernel.md`).
+  (`docs/sensors.md`), `sync-state-drivers.py`, step 20's check that the Denali device trees' rail and
+  interconnect users all have a driver (`docs/kernel.md`), and `grub-font-cell.py`, step 30's fit of the GRUB
+  console font to `gfxterm`'s cell (`docs/fedora-media.md`).
 - `payload/`: the support RPM's payload, installed under `/usr/libexec/sp11`, `/etc/grub.d` and `/usr/lib/...`
   (the modem rule and GNSS feed in 5G builds only); `kernel-local`, a build input of step 20 and part of
   `KERNEL_SP11_REV` (the patch set itself is the kernel fork's, the submodule `linux-sp11` below); `sensors/`
@@ -44,8 +45,10 @@ never touches the host.
   ISO build (`rpm -U --noscripts` plus the helper runs). After step 50 the live root carries that RPM, so the
   upgrade is a reinstall with `--replacepkgs`; `SUPPORT_PREVIOUS_RPM=<rpm>` installs that build first.
 - The update path first stages a wrong GRUB policy (`GRUB_GFXMODE=640x480`, an empty `GRUB_FONT`,
-  `GRUB_TIMEOUT=99`, no font in `/boot`), so a package that installs without applying the `sp11.conf` policy to
-  `/etc/default/grub` and the menu fails.
+  `GRUB_TIMEOUT=99`, a stale font in `/boot`), so a package that installs without applying the `sp11.conf` policy
+  to `/etc/default/grub` and the menu fails; both paths compare the font in `/boot` with the package's.
+- Its `/boot` image is 200 MB, which the source media's `/boot` (532 MB with the stock kernel and its rescue
+  initramfs) overflows: the root must be past step 50's kernel swap.
 - Both paths check the 3.x payload (dnf override, `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover); from
   3.5 the modem's files and the GNSS feed's policy module on a 5G unit (loaded by hand on the live path, as step
   50 does) and their absence on the others; from 3.6 the sleep hook's pause instead of a stop; from 3.7
@@ -98,9 +101,14 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
   works; its `%posttrans` must run `sp11-grub-defaults` before regenerating `grub.cfg` (up to 2.3 a changed policy
   never reached the machine), which step 35 guards.
 - Input hashes: steps 30 and 45 record `inputs_sha256` (`lib.sh`; the payload, the spec template, the rendered
-  `sp11.conf` values, for step 45 also the registry export and the DriverStore package) as `Inputs:` in the RPM
-  description and die when the cached RPM of the same version was built from other inputs, `FORCE=1` or not. The
-  hash covers repo-relative paths, so a payload rename invalidates it too.
+  `sp11.conf` values, for step 30 also `grub-font-cell.py`, for step 45 also the registry export and the DriverStore
+  package) as `Inputs:` in the RPM description and die when the cached RPM of the same version was built from other
+  inputs, `FORCE=1` or not. The hash covers repo-relative paths, so a payload rename invalidates it too.
+- The input hash does not cover the host's toolchain: step 30 compiles `sp11-bt-set-addr` with the host's gcc and
+  links glibc's startup code in. The helper of support 3.9 (built 2026-11-01 on the Fedora 44 host) and of 3.10
+  (Fedora 45) differ in that code, 72512 and 72608 bytes; the helper's own object code is the same from both
+  releases, and both set the address on the device (2026-11-10). A rebuilt earlier version is therefore not the
+  installed package: compare a new RPM with the device's `rpm -q --dump`.
 - Kernel revision pins: `KERNEL_SP11_REV_SHA256` in `sp11.conf` pins each revision's content (`kernel_rev_sha256`
   over the revision number, the effective `kernel-local` lines, the base commit and the gitlink); step 20 dies when
   either differs from the pin and prints the value to set after a bump.

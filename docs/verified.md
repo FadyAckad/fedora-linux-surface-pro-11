@@ -366,3 +366,14 @@ One entry per round; the facts each established live in the topic notes.
   pen, battery, brightness, volume keys, keyboard and touchpad, rotation, power modes, a USB 3 stick both ways
   round).
 - Found: opening the cover no longer wakes the system; the power key does. Accepted for now (`docs/sleep.md`).
+
+## Support RPM 3.10: the GRUB console font (2026-11-10)
+
+- Installed: `sp11-surface-support` 3.10 by `dnf upgrade` over 3.9, under kernel `7.3.3-300.sp11.2.fc45`. Against
+  the installed 3.9 the package changed two files: the font, and `sp11-bt-set-addr` as the Fedora 45 host compiles
+  the same source (`docs/pipeline.md`, Versions and content pins).
+- Confirmed: the font in `/boot/grub2/fonts` replaced by the package's and named by the menu's `loadfont` line;
+  the Bluetooth address unit's journal lines the same before and after, ending in `Success: public address set`,
+  and the controller carrying the configured address.
+- By hand (owner): the menu and its editor show every underscore and the letters complete at size 32; the
+  Bluetooth keyboard and pen connect.

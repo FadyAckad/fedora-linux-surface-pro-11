@@ -91,6 +91,10 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   management before `bluetooth.service` (udev-triggered). Upstream's `parse_mac` fills the little-endian `bdaddr_t`
   in printed order, so step 30 patches `out[i]` to `out[5 - i]`; `sp11-bt-apply` only maps the unit instance
   `hciN` to `N`.
+- `sp11-bluetooth-address@hci0.service` logs at a boot: `short write 0/12` twice, `hci0 ready at T+1s`,
+  `set-public-address  status 0x00 (success)`, `Success: public address set` (2026-11-10, alike from the helper
+  compiled on Fedora 44 and on Fedora 45). `bluetoothctl show` then names the controller with the address of
+  `/etc/sp11/bluetooth-address`.
 
 ## Pen
 
