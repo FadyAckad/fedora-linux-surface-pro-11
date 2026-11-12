@@ -1,0 +1,49 @@
+From 34b36355078e3b1c40d4608fe7a2ccaa8df4fdb4 Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Sun, 28 Dec 2025 17:35:58 +0100
+Subject: [PATCH] cta: make di_cta.flags optional
+
+These flags are not specified for CTA blocks embedded inside
+DisplayID v2, for instance.
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+[sp11: hunk positions as they apply to 0.3.0; the changed lines are upstream's]
+
+ cta.c         | 4 ++--
+ include/cta.h | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/cta.c b/cta.c
+index b2b53b0..b2ffd7c 100644
+--- a/cta.c
++++ b/cta.c
+@@ -1003,11 +1003,11 @@ parse_video_cap_block(struct di_cta *cta,
+ 
+ 	switch (video_cap->it_over_underscan) {
+ 	case DI_CTA_VIDEO_CAP_ALWAYS_OVERSCAN:
+-		if (cta->flags->it_underscan)
++		if (cta->flags && cta->flags->it_underscan)
+ 			add_failure(cta, "Video Capability Data Block: IT video formats are always overscanned, but bit 7 of Byte 3 of the CTA-861 Extension header is set to underscanned.");
+ 		break;
+ 	case DI_CTA_VIDEO_CAP_ALWAYS_UNDERSCAN:
+-		if (!cta->flags->it_underscan)
++		if (cta->flags && !cta->flags->it_underscan)
+ 			add_failure(cta, "Video Capability Data Block: IT video formats are always underscanned, but bit 7 of Byte 3 of the CTA-861 Extension header is set to overscanned.");
+ 	default:
+ 		break;
+diff --git a/include/cta.h b/include/cta.h
+index 9405932..4c73e49 100644
+--- a/include/cta.h
++++ b/include/cta.h
+@@ -86,7 +86,7 @@
+  */
+ struct di_cta {
+ 	int revision;
+-	const struct di_edid_cta_flags *flags;
++	const struct di_edid_cta_flags *flags; /* may be NULL for non-EDID blocks */
+ 
+ 	struct di_logger *logger;
+ };
+-- 
+GitLab

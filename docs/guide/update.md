@@ -1,9 +1,9 @@
 # Update an installed system
 
-Updating the support RPM, installing a new SP11 kernel next to the current one, and what dnf does with kernels. The
-RPMs come from `build/rpms/` after a build ([`docs/guide/build-rpms.md`](build-rpms.md)) or from the ISO the
-system was installed from, which carries every RPM it installed under `/sp11/rpms`: kernel, support, iptsd and the
-sensors stack.
+Updating the support RPM, installing a new SP11 kernel next to the current one, what dnf does with kernels, and
+the `libdisplay-info` rebuild for HDR. The RPMs come from `build/rpms/` after a build
+([`docs/guide/build-rpms.md`](build-rpms.md)) or from the ISO the system was installed from, which carries every
+RPM it installed under `/sp11/rpms`: kernel, support, iptsd and the sensors stack.
 
 ## Support RPM
 
@@ -33,7 +33,7 @@ keep theirs.
 
 dnf keeps at most three kernels per package name (`installonly_limit`) and removes the oldest one, never the
 running one, in the transaction that installs a fourth. Check `df -h /boot` before installing another kernel; each
-SP11 kernel takes about 195 MB there. A dracut failure inside the install leaves the new kernel without a boot
+SP11 kernel takes about 212 MB there. A dracut failure inside the install leaves the new kernel without a boot
 entry, and only the transaction's output says so.
 
 Stock Fedora kernels, which lack the SP11 patch set, are hidden from every configured repository (support RPM 3.0),
@@ -44,6 +44,23 @@ lifts it for one command.
 ## Sensors stack
 
 The four sensors RPMs are updated together, in one transaction: [`docs/guide/sensors.md`](sensors.md).
+
+## libdisplay-info
+
+HDR on the built-in panel needs a kernel of 7.3.3 revision 3 or later and this rebuild of Fedora's
+`libdisplay-info` ([`docs/display.md`](../display.md)). It installs over Fedora's build:
+
+```bash
+sudo dnf install ./libdisplay-info-0.3.0-2.sp11.1.fc45.aarch64.rpm
+```
+
+Log out and in; Settings, Displays then has the switch `HDR (High Dynamic Range)`. A later Fedora build of the
+package replaces the rebuild through `dnf upgrade`, and the switch goes with it until the rebuild is redone on
+that build. Back to Fedora's build:
+
+```bash
+sudo dnf downgrade libdisplay-info
+```
 
 ## Cameras
 

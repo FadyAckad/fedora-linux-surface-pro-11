@@ -1,0 +1,517 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Read-only probe of the Surface Pro 11's display path.
+
+Collects what decides whether a compositor can offer HDR on the built-in panel and what the link runs at:
+the connectors' KMS properties (Colorspace, HDR_OUTPUT_METADATA, max bpc), the atomic state and the DP
+driver's debug files from debugfs, the panel's DPCD (link rates, VSC SDP colorimetry support, eDP and
+backlight capabilities), the EDID's checksum, the backlight devices and the kernel log's display lines.
+
+It writes nothing but its report and changes no setting: the DRM properties are read with
+DRM_IOCTL_MODE_OBJ_GETPROPERTIES, which does not probe a connector, and the DPCD through the kernel's
+AUX character device of the eDP controller only.
+
+Usage: sudo python3 sp11-display-probe REPORT [--root DIR]
+  REPORT      the file to write
+  --root DIR  read /sys, /dev and /proc below DIR (a copy or a fake root; no root needed, no ioctl)
+"""
+import errno
+import fcntl
+import hashlib
+import os
+import re
+import stat
+import struct
+import subprocess
+import sys
+
+# include/uapi/drm/drm.h and drm_mode.h; the structures' sizes are in the formats' comments
+DRM_IOCTL_MODE_GETPROPERTY = 0xC04064AA
+DRM_IOCTL_MODE_GETPROPBLOB = 0xC01064AC
+DRM_IOCTL_MODE_OBJ_GETPROPERTIES = 0xC02064B9
+DRM_IOCTL_SET_CLIENT_CAP = 0x4010640D
+DRM_CLIENT_CAP_ATOMIC = 3
+DRM_MODE_OBJECT_CONNECTOR = 0xC0C0C0C0
+DRM_MODE_PROP_RANGE = 1 << 1
+DRM_MODE_PROP_IMMUTABLE = 1 << 2
+DRM_MODE_PROP_ENUM = 1 << 3
+DRM_MODE_PROP_BLOB = 1 << 4
+DRM_MODE_PROP_BITMASK = 1 << 5
+DRM_MODE_PROP_EXTENDED_TYPE = 0x0000FFC0
+DRM_MODE_PROP_OBJECT = 1 << 6
+DRM_MODE_PROP_SIGNED_RANGE = 2 << 6
+FMT_OBJ_GET_PROPERTIES = "=QQIII4x"        # struct drm_mode_obj_get_properties, 32 bytes
+FMT_GET_PROPERTY = "=QQII32sII"            # struct drm_mode_get_property, 64 bytes
+FMT_PROPERTY_ENUM = "=Q32s"                # struct drm_mode_property_enum, 40 bytes
+FMT_GET_BLOB = "=IIQ"                      # struct drm_mode_get_blob, 16 bytes
+FMT_SET_CLIENT_CAP = "=QQ"                 # struct drm_set_client_cap, 16 bytes
+FMT_HDR_OUTPUT_METADATA = "=IBB6H2HHHHH2x"  # struct hdr_output_metadata, 32 bytes
+
+EOTF = {0: "traditional gamma, SDR", 1: "traditional gamma, HDR", 2: "SMPTE ST 2084 (PQ)", 3: "HLG"}
+
+# (first register, length, name): the DPCD ranges read from the eDP panel
+DPCD_RANGES = [
+    (0x000, 16, "receiver capabilities"),
+    (0x010, 16, "supported link rates (eDP 1.4)"),
+    (0x060, 16, "DSC capabilities"),
+    (0x070, 2, "PSR capabilities"),
+    (0x100, 9, "link configuration"),
+    (0x115, 1, "link rate set"),
+    (0x170, 1, "PSR configuration"),
+    (0x200, 6, "sink and lane status"),
+    (0x340, 32, "vendor range 0x340 (HDR control on some timing controllers)"),
+    (0x700, 5, "eDP revision and general capabilities"),
+    (0x720, 4, "eDP display control and backlight"),
+    (0x732, 6, "eDP backlight limits and panel target luminance"),
+    (0x2200, 16, "extended receiver capabilities"),
+    (0x2210, 1, "DPRX feature enumeration list"),
+]
+
+
+class Report:
+    def __init__(self):
+        self.lines = []
+
+    def section(self, title):
+        self.lines.append("")
+        self.lines.append("== " + title)
+
+    def add(self, text=""):
+        for line in str(text).splitlines() or [""]:
+            self.lines.append(line.rstrip())
+
+    def text(self):
+        return "\n".join(self.lines).lstrip("\n") + "\n"
+
+
+def read_text(path, limit=65536):
+    try:
+        with open(path, "rb") as f:
+            return f.read(limit).decode("utf-8", "replace")
+    except OSError as e:
+        return "<%s>" % (e.strerror or e)
+
+
+def read_bytes(path, limit=65536):
+    try:
+        with open(path, "rb") as f:
+            return f.read(limit)
+    except OSError:
+        return None
+
+
+def hexdump(data, base=0):
+    out = []
+    for i in range(0, len(data), 16):
+        chunk = data[i:i + 16]
+        out.append("  %05x: %s" % (base + i, " ".join("%02x" % b for b in chunk)))
+    return "\n".join(out)
+
+
+def cstr(raw):
+    return raw.split(b"\0", 1)[0].decode("ascii", "replace")
+
+
+# --- DRM properties ---------------------------------------------------------------------------------
+
+def drm_ioctl(fd, request, buf):
+    """One ioctl on a bytearray; replaced by the self-test."""
+    fcntl.ioctl(fd, request, buf, True)
+
+
+def _addr(buf):
+    import ctypes
+    return ctypes.addressof((ctypes.c_char * len(buf)).from_buffer(buf))
+
+
+def get_blob(fd, blob_id, ioctl=None):
+    ioctl = ioctl or drm_ioctl
+    if not blob_id:
+        return b""
+    req = bytearray(struct.pack(FMT_GET_BLOB, blob_id, 0, 0))
+    ioctl(fd, DRM_IOCTL_MODE_GETPROPBLOB, req)
+    length = struct.unpack(FMT_GET_BLOB, req)[1]
+    if not length:
+        return b""
+    data = bytearray(length)
+    req = bytearray(struct.pack(FMT_GET_BLOB, blob_id, length, _addr(data)))
+    ioctl(fd, DRM_IOCTL_MODE_GETPROPBLOB, req)
+    return bytes(data[:struct.unpack(FMT_GET_BLOB, req)[1]])
+
+
+def get_property(fd, prop_id, ioctl=None):
+    """Name, flags, values and enum names of one property."""
+    ioctl = ioctl or drm_ioctl
+    req = bytearray(struct.pack(FMT_GET_PROPERTY, 0, 0, prop_id, 0, b"", 0, 0))
+    ioctl(fd, DRM_IOCTL_MODE_GETPROPERTY, req)
+    _, _, _, flags, name, n_values, n_enums = struct.unpack(FMT_GET_PROPERTY, req)
+    values = bytearray(8 * n_values)
+    enums = bytearray(struct.calcsize(FMT_PROPERTY_ENUM) * n_enums)
+    is_enum = bool(flags & (DRM_MODE_PROP_ENUM | DRM_MODE_PROP_BITMASK))
+    req = bytearray(struct.pack(FMT_GET_PROPERTY, _addr(values) if n_values else 0,
+                                _addr(enums) if (n_enums and is_enum) else 0, prop_id, 0, b"",
+                                n_values, n_enums if is_enum else 0))
+    ioctl(fd, DRM_IOCTL_MODE_GETPROPERTY, req)
+    _, _, _, flags, name, n_values2, n_enums2 = struct.unpack(FMT_GET_PROPERTY, req)
+    vals = list(struct.unpack("=%dQ" % min(n_values, n_values2), values[:8 * min(n_values, n_values2)]))
+    names = {}
+    if is_enum:
+        size = struct.calcsize(FMT_PROPERTY_ENUM)
+        for i in range(min(n_enums, n_enums2)):
+            value, raw = struct.unpack_from(FMT_PROPERTY_ENUM, enums, i * size)
+            names[value] = cstr(raw)
+    return cstr(name), flags, vals, names
+
+
+def connector_properties(fd, connector_id, ioctl=None):
+    """[(name, flags, values, enum names, current value)] of a connector, without probing it."""
+    ioctl = ioctl or drm_ioctl
+    req = bytearray(struct.pack(FMT_OBJ_GET_PROPERTIES, 0, 0, 0, connector_id, DRM_MODE_OBJECT_CONNECTOR))
+    ioctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES, req)
+    count = struct.unpack(FMT_OBJ_GET_PROPERTIES, req)[2]
+    if not count:
+        return []
+    ids = bytearray(4 * count)
+    vals = bytearray(8 * count)
+    req = bytearray(struct.pack(FMT_OBJ_GET_PROPERTIES, _addr(ids), _addr(vals), count, connector_id,
+                                DRM_MODE_OBJECT_CONNECTOR))
+    ioctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES, req)
+    count = min(count, struct.unpack(FMT_OBJ_GET_PROPERTIES, req)[2])
+    out = []
+    for prop_id, value in zip(struct.unpack("=%dI" % count, ids[:4 * count]),
+                              struct.unpack("=%dQ" % count, vals[:8 * count])):
+        name, flags, values, names = get_property(fd, prop_id, ioctl)
+        out.append((name, flags, values, names, value))
+    return out
+
+
+def describe_hdr_metadata(blob):
+    if len(blob) < struct.calcsize(FMT_HDR_OUTPUT_METADATA):
+        return "blob of %d bytes (shorter than a static metadata type 1 block)" % len(blob)
+    f = struct.unpack_from(FMT_HDR_OUTPUT_METADATA, blob)
+    kind, eotf, kind1 = f[0], f[1], f[2]
+    prim, white = f[3:9], f[9:11]
+    max_dml, min_dml, max_cll, max_fall = f[11:15]
+    return ("metadata type %d/%d, EOTF %d (%s), primaries %s, white point %s, mastering luminance "
+            "%d cd/m2 max and %.4f cd/m2 min, MaxCLL %d, MaxFALL %d"
+            % (kind, kind1, eotf, EOTF.get(eotf, "unknown"),
+               " ".join("(%.4f, %.4f)" % (prim[i] / 50000.0, prim[i + 1] / 50000.0) for i in (0, 2, 4)),
+               "(%.4f, %.4f)" % (white[0] / 50000.0, white[1] / 50000.0),
+               max_dml, min_dml / 10000.0, max_cll, max_fall))
+
+
+def describe_property(fd, prop, ioctl=None):
+    name, flags, values, names, value = prop
+    kind = flags & DRM_MODE_PROP_EXTENDED_TYPE
+    immutable = " (immutable)" if flags & DRM_MODE_PROP_IMMUTABLE else ""
+    if flags & DRM_MODE_PROP_ENUM:
+        return "%s%s = %s; values: %s" % (name, immutable, names.get(value, value),
+                                          ", ".join(names[v] for v in sorted(names)))
+    if flags & DRM_MODE_PROP_BITMASK:
+        return "%s%s = 0x%x; bits: %s" % (name, immutable, value,
+                                          ", ".join(names[v] for v in sorted(names)))
+    if flags & DRM_MODE_PROP_BLOB:
+        text = "%s%s = blob %d" % (name, immutable, value)
+        if value:
+            try:
+                blob = get_blob(fd, value, ioctl)
+            except OSError as e:
+                return text + " (unreadable: %s)" % e.strerror
+            text += ", %d bytes" % len(blob)
+            if name == "HDR_OUTPUT_METADATA":
+                text += ": " + describe_hdr_metadata(blob)
+            elif name == "EDID":
+                text += ", sha256 " + hashlib.sha256(blob).hexdigest()
+        return text
+    if flags & DRM_MODE_PROP_RANGE or kind == DRM_MODE_PROP_SIGNED_RANGE:
+        if kind == DRM_MODE_PROP_SIGNED_RANGE:
+            signed = [v - (1 << 64) if v >> 63 else v for v in values + [value]]
+            values, value = signed[:-1], signed[-1]
+        return "%s%s = %d; range %s" % (name, immutable, value, " to ".join(str(v) for v in values))
+    if kind == DRM_MODE_PROP_OBJECT:
+        return "%s%s = object %d" % (name, immutable, value)
+    return "%s%s = %d (flags 0x%x)" % (name, immutable, value, flags)
+
+
+def probe_properties(rep, root, sandbox):
+    rep.section("Connectors and their KMS properties")
+    drm = os.path.join(root, "sys/class/drm")
+    try:
+        entries = sorted(os.listdir(drm))
+    except OSError as e:
+        rep.add("no %s: %s" % (drm, e.strerror))
+        return
+    cards = [e for e in entries if re.fullmatch(r"card\d+", e)]
+    if not cards:
+        rep.add("no DRM card")
+    for card in cards:
+        driver = os.path.basename(os.path.realpath(os.path.join(drm, card, "device/driver")))
+        rep.add("%s: driver %s" % (card, driver))
+        fd = None
+        dev = os.path.join(root, "dev/dri", card)
+        if sandbox:
+            rep.add("  (sandbox: no ioctl on %s)" % dev)
+        else:
+            try:
+                fd = os.open(dev, os.O_RDWR | os.O_CLOEXEC)
+                if not stat.S_ISCHR(os.fstat(fd).st_mode):
+                    raise OSError(errno.ENOTTY, "not a character device")
+                try:
+                    drm_ioctl(fd, DRM_IOCTL_SET_CLIENT_CAP,
+                              bytearray(struct.pack(FMT_SET_CLIENT_CAP, DRM_CLIENT_CAP_ATOMIC, 1)))
+                except OSError:
+                    pass
+            except OSError as e:
+                rep.add("  cannot use %s: %s" % (dev, e.strerror))
+                if fd is not None:
+                    os.close(fd)
+                fd = None
+        for conn in [e for e in entries if e.startswith(card + "-")]:
+            base = os.path.join(drm, conn)
+            fields = ["status %s" % read_text(os.path.join(base, "status")).strip(),
+                      "enabled %s" % read_text(os.path.join(base, "enabled")).strip()]
+            edid = read_bytes(os.path.join(base, "edid"))
+            if edid:
+                fields.append("EDID %d bytes, sha256 %s" % (len(edid), hashlib.sha256(edid).hexdigest()))
+            modes = read_text(os.path.join(base, "modes")).split()
+            if modes and not modes[0].startswith("<"):
+                fields.append("modes %s" % " ".join(sorted(set(modes), key=modes.index)[:6]))
+            rep.add("  %s: %s" % (conn[len(card) + 1:], "; ".join(fields)))
+            cid = read_text(os.path.join(base, "connector_id")).strip()
+            if fd is None or not cid.isdigit():
+                continue
+            try:
+                for prop in connector_properties(fd, int(cid)):
+                    rep.add("    " + describe_property(fd, prop))
+            except OSError as e:
+                rep.add("    properties unreadable: %s" % e.strerror)
+        if fd is not None:
+            os.close(fd)
+
+
+# --- debugfs ----------------------------------------------------------------------------------------
+
+def probe_debugfs(rep, root):
+    rep.section("Atomic state (debugfs)")
+    dri = os.path.join(root, "sys/kernel/debug/dri")
+    try:
+        devs = sorted(os.listdir(dri))
+    except OSError as e:
+        rep.add("no %s: %s" % (dri, e.strerror))
+        return
+    seen = set()
+    for dev in devs:
+        path = os.path.join(dri, dev)
+        real = os.path.realpath(path)
+        if real in seen or not os.path.isdir(path):
+            continue
+        seen.add(real)
+        state = os.path.join(path, "state")
+        if os.path.exists(state):
+            rep.add("%s/state:" % dev)
+            keep = re.compile(r"^(plane\[|crtc\[|connector\[|encoder\[|\s+(crtc=|fb=|format=|size=|"
+                              r"allocated by|crtc-pos|src-pos|enable=|active=|self_refresh|mode:|"
+                              r"mode_changed|connectors_changed|colorspace|max_requested_bpc|"
+                              r"interlace_allowed|ycbcr_420|color_mgmt|bridge))")
+            for line in read_text(state, 262144).splitlines():
+                if keep.match(line):
+                    rep.add("  " + line)
+    rep.section("DP driver debug files (debugfs)")
+    found = False
+    for dev in devs:
+        path = os.path.join(dri, dev)
+        if os.path.realpath(path) != path and not re.fullmatch(r"\d+", dev):
+            continue
+        for dirpath, _dirs, files in os.walk(path):
+            for name in sorted(files):
+                if name.startswith("dp_debug") or name in ("msm_dp_test_active", "msm_dp_test_type"):
+                    found = True
+                    rel = os.path.relpath(os.path.join(dirpath, name), dri)
+                    rep.add("%s:" % rel)
+                    rep.add("  " + read_text(os.path.join(dirpath, name)).rstrip().replace("\n", "\n  "))
+    if not found:
+        rep.add("none found")
+    rep.section("Connector directories in debugfs (file names)")
+    for dev in devs:
+        path = os.path.join(dri, dev)
+        if not re.fullmatch(r"\d+", dev) or not os.path.isdir(path):
+            continue
+        for name in sorted(os.listdir(path)):
+            sub = os.path.join(path, name)
+            if os.path.isdir(sub) and re.match(r"(eDP|DP|HDMI|DSI)-", name):
+                rep.add("%s/%s: %s" % (dev, name, " ".join(sorted(os.listdir(sub)))))
+
+
+# --- DPCD -------------------------------------------------------------------------------------------
+
+def edp_aux_devices(root):
+    """AUX character devices whose controller has an aux-bus child in the device tree: the eDP ones."""
+    base = os.path.join(root, "sys/class/drm_dp_aux_dev")
+    out = []
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return out
+    for name in names:
+        dev = os.path.join(base, name)
+        if os.path.isdir(os.path.join(dev, "device/of_node/aux-bus")):
+            out.append((name, os.path.basename(os.path.realpath(os.path.join(dev, "device")))))
+    return out
+
+
+def read_dpcd(path, first, length):
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        return os.pread(fd, length, first)
+    finally:
+        os.close(fd)
+
+
+def decode_dpcd(rep, regs):
+    def reg(addr):
+        for first, data in regs.items():
+            if first <= addr < first + len(data):
+                return data[addr - first]
+        return None
+
+    rev = reg(0x000)
+    if rev is not None:
+        rep.add("  DPCD revision %d.%d; MAX_LINK_RATE 0x%02x (%s); MAX_LANE_COUNT %d"
+                % (rev >> 4, rev & 15, reg(0x001),
+                   "%.2f Gbit/s per lane" % (reg(0x001) * 0.27) if reg(0x001) else "none: see the rate table",
+                   reg(0x002) & 0x1F))
+    table = regs.get(0x010)
+    if table:
+        rates = [struct.unpack_from("<H", table, i)[0] * 200 for i in range(0, len(table) - 1, 2)]
+        rates = [r for r in rates if r]
+        rep.add("  supported link rates: %s"
+                % (", ".join("%.2f Gbit/s" % (r / 1e6) for r in rates) if rates else "table empty"))
+    if reg(0x100) is not None:
+        rep.add("  link now: LINK_BW_SET 0x%02x%s, LINK_RATE_SET %s, %d lanes"
+                % (reg(0x100), " (%.2f Gbit/s per lane)" % (reg(0x100) * 0.27) if reg(0x100) else "",
+                   reg(0x115) if reg(0x115) is not None else "?", reg(0x101) & 0x1F))
+    if reg(0x060) is not None:
+        rep.add("  DSC decoding: %s" % ("supported" if reg(0x060) & 1 else "not supported"))
+    if reg(0x070) is not None:
+        rep.add("  PSR: support 0x%02x, capabilities 0x%02x; enabled now: %s"
+                % (reg(0x070), reg(0x071), "?" if reg(0x170) is None else ("yes" if reg(0x170) & 1 else "no")))
+    if reg(0x2210) is not None:
+        rep.add("  DPRX feature list 0x%02x: VSC SDP extension for colorimetry %s"
+                % (reg(0x2210), "supported" if reg(0x2210) & 0x08 else "not supported"))
+    if reg(0x700) is not None:
+        names = {0: "1.1 or lower", 1: "1.2", 2: "1.3", 3: "1.4", 4: "1.4a", 5: "1.4b", 6: "1.5"}
+        rep.add("  eDP revision register 0x%02x (eDP %s); general capabilities 0x%02x 0x%02x 0x%02x; "
+                "backlight adjustment capabilities 0x%02x"
+                % (reg(0x700), names.get(reg(0x700), "?"), reg(0x701), reg(0x703), reg(0x704), reg(0x702)))
+        rep.add("  backlight: AUX enable %s, AUX brightness %s, panel luminance control (eDP 1.5) %s"
+                % ("yes" if reg(0x701) & 0x04 else "no", "yes" if reg(0x702) & 0x02 else "no",
+                   "yes" if reg(0x704) & 0x10 else "no"))
+
+
+def probe_dpcd(rep, root):
+    rep.section("DPCD of the eDP panel (AUX character device)")
+    devices = edp_aux_devices(root)
+    if not devices:
+        rep.add("no AUX device of an eDP controller found; nothing read. The AUX devices and their controllers:")
+        base = os.path.join(root, "sys/class/drm_dp_aux_dev")
+        try:
+            names = sorted(os.listdir(base))
+        except OSError:
+            names = []
+        for name in names:
+            rep.add("  %s -> %s" % (name, os.path.realpath(os.path.join(base, name, "device"))))
+        if not names:
+            rep.add("  none")
+        return
+    for name, controller in devices:
+        rep.add("%s (%s):" % (name, controller))
+        path = os.path.join(root, "dev", name)
+        regs = {}
+        for first, length, title in DPCD_RANGES:
+            try:
+                data = read_dpcd(path, first, length)
+            except OSError as e:
+                rep.add("  0x%03x %s: unreadable (%s)" % (first, title, e.strerror))
+                if first == 0:
+                    break
+                continue
+            regs[first] = data
+            rep.add("  %s:" % title)
+            rep.add(hexdump(data, first))
+        if regs:
+            rep.add("  decoded:")
+            decode_dpcd(rep, regs)
+
+
+# --- the rest ---------------------------------------------------------------------------------------
+
+def probe_backlight(rep, root):
+    rep.section("Backlight devices")
+    base = os.path.join(root, "sys/class/backlight")
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        names = []
+    if not names:
+        rep.add("none")
+    for name in names:
+        vals = ["%s %s" % (f, read_text(os.path.join(base, name, f)).strip())
+                for f in ("type", "max_brightness", "brightness", "actual_brightness", "bl_power")]
+        rep.add("%s: %s" % (name, "; ".join(vals)))
+
+
+def run(cmd, timeout=30):
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        return p.stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return "<%s: %s>" % (cmd[0], e)
+
+
+def probe_system(rep, root, sandbox):
+    rep.section("System")
+    rep.add("kernel %s" % read_text(os.path.join(root, "proc/sys/kernel/osrelease")).strip())
+    rep.add("command line %s" % read_text(os.path.join(root, "proc/cmdline")).strip())
+    if sandbox:
+        return
+    rep.add(run(["rpm", "-q", "mutter", "gnome-shell", "gnome-control-center", "libdisplay-info",
+                 "mesa-dri-drivers", "kwin"]).rstrip())
+    rep.section("Kernel log: display lines with a warning or an error")
+    log = run(["journalctl", "-k", "-b", "--no-pager", "-o", "short-monotonic"], 60)
+    area = re.compile(r"msm|dpu|drm|edp|displayport|\bdp[_ -]|panel|atna|backlight", re.I)
+    bad = re.compile(r"error|fail|warn|timed? ?out|underrun|unable|invalid|refus|cannot|link train|\*ERROR\*", re.I)
+    lines = [ln for ln in log.splitlines() if area.search(ln) and bad.search(ln)]
+    rep.add("\n".join(lines[-80:]) if lines else "none")
+
+
+def main(argv):
+    args = argv[1:]
+    root = "/"
+    if "--root" in args:
+        i = args.index("--root")
+        if i + 1 >= len(args):
+            sys.exit("--root needs a directory")
+        root = args[i + 1]
+        del args[i:i + 2]
+    if len(args) != 1 or args[0].startswith("-"):
+        sys.exit(__doc__.strip().split("\n\n")[-1])
+    sandbox = os.path.realpath(root) != "/"
+    if not sandbox and os.geteuid() != 0:
+        sys.exit("run as root (debugfs and the AUX device need it): sudo python3 %s %s" % (argv[0], args[0]))
+    rep = Report()
+    rep.add("Surface Pro 11 display probe")
+    probe_system(rep, root, sandbox)
+    probe_properties(rep, root, sandbox)
+    probe_debugfs(rep, root)
+    probe_dpcd(rep, root)
+    probe_backlight(rep, root)
+    with open(args[0], "w", encoding="utf-8") as f:
+        f.write(rep.text())
+    owner = os.environ.get("SUDO_UID"), os.environ.get("SUDO_GID")
+    if not sandbox and all(v and v.isdigit() for v in owner):
+        os.chown(args[0], int(owner[0]), int(owner[1]))
+    print("wrote %s (%d lines)" % (args[0], len(rep.lines)))
+
+
+if __name__ == "__main__":
+    main(sys.argv)

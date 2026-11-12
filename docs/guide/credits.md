@@ -39,6 +39,11 @@ version 3 or later (`LICENSE`). Everything third-party is downloaded and package
   The approach follows [denisix/ubuntu-surface-pro-11](https://github.com/denisix/ubuntu-surface-pro-11). The
   sensor configuration and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files
   copied from your own Windows installation at build time, like the firmware below.
+- Display (HDR): the kernel's DisplayPort HDR commits are Xilin Wu's series from the kernel mailing lists (GPL-2.0
+  like the kernel; [`docs/kernel-patches.md`](../kernel-patches.md), 7.3.3 revision 3). Fedora's
+  `libdisplay-info` source RPM (MIT) is rebuilt with eleven commits of its upstream,
+  [emersion/libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info), by Simon Ser
+  (`payload/display/libdisplay-info/`).
 - GPS (5G SKU): the 5G device tree follows the PCIe 5 wiring of Qualcomm's reference design in the kernel
   (`x1-crd.dtsi`), as Windows' ACPI tables describe it. `sp11-gnss` speaks the modem's location service from the
   message layouts of Qualcomm's LOC interface, `location_service_v02.h` in the open `loc_api_v02` sources (The

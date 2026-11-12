@@ -257,6 +257,30 @@ after their trailers that names the source and the change.
   (`docs/sleep.md`). Pushed the same day as `sp11/7.3.3` (head `476df635`, tree `9eb147a1`, the tree the kernel
   was built from), signed in place in the submodule without a clone of the fork.
 
+### 7.3.3 revision 3: HDR on DisplayPort and eDP
+
+- 0090–0111: 22 commits by Xilin Wu, carried from the mailing list and not merged upstream: the series
+  "drm/msm/dp: Add static HDR support for DP and eDP" in its second version of 2026-10-09 (0092–0111,
+  `20261009-msm-dp-hdr10-v2-0-1835d4966da3@radxa.com`) and two fixes of its first version that the second
+  builds on (0090, in msm-next as `62c6146e5fde`, and 0091). Each commit's `[sp11: ...]` note names its posting.
+- What they add: the connector properties `max bpc`, `Colorspace` and `HDR_OUTPUT_METADATA` on DP and eDP, the
+  BT.2020 VSC packet and the HDR static metadata packet, 10 bits per colour as the condition for HDR, HDR
+  streams kept out of PSR. On the way they rework the stream enable, the PHY's power bookkeeping and the read of
+  an eDP panel's capabilities; outside the msm driver, 0092–0094 let the bridge connector attach `max bpc` to a
+  non-HDMI chain.
+- Adapted where they meet SP11 patches: 0099 and 0100 keep 0033's delayed clock defaults between the PHY's
+  power-on and the link clocks, and a failure there powers the PHY off; 0102 keeps 0036's link-rate quirk ahead
+  of the capability read; 0107 lets 0026 choose the direct SDP flush only while PSR is enabled, so a stream
+  outside PSR keeps the peripheral flush that latches its packets.
+- Upstream on 2026-11-12: under review, with changes asked for on the `max bpc` handling in the bridge chain and
+  on the video test and VSC flush patches. The next rebase takes upstream's current version.
+- No configuration change: the built configuration is revision 2's, and the four module packages hold the same
+  modules.
+- Passed its device round on 2026-11-12: the standard checks, nine switches between SDR and HDR, seven suspends
+  with HDR on, 8 hours asleep at 0.31 W with the memory asleep 27167 of 28951 s (`docs/verified.md`,
+  `docs/display.md`). Pushed the same day: `sp11/7.3.3` moved forward by the 22 commits (head `fe43e1a3`, tree
+  `5aa74d68`, the tree the kernel was built from), signed in place in the submodule.
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -314,6 +338,9 @@ The patches by number, with their origin and what each is needed for.
 | 0087 | QRTR SMD: the probe's send lock released before a failed open's unregistration | this repository | boots that sat 212 s in dracut-initqueue and ran without battery, Wi-Fi and sensors (0006's deadlock) |
 | 0088 | Denali device tree: the crypto engine's node disabled | this repository | no user of the interconnect without a driver, since 7.3 marks the engine's driver `BROKEN` (`docs/kernel.md`, Sync state and the CDSP) |
 | 0089 | X1E80100 pin controller: GPIO wake interrupts stay on the TLMM summary interrupt, not the PDC (7.2's state) | this repository | a suspend with the lid open that holds; 7.3's PDC wake path woke it at once (`docs/sleep.md`) |
+| 0090, 0091 | DP: hot-plug state updates serialized, the debugfs connector pointer initialized | Xilin Wu (posted 2026-09-30; 0090 in msm-next) | prerequisites of 0092–0111 |
+| 0092–0094 | DRM core: `max bpc` attached before a connector has a state, and by the bridge connector for non-HDMI chains | Xilin Wu (posted 2026-10-09) | 10 bits per colour on DP and eDP |
+| 0095–0111 | DP and eDP: the output bit depth, the BT.2020 VSC packet, the HDR static metadata packet, `Colorspace` and `HDR_OUTPUT_METADATA`; stream enable, PHY power and the eDP capability read reworked | Xilin Wu (posted 2026-10-09) | HDR (`docs/display.md`) |
 
 ## Left out of v23.2
 

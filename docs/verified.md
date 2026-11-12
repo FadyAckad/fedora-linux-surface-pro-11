@@ -377,3 +377,28 @@ One entry per round; the facts each established live in the topic notes.
   and the controller carrying the configured address.
 - By hand (owner): the menu and its editor show every underscore and the letters complete at size 32; the
   Bluetooth keyboard and pen connect.
+
+## Kernel 7.3.3 revision 3 and libdisplay-info 0.3.0-2.sp11.1: HDR (2026-11-12)
+
+- Installed: the kernel RPMs `7.3.3-300.sp11.3.fc45` (revision 2 plus 0090–0111, the DisplayPort HDR series),
+  `dnf install` next to revision 2 (dnf removed 7.2.15 revision 2, the oldest of four kernels), and
+  `libdisplay-info` `0.3.0-2.sp11.1.fc45` over Fedora's `0.3.0-2.fc45`, under mutter and gnome-shell 51.1.
+- Confirmed, HDR: `max bpc`, `Colorspace` and `HDR_OUTPUT_METADATA` on eDP-1, DP-1 and DP-2, and mutter listing
+  `bt2100`, where revision 2 with Fedora's library had neither; HDR on with `Colorspace = BT2020_RGB`, the PQ
+  metadata blob and an XR30 plane at 30 bits per pixel on four 8.1 Gbit/s lanes; nine switches between SDR and
+  HDR in all; seven suspends with HDR on, the session back in `bt2100`; no DisplayPort, DPU or panel error in the
+  kernel log of five boots (`docs/display.md`).
+- Confirmed: the standard checks (the proxy at orientation `normal`, 5 lux and a compass heading; the CDSP after
+  three reboots); eight suspends from the Power menu, the lid and for the long sleep, all `deep`; 8 h 2 min
+  asleep with HDR on at 0.31 W (35.82 to 33.33 Wh, 72 to 67 %), the memory in its low-power state 27167 of
+  28951 s, one suspend entry and exit, no wake.
+- By hand (owner): every by-hand check of the round passed: the feature table's rows in use, the cameras and the
+  front camera's light, the microphone, the screen back after three lock-screen blankings, and in HDR the
+  brightness keys and slider, colours, a screenshot and Night Light. An external display was not tried.
+- Found: rotating the tablet switches HDR off, a mutter 51.1 defect fixed upstream for 51.2 (`docs/display.md`,
+  Known issues). One suspend of ten, started 20 s after a wake, was refused by the Surface Aggregator's hub,
+  whose display-off notice to the EC timed out (`ssam_serial_hub_pm_prepare` returns -110 after 9 s), and
+  systemd slept in `s2idle` instead (`docs/sleep.md`). One of five boots logged a GPU hang at login that
+  recovered by itself (the bandwidth vote's timeout, then `hangcheck recover`; `docs/display.md`, Known issues).
+  The long sleep drew 0.31 W against revision 2's 0.25 W with the same share of memory sleep; one sleep each,
+  the difference is not explained.

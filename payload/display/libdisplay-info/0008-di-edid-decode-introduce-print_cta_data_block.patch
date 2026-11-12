@@ -1,0 +1,353 @@
+From 80caacc0cde1fa1617631a924c97d3964f4d3076 Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Thu, 9 Oct 2025 18:29:28 +0200
+Subject: [PATCH] di-edid-decode: introduce print_cta_data_block()
+
+This will be re-used by DisplayID v2.
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+[sp11: hunk positions as they apply to 0.3.0; the changed lines are upstream's]
+
+ di-edid-decode/cta.c     | 272 ++++++++++++++++++++-------------------
+ include/di-edid-decode.h |   4 +
+ 2 files changed, 141 insertions(+), 135 deletions(-)
+
+diff --git a/di-edid-decode/cta.c b/di-edid-decode/cta.c
+index 5207e90..b13f612 100644
+--- a/di-edid-decode/cta.c
++++ b/di-edid-decode/cta.c
+@@ -676,18 +676,15 @@ print_cta_sads(const struct di_cta_sad *const *sads)
+ }
+ 
+ static void
+-print_ycbcr420_cap_map(const struct di_edid_cta *cta,
+-		       const struct di_cta_ycbcr420_cap_map_block *map)
++print_ycbcr420_cap_map(const struct di_cta_ycbcr420_cap_map_block *map,
++		       const struct di_cta_data_block *const *data_blocks)
+ {
+-	const struct di_cta_data_block *const *data_blocks;
+ 	const struct di_cta_data_block *data_block;
+ 	enum di_cta_data_block_tag tag;
+ 	const struct di_cta_svd *const *svds;
+ 	size_t global_svd_index, block_index_offset = 0;
+ 	size_t i, j;
+ 
+-	data_blocks = di_edid_cta_get_data_blocks(cta);
+-
+ 	for (i = 0; data_blocks[i] != NULL; i++) {
+ 		data_block = data_blocks[i];
+ 
+@@ -1353,11 +1350,9 @@ video_cap_over_underscan_name(enum di_cta_video_cap_over_underscan over_undersca
+ }
+ 
+ void
+-print_cta(const struct di_edid_cta *cta)
++print_cta_data_block(const struct di_cta_data_block *data_block,
++		     const struct di_cta_data_block *const *data_blocks)
+ {
+-	const struct di_edid_cta_flags *cta_flags;
+-	const struct di_cta_data_block *const *data_blocks;
+-	const struct di_cta_data_block *data_block;
+ 	enum di_cta_data_block_tag data_block_tag;
+ 	const struct di_cta_svd *const *svds;
+ 	const struct di_cta_speaker_alloc_block *speaker_alloc;
+@@ -1371,7 +1366,6 @@ print_cta(const struct di_edid_cta *cta)
+ 	const struct di_cta_ycbcr420_cap_map_block *ycbcr420_cap_map;
+ 	const struct di_cta_infoframe_block *infoframe;
+ 	const struct di_cta_video_format_pref_block *video_format_pref;
+-	const struct di_edid_detailed_timing_def *const *detailed_timing_defs;
+ 	const struct di_cta_type_vii_timing_block *type_vii_timing;
+ 	const struct di_cta_hdmi_audio_block *hdmi_audio;
+ 	const struct di_cta_vendor_hdmi_block *vendor_hdmi;
+@@ -1379,9 +1373,140 @@ print_cta(const struct di_edid_cta *cta)
+ 	const struct di_cta_dolby_video_block *dolby_video;
+ 	const struct di_cta_hdmi_forum_sink_cap *hdmi_sink_cap;
+ 	const struct di_cta_vendor_hdmi_forum_block *hdmi_forum;
+-	size_t i;
+ 	int vtdb_index = 0;
+ 
++	data_block_tag = di_cta_data_block_get_tag(data_block);
++	printf("  %s:\n", cta_data_block_tag_name(data_block_tag));
++
++	switch (data_block_tag) {
++	case DI_CTA_DATA_BLOCK_VIDEO:
++		svds = di_cta_data_block_get_video(data_block)->svds;
++		printf_cta_svds(svds);
++		break;
++	case DI_CTA_DATA_BLOCK_YCBCR420:
++		svds = di_cta_data_block_get_ycbcr420_video (data_block)->svds;
++		printf_cta_svds(svds);
++		break;
++	case DI_CTA_DATA_BLOCK_SPEAKER_ALLOC:
++		speaker_alloc = di_cta_data_block_get_speaker_alloc(data_block);
++		print_speaker_alloc(&speaker_alloc->speakers, "    ");
++		break;
++	case DI_CTA_DATA_BLOCK_VIDEO_CAP:
++		video_cap = di_cta_data_block_get_video_cap(data_block);
++		printf("    YCbCr quantization: %s\n",
++		       video_cap->selectable_ycc_quantization_range ?
++		       "Selectable (via AVI YQ)" : "No Data");
++		printf("    RGB quantization: %s\n",
++		       video_cap->selectable_rgb_quantization_range ?
++		       "Selectable (via AVI Q)" : "No Data");
++		printf("    PT scan behavior: %s\n",
++		       video_cap_over_underscan_name(video_cap->pt_over_underscan,
++						     "No Data"));
++		printf("    IT scan behavior: %s\n",
++		       video_cap_over_underscan_name(video_cap->it_over_underscan,
++						     "IT video formats not supported"));
++		printf("    CE scan behavior: %s\n",
++		       video_cap_over_underscan_name(video_cap->ce_over_underscan,
++						     "CE video formats not supported"));
++		break;
++	case DI_CTA_DATA_BLOCK_VESA_DISPLAY_DEVICE:
++		vesa_display_device = di_cta_data_block_get_vesa_display_device(data_block);
++		print_cta_vesa_display_device(vesa_display_device);
++		break;
++	case DI_CTA_DATA_BLOCK_COLORIMETRY:
++		colorimetry = di_cta_data_block_get_colorimetry(data_block);
++		if (colorimetry->xvycc_601)
++			printf("    xvYCC601\n");
++		if (colorimetry->xvycc_709)
++			printf("    xvYCC709\n");
++		if (colorimetry->sycc_601)
++			printf("    sYCC601\n");
++		if (colorimetry->opycc_601)
++			printf("    opYCC601\n");
++		if (colorimetry->oprgb)
++			printf("    opRGB\n");
++		if (colorimetry->bt2020_cycc)
++			printf("    BT2020cYCC\n");
++		if (colorimetry->bt2020_ycc)
++			printf("    BT2020YCC\n");
++		if (colorimetry->bt2020_rgb)
++			printf("    BT2020RGB\n");
++		if (colorimetry->ictcp)
++			printf("    ICtCp\n");
++		if (colorimetry->st2113_rgb)
++			printf("    ST2113RGB\n");
++		break;
++	case DI_CTA_DATA_BLOCK_HDR_STATIC_METADATA:
++		hdr_static_metadata = di_cta_data_block_get_hdr_static_metadata(data_block);
++		print_cta_hdr_static_metadata(hdr_static_metadata);
++		break;
++	case DI_CTA_DATA_BLOCK_HDR_DYNAMIC_METADATA:
++		hdr_dynamic_metadata = di_cta_data_block_get_hdr_dynamic_metadata(data_block);
++		print_cta_hdr_dynamic_metadata(hdr_dynamic_metadata);
++		break;
++	case DI_CTA_DATA_BLOCK_VESA_DISPLAY_TRANSFER_CHARACTERISTIC:
++		transfer_characteristics = di_cta_data_block_get_vesa_transfer_characteristics(data_block);
++		print_cta_vesa_transfer_characteristics(transfer_characteristics);
++		break;
++	case DI_CTA_DATA_BLOCK_AUDIO:
++		sads = di_cta_data_block_get_audio(data_block)->sads;
++		print_cta_sads(sads);
++		break;
++	case DI_CTA_DATA_BLOCK_YCBCR420_CAP_MAP:
++		ycbcr420_cap_map = di_cta_data_block_get_ycbcr420_cap_map(data_block);
++		print_ycbcr420_cap_map(ycbcr420_cap_map, data_blocks);
++		break;
++	case DI_CTA_DATA_BLOCK_INFOFRAME:
++		infoframe = di_cta_data_block_get_infoframe(data_block);
++		printf("    VSIFs: %d\n", infoframe->num_simultaneous_vsifs - 1);
++		print_infoframes(infoframe->infoframes);
++		break;
++	case DI_CTA_DATA_BLOCK_VIDEO_FORMAT_PREF:
++		video_format_pref = di_cta_data_block_get_video_format_pref(data_block);
++		printf_cta_svrs(video_format_pref->svrs);
++		break;
++	case DI_CTA_DATA_BLOCK_DISPLAYID_VIDEO_TIMING_VII:
++		type_vii_timing = di_cta_data_block_get_did_type_vii_timing(data_block);
++		print_did_type_vii_timing(type_vii_timing->timing, vtdb_index);
++		vtdb_index++;
++		break;
++	case DI_CTA_DATA_BLOCK_HDMI_AUDIO:
++		hdmi_audio = di_cta_data_block_get_hdmi_audio(data_block);
++		print_hdmi_audio(hdmi_audio);
++		break;
++	case DI_CTA_DATA_BLOCK_VENDOR_HDMI:
++		vendor_hdmi = di_cta_data_block_get_vendor_hdmi(data_block);
++		print_cta_hdmi(vendor_hdmi);
++		break;
++	case DI_CTA_DATA_BLOCK_HDR10PLUS:
++		hdr10plus = di_cta_data_block_get_hdr10plus(data_block);
++		print_cta_hdr10plus(hdr10plus);
++		break;
++	case DI_CTA_DATA_BLOCK_DOLBY_VIDEO:
++		dolby_video = di_cta_data_block_get_dolby_video(data_block);
++		print_cta_dolby_video(dolby_video);
++		break;
++	case DI_CTA_DATA_BLOCK_HDMI_SINK_CAP:
++		hdmi_sink_cap = di_cta_data_block_get_hdmi_sink_cap(data_block);
++		print_cta_hdmi_scds(&hdmi_sink_cap->scds);
++		break;
++	case DI_CTA_DATA_BLOCK_VENDOR_HDMI_FORUM:
++		hdmi_forum = di_cta_data_block_get_vendor_hdmi_forum(data_block);
++		print_cta_hdmi_scds(&hdmi_forum->scds);
++		break;
++	default:
++		break; /* Ignore */
++	}
++}
++
++void
++print_cta(const struct di_edid_cta *cta)
++{
++	const struct di_edid_cta_flags *cta_flags;
++	const struct di_cta_data_block *const *data_blocks;
++	const struct di_edid_detailed_timing_def *const *detailed_timing_defs;
++	size_t i;
++
+ 	printf("  Revision: %d\n", di_edid_cta_get_revision(cta));
+ 
+ 	cta_flags = di_edid_cta_get_flags(cta);
+@@ -1401,130 +1526,7 @@ print_cta(const struct di_edid_cta *cta)
+ 
+ 	data_blocks = di_edid_cta_get_data_blocks(cta);
+ 	for (i = 0; data_blocks[i] != NULL; i++) {
+-		data_block = data_blocks[i];
+-
+-		data_block_tag = di_cta_data_block_get_tag(data_block);
+-		printf("  %s:\n", cta_data_block_tag_name(data_block_tag));
+-
+-		switch (data_block_tag) {
+-		case DI_CTA_DATA_BLOCK_VIDEO:
+-			svds = di_cta_data_block_get_video(data_block)->svds;
+-			printf_cta_svds(svds);
+-			break;
+-		case DI_CTA_DATA_BLOCK_YCBCR420:
+-			svds = di_cta_data_block_get_ycbcr420_video (data_block)->svds;
+-			printf_cta_svds(svds);
+-			break;
+-		case DI_CTA_DATA_BLOCK_SPEAKER_ALLOC:
+-			speaker_alloc = di_cta_data_block_get_speaker_alloc(data_block);
+-			print_speaker_alloc(&speaker_alloc->speakers, "    ");
+-			break;
+-		case DI_CTA_DATA_BLOCK_VIDEO_CAP:
+-			video_cap = di_cta_data_block_get_video_cap(data_block);
+-			printf("    YCbCr quantization: %s\n",
+-			       video_cap->selectable_ycc_quantization_range ?
+-			       "Selectable (via AVI YQ)" : "No Data");
+-			printf("    RGB quantization: %s\n",
+-			       video_cap->selectable_rgb_quantization_range ?
+-			       "Selectable (via AVI Q)" : "No Data");
+-			printf("    PT scan behavior: %s\n",
+-			       video_cap_over_underscan_name(video_cap->pt_over_underscan,
+-							     "No Data"));
+-			printf("    IT scan behavior: %s\n",
+-			       video_cap_over_underscan_name(video_cap->it_over_underscan,
+-							     "IT video formats not supported"));
+-			printf("    CE scan behavior: %s\n",
+-			       video_cap_over_underscan_name(video_cap->ce_over_underscan,
+-							     "CE video formats not supported"));
+-			break;
+-		case DI_CTA_DATA_BLOCK_VESA_DISPLAY_DEVICE:
+-			vesa_display_device = di_cta_data_block_get_vesa_display_device(data_block);
+-			print_cta_vesa_display_device(vesa_display_device);
+-			break;
+-		case DI_CTA_DATA_BLOCK_COLORIMETRY:
+-			colorimetry = di_cta_data_block_get_colorimetry(data_block);
+-			if (colorimetry->xvycc_601)
+-				printf("    xvYCC601\n");
+-			if (colorimetry->xvycc_709)
+-				printf("    xvYCC709\n");
+-			if (colorimetry->sycc_601)
+-				printf("    sYCC601\n");
+-			if (colorimetry->opycc_601)
+-				printf("    opYCC601\n");
+-			if (colorimetry->oprgb)
+-				printf("    opRGB\n");
+-			if (colorimetry->bt2020_cycc)
+-				printf("    BT2020cYCC\n");
+-			if (colorimetry->bt2020_ycc)
+-				printf("    BT2020YCC\n");
+-			if (colorimetry->bt2020_rgb)
+-				printf("    BT2020RGB\n");
+-			if (colorimetry->ictcp)
+-				printf("    ICtCp\n");
+-			if (colorimetry->st2113_rgb)
+-				printf("    ST2113RGB\n");
+-			break;
+-		case DI_CTA_DATA_BLOCK_HDR_STATIC_METADATA:
+-			hdr_static_metadata = di_cta_data_block_get_hdr_static_metadata(data_block);
+-			print_cta_hdr_static_metadata(hdr_static_metadata);
+-			break;
+-		case DI_CTA_DATA_BLOCK_HDR_DYNAMIC_METADATA:
+-			hdr_dynamic_metadata = di_cta_data_block_get_hdr_dynamic_metadata(data_block);
+-			print_cta_hdr_dynamic_metadata(hdr_dynamic_metadata);
+-			break;
+-		case DI_CTA_DATA_BLOCK_VESA_DISPLAY_TRANSFER_CHARACTERISTIC:
+-			transfer_characteristics = di_cta_data_block_get_vesa_transfer_characteristics(data_block);
+-			print_cta_vesa_transfer_characteristics(transfer_characteristics);
+-			break;
+-		case DI_CTA_DATA_BLOCK_AUDIO:
+-			sads = di_cta_data_block_get_audio(data_block)->sads;
+-			print_cta_sads(sads);
+-			break;
+-		case DI_CTA_DATA_BLOCK_YCBCR420_CAP_MAP:
+-			ycbcr420_cap_map = di_cta_data_block_get_ycbcr420_cap_map(data_block);
+-			print_ycbcr420_cap_map(cta, ycbcr420_cap_map);
+-			break;
+-		case DI_CTA_DATA_BLOCK_INFOFRAME:
+-			infoframe = di_cta_data_block_get_infoframe(data_block);
+-			printf("    VSIFs: %d\n", infoframe->num_simultaneous_vsifs - 1);
+-			print_infoframes(infoframe->infoframes);
+-			break;
+-		case DI_CTA_DATA_BLOCK_VIDEO_FORMAT_PREF:
+-			video_format_pref = di_cta_data_block_get_video_format_pref(data_block);
+-			printf_cta_svrs(video_format_pref->svrs);
+-			break;
+-		case DI_CTA_DATA_BLOCK_DISPLAYID_VIDEO_TIMING_VII:
+-			type_vii_timing = di_cta_data_block_get_did_type_vii_timing(data_block);
+-			print_did_type_vii_timing(type_vii_timing->timing, vtdb_index);
+-			vtdb_index++;
+-			break;
+-		case DI_CTA_DATA_BLOCK_HDMI_AUDIO:
+-			hdmi_audio = di_cta_data_block_get_hdmi_audio(data_block);
+-			print_hdmi_audio(hdmi_audio);
+-			break;
+-		case DI_CTA_DATA_BLOCK_VENDOR_HDMI:
+-			vendor_hdmi = di_cta_data_block_get_vendor_hdmi(data_block);
+-			print_cta_hdmi(vendor_hdmi);
+-			break;
+-		case DI_CTA_DATA_BLOCK_HDR10PLUS:
+-			hdr10plus = di_cta_data_block_get_hdr10plus(data_block);
+-			print_cta_hdr10plus(hdr10plus);
+-			break;
+-		case DI_CTA_DATA_BLOCK_DOLBY_VIDEO:
+-			dolby_video = di_cta_data_block_get_dolby_video(data_block);
+-			print_cta_dolby_video(dolby_video);
+-			break;
+-		case DI_CTA_DATA_BLOCK_HDMI_SINK_CAP:
+-			hdmi_sink_cap = di_cta_data_block_get_hdmi_sink_cap(data_block);
+-			print_cta_hdmi_scds(&hdmi_sink_cap->scds);
+-			break;
+-		case DI_CTA_DATA_BLOCK_VENDOR_HDMI_FORUM:
+-			hdmi_forum = di_cta_data_block_get_vendor_hdmi_forum(data_block);
+-			print_cta_hdmi_scds(&hdmi_forum->scds);
+-			break;
+-		default:
+-			break; /* Ignore */
+-		}
++		print_cta_data_block(data_blocks[i], data_blocks);
+ 	}
+ 
+ 	detailed_timing_defs = di_edid_cta_get_detailed_timing_defs(cta);
+diff --git a/include/di-edid-decode.h b/include/di-edid-decode.h
+index ec423ea..c531f1d 100644
+--- a/include/di-edid-decode.h
++++ b/include/di-edid-decode.h
+@@ -29,6 +29,10 @@ print_detailed_timing_def(const struct di_edid_detailed_timing_def *def);
+ void
+ print_cta(const struct di_edid_cta *cta);
+ 
++void
++print_cta_data_block(const struct di_cta_data_block *data_block,
++		     const struct di_cta_data_block *const *data_blocks);
++
+ void
+ print_displayid(const struct di_displayid *displayid);
+ 
+-- 
+GitLab

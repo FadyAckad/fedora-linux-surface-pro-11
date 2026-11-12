@@ -107,4 +107,11 @@ for pkg in $SENSORS_DEPS_PKGS; do
     ( cd "$DEPS_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" --arch=aarch64 "$pkg" ) || die "dnf download $pkg failed"
   fi
 done
+## libdisplay-info (scripts/47): Fedora's source RPM, rebuilt with upstream's DisplayID v2 CTA-861 support, and
+## Fedora's own binary RPM of that build, the reference steps 47 and 48 compare the rebuild with (both pinned in
+## sp11.conf)
+fetch "$LIBDISPLAY_INFO_SRPM_URL" "$CACHE_DIR/$LIBDISPLAY_INFO_SRPM"
+verify_sha256 "$CACHE_DIR/$LIBDISPLAY_INFO_SRPM" "$LIBDISPLAY_INFO_SRPM_SHA256"
+fetch "$LIBDISPLAY_INFO_STOCK_URL" "$CACHE_DIR/$LIBDISPLAY_INFO_STOCK_RPM"
+verify_sha256 "$CACHE_DIR/$LIBDISPLAY_INFO_STOCK_RPM" "$LIBDISPLAY_INFO_STOCK_SHA256"
 log "all sources present under $CACHE_DIR"

@@ -3,9 +3,9 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.3.3-300.fc45` source RPM with Fedora's configuration, rebuilt with the 89 patches of
+- Kernel: Fedora's `kernel-7.3.3-300.fc45` source RPM with Fedora's configuration, rebuilt with the 111 patches of
   the branch `sp11/7.3.3` of the project's kernel fork, the submodule `linux-sp11` (on the stable tag `v7.3.3`,
-  pinned by commit; SP11 revision 2 of 7.3.3) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md);
+  pinned by commit; SP11 revision 3 of 7.3.3) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md);
   each patch, its authors and what it is needed for: [`docs/kernel-patches.md`](../kernel-patches.md).
   - `kernel-local` enables the patch set's touch driver and two camera sensor drivers, and one driver Fedora's
     configuration leaves out, the video clock controller: without it Linux never lowers the power-rail and bus
@@ -13,11 +13,18 @@ bullet is in the working note it names.
     up to kernel 7.2, has its device-tree node disabled since 7.3 marks its driver broken.
   - The patches are ooaklee's Surface Pro 11 work from linux_ms_dev_kit-sp11 v23 with the X1E fixes from jglathe's
     tree that act on this machine, turbineBMW's camera branch, three changes from mainline 7.3 for deep sleep, five
-    Adreno fixes and a Type-C fix carried from their postings, and this repository's own commits; that tree's Ubuntu
-    packaging, SAUCE patches, camera stack and ADSP attach series are not carried.
+    Adreno fixes, a Type-C fix and the DisplayPort HDR series carried from their postings, and this repository's
+    own commits; that tree's Ubuntu packaging, SAUCE patches, camera stack and ADSP attach series are not
+    carried.
   - Deep sleep takes the PCIe links down, so the memory reaches its low-power mode (about 0.33 W asleep instead of
     0.85 W). The modem loses power with its link and starts again after each wake; keeping its link up would keep
     the memory awake ([`docs/sleep.md`](../sleep.md)).
+- HDR: GNOME offers its HDR switch only when the kernel exposes the colour-space and HDR-metadata properties and
+  the panel's EDID announces HDR. The kernel's part is the DisplayPort HDR series in the patch set. The EDID's
+  part sits in a DisplayID 2.0 extension that Fedora's `libdisplay-info` 0.3.0 does not read, so step 47
+  rebuilds Fedora's own package with the upstream commits that do. The rebuild keeps the library's name and
+  version, replaces Fedora's build in place, and any later Fedora build replaces it in turn.
+  [`docs/display.md`](../display.md).
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb` from the kernel package, on the 5G SKU
   `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree with the modem on PCIe 5 (chosen by the unit's SKU).
   It is loaded explicitly everywhere: GRUB `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry

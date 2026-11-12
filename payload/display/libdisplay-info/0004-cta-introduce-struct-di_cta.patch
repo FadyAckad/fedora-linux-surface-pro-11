@@ -1,0 +1,490 @@
+From d535192adc496335b9ff2268398709e4cd566e68 Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Thu, 9 Oct 2025 17:38:23 +0200
+Subject: [PATCH] cta: introduce struct di_cta
+
+In the next commit, CTA parsing functions will be re-used for
+DisplayID v2. However, DisplayID v2 doesn't embed a full EDID-style
+CTA extension. Instead, it embeds a list of CTA blocks.
+
+Stop passing around a struct di_edid_cta and instead pass a
+struct di_cta with minimal state.
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+[sp11: hunk positions as they apply to 0.3.0; the changed lines are upstream's]
+
+ cta.c         | 120 +++++++++++++++++++++++++++-----------------------
+ include/cta.h |  12 ++++-
+ 2 files changed, 76 insertions(+), 56 deletions(-)
+
+diff --git a/cta.c b/cta.c
+index 12187cc..b2b53b0 100644
+--- a/cta.c
++++ b/cta.c
+@@ -58,7 +58,7 @@ di_cta_hdmi_video_format_from_hdmi_vic(uint8_t hdmi_vic)
+ }
+ 
+ static void
+-add_failure(struct di_edid_cta *cta, const char fmt[], ...)
++add_failure(struct di_cta *cta, const char fmt[], ...)
+ {
+ 	va_list args;
+ 
+@@ -68,7 +68,7 @@ add_failure(struct di_edid_cta *cta, const char fmt[], ...)
+ }
+ 
+ static void
+-add_failure_until(struct di_edid_cta *cta, int revision, const char fmt[], ...)
++add_failure_until(struct di_cta *cta, int revision, const char fmt[], ...)
+ {
+ 	va_list args;
+ 
+@@ -82,7 +82,7 @@ add_failure_until(struct di_edid_cta *cta, int revision, const char fmt[], ...)
+ }
+ 
+ static struct di_cta_svd *
+-parse_svd(struct di_edid_cta *cta, uint8_t raw, uint8_t original_index,
++parse_svd(struct di_cta *cta, uint8_t raw, uint8_t original_index,
+ 	  const char *prefix)
+ {
+ 	struct di_cta_svd svd, *svd_ptr;
+@@ -115,7 +115,7 @@ parse_svd(struct di_edid_cta *cta, uint8_t raw, uint8_t original_index,
+ }
+ 
+ static bool
+-parse_video_block(struct di_edid_cta *cta, struct di_cta_video_block_priv *video,
++parse_video_block(struct di_cta *cta, struct di_cta_video_block_priv *video,
+ 		  const uint8_t *data, size_t size)
+ {
+ 	uint8_t i;
+@@ -139,7 +139,7 @@ parse_video_block(struct di_edid_cta *cta, struct di_cta_video_block_priv *video
+ }
+ 
+ static int
+-hdmi_latency_from_raw(struct di_edid_cta *cta, const char *block_name,
++hdmi_latency_from_raw(struct di_cta *cta, const char *block_name,
+ 		      const char *type, uint8_t raw)
+ {
+ 	/* Unknown latency.  */
+@@ -161,7 +161,7 @@ hdmi_latency_from_raw(struct di_edid_cta *cta, const char *block_name,
+ }
+ 
+ static bool
+-parse_vendor_hdmi_block(struct di_edid_cta *cta,
++parse_vendor_hdmi_block(struct di_cta *cta,
+ 			struct di_cta_vendor_hdmi_block_priv *priv,
+ 			const uint8_t *data, size_t size)
+ {
+@@ -309,7 +309,7 @@ parse_vendor_hdmi_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_hdmi_scds(struct di_edid_cta *cta, struct di_cta_hdmi_scds *scds,
++parse_hdmi_scds(struct di_cta *cta, struct di_cta_hdmi_scds *scds,
+ 		struct di_cta_hdmi_dsc *dsc, const uint8_t *data, size_t size,
+ 		const char *block_name)
+ {
+@@ -476,7 +476,7 @@ parse_hdmi_scds(struct di_edid_cta *cta, struct di_cta_hdmi_scds *scds,
+ }
+ 
+ static bool
+-parse_vendor_hdmi_forum_block(struct di_edid_cta *cta,
++parse_vendor_hdmi_forum_block(struct di_cta *cta,
+ 			      struct di_cta_vendor_hdmi_forum_block_priv *priv,
+ 			      const uint8_t *data, size_t size)
+ {
+@@ -491,7 +491,7 @@ parse_vendor_hdmi_forum_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_hdmi_forum_sink_cap(struct di_edid_cta *cta,
++parse_hdmi_forum_sink_cap(struct di_cta *cta,
+ 			  struct di_cta_hdmi_forum_sink_cap_priv *priv,
+ 			  const uint8_t *data, size_t size)
+ {
+@@ -506,7 +506,7 @@ parse_hdmi_forum_sink_cap(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_ycbcr420_block(struct di_edid_cta *cta,
++parse_ycbcr420_block(struct di_cta *cta,
+ 		     struct di_cta_ycbcr420_video_block_priv *ycbcr420,
+ 		     const uint8_t *data, size_t size)
+ {
+@@ -531,7 +531,7 @@ parse_ycbcr420_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_sad_format(struct di_edid_cta *cta, uint8_t code, uint8_t code_ext,
++parse_sad_format(struct di_cta *cta, uint8_t code, uint8_t code_ext,
+ 		 enum di_cta_audio_format *format, const char *prefix)
+ {
+ 	switch (code) {
+@@ -624,7 +624,7 @@ parse_sad_format(struct di_edid_cta *cta, uint8_t code, uint8_t code_ext,
+ }
+ 
+ static bool
+-parse_sad(struct di_edid_cta *cta, struct di_cta_audio_block_priv *audio,
++parse_sad(struct di_cta *cta, struct di_cta_audio_block_priv *audio,
+ 	  const uint8_t data[static CTA_SAD_SIZE])
+ {
+ 	enum di_cta_audio_format format;
+@@ -901,7 +901,7 @@ parse_sad(struct di_edid_cta *cta, struct di_cta_audio_block_priv *audio,
+ }
+ 
+ static bool
+-parse_audio_block(struct di_edid_cta *cta, struct di_cta_audio_block_priv *audio,
++parse_audio_block(struct di_cta *cta, struct di_cta_audio_block_priv *audio,
+ 		  const uint8_t *data, size_t size)
+ {
+ 	size_t i;
+@@ -919,7 +919,7 @@ parse_audio_block(struct di_edid_cta *cta, struct di_cta_audio_block_priv *audio
+ }
+ 
+ static bool
+-parse_speaker_alloc(struct di_edid_cta *cta, struct di_cta_speaker_allocation *speaker_alloc,
++parse_speaker_alloc(struct di_cta *cta, struct di_cta_speaker_allocation *speaker_alloc,
+ 		    const uint8_t data[3], const char *prefix)
+ {
+ 	bool rlc_rrc;
+@@ -960,7 +960,7 @@ parse_speaker_alloc(struct di_edid_cta *cta, struct di_cta_speaker_allocation *s
+ }
+ 
+ static bool
+-parse_speaker_alloc_block(struct di_edid_cta *cta,
++parse_speaker_alloc_block(struct di_cta *cta,
+ 			  struct di_cta_speaker_alloc_block *speaker_alloc,
+ 			  const uint8_t *data, size_t size)
+ {
+@@ -978,7 +978,7 @@ parse_speaker_alloc_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_video_cap_block(struct di_edid_cta *cta,
++parse_video_cap_block(struct di_cta *cta,
+ 		      struct di_cta_video_cap_block *video_cap,
+ 		      const uint8_t *data, size_t size)
+ {
+@@ -1003,11 +1003,11 @@ parse_video_cap_block(struct di_edid_cta *cta,
+ 
+ 	switch (video_cap->it_over_underscan) {
+ 	case DI_CTA_VIDEO_CAP_ALWAYS_OVERSCAN:
+-		if (cta->flags.it_underscan)
++		if (cta->flags->it_underscan)
+ 			add_failure(cta, "Video Capability Data Block: IT video formats are always overscanned, but bit 7 of Byte 3 of the CTA-861 Extension header is set to underscanned.");
+ 		break;
+ 	case DI_CTA_VIDEO_CAP_ALWAYS_UNDERSCAN:
+-		if (!cta->flags.it_underscan)
++		if (!cta->flags->it_underscan)
+ 			add_failure(cta, "Video Capability Data Block: IT video formats are always underscanned, but bit 7 of Byte 3 of the CTA-861 Extension header is set to overscanned.");
+ 	default:
+ 		break;
+@@ -1068,7 +1068,7 @@ parse_vesa_display_device_additional_primary_chromaticity(struct di_cta_vesa_dis
+ }
+ 
+ static bool
+-parse_vesa_display_device(struct di_edid_cta *cta, struct di_cta_vesa_display_device_block *dddb,
++parse_vesa_display_device(struct di_cta *cta, struct di_cta_vesa_display_device_block *dddb,
+ 		const uint8_t *data, size_t size)
+ {
+ 	const size_t offset = 2; /* CTA block header */
+@@ -1270,7 +1270,7 @@ parse_vesa_display_device(struct di_edid_cta *cta, struct di_cta_vesa_display_de
+ }
+ 
+ static bool
+-parse_colorimetry_block(struct di_edid_cta *cta,
++parse_colorimetry_block(struct di_cta *cta,
+ 			struct di_cta_colorimetry_block *colorimetry,
+ 			const uint8_t *data, size_t size)
+ {
+@@ -1316,7 +1316,7 @@ parse_min_luminance(uint8_t raw, float max)
+ }
+ 
+ static bool
+-parse_hdr_static_metadata_block(struct di_edid_cta *cta,
++parse_hdr_static_metadata_block(struct di_cta *cta,
+ 				struct di_cta_hdr_static_metadata_block_priv *metadata,
+ 				const uint8_t *data, size_t size)
+ {
+@@ -1359,7 +1359,7 @@ parse_hdr_static_metadata_block(struct di_edid_cta *cta,
+ 	return true;
+ }
+ static bool
+-parse_hdr_dynamic_metadata_block(struct di_edid_cta *cta,
++parse_hdr_dynamic_metadata_block(struct di_cta *cta,
+ 				 struct di_cta_hdr_dynamic_metadata_block_priv *priv,
+ 				 const uint8_t *data, size_t size)
+ {
+@@ -1473,7 +1473,7 @@ parse_hdr_dynamic_metadata_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_vesa_transfer_characteristics_block(struct di_edid_cta *cta,
++parse_vesa_transfer_characteristics_block(struct di_cta *cta,
+ 					  struct di_cta_vesa_transfer_characteristics_block *tf,
+ 					  const uint8_t *data, size_t size)
+ {
+@@ -1496,7 +1496,7 @@ parse_vesa_transfer_characteristics_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_video_format_pref_block(struct di_edid_cta *cta,
++parse_video_format_pref_block(struct di_cta *cta,
+ 			      struct di_cta_video_format_pref_priv *vfpdb,
+ 			      const uint8_t *data, size_t size)
+ {
+@@ -1547,7 +1547,7 @@ parse_video_format_pref_block(struct di_edid_cta *cta,
+ 
+ 
+ static void
+-parse_ycbcr420_cap_map(struct di_edid_cta *cta,
++parse_ycbcr420_cap_map(struct di_cta *cta,
+ 		       struct di_cta_ycbcr420_cap_map_block *ycbcr420_cap_map,
+ 		       const uint8_t *data, size_t size)
+ {
+@@ -1561,7 +1561,7 @@ parse_ycbcr420_cap_map(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_hdmi_audio_3d_descriptor(struct di_edid_cta *cta,
++parse_hdmi_audio_3d_descriptor(struct di_cta *cta,
+ 			       struct di_cta_sad_priv *sad,
+ 			       const uint8_t *data, size_t size)
+ {
+@@ -1610,7 +1610,7 @@ parse_hdmi_audio_3d_descriptor(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_hdmi_audio_block(struct di_edid_cta *cta,
++parse_hdmi_audio_block(struct di_cta *cta,
+ 		       struct di_cta_hdmi_audio_block_priv *priv,
+ 		       const uint8_t *data, size_t size)
+ {
+@@ -1704,7 +1704,7 @@ skip:
+ }
+ 
+ static struct di_cta_infoframe_descriptor *
+-parse_infoframe(struct di_edid_cta *cta, uint8_t type,
++parse_infoframe(struct di_cta *cta, uint8_t type,
+ 		const uint8_t *data, size_t size)
+ {
+ 	struct di_cta_infoframe_descriptor infoframe = {0};
+@@ -1759,7 +1759,7 @@ parse_infoframe(struct di_edid_cta *cta, uint8_t type,
+ }
+ 
+ static bool
+-parse_infoframe_block(struct di_edid_cta *cta,
++parse_infoframe_block(struct di_cta *cta,
+ 		      struct di_cta_infoframe_block_priv *ifb,
+ 		      const uint8_t *data, size_t size)
+ {
+@@ -1827,7 +1827,7 @@ decode_coord(unsigned char x)
+ }
+ 
+ static bool
+-parse_room_config_block(struct di_edid_cta *cta,
++parse_room_config_block(struct di_cta *cta,
+ 			struct di_cta_room_configuration_block *rc,
+ 			const uint8_t *data, size_t size)
+ {
+@@ -1894,7 +1894,7 @@ parse_room_config_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_speaker_location_block(struct di_edid_cta *cta,
++parse_speaker_location_block(struct di_cta *cta,
+ 			     struct di_cta_speaker_location_priv *sldb,
+ 			     const uint8_t *data, size_t size)
+ {
+@@ -1946,7 +1946,7 @@ parse_speaker_location_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_did_type_vii_timing(struct di_edid_cta *cta,
++parse_did_type_vii_timing(struct di_cta *cta,
+ 			  struct di_cta_type_vii_timing_priv *t,
+ 			  const uint8_t *data, size_t size)
+ {
+@@ -2067,7 +2067,7 @@ ff_peak_lum_index_to_nits(int index, int peak_lum)
+ }
+ 
+ static bool
+-parse_hdr10plus_block(struct di_edid_cta *cta,
++parse_hdr10plus_block(struct di_cta *cta,
+ 		      struct di_cta_hdr10plus_block *block,
+ 		      const uint8_t *data, size_t size)
+ {
+@@ -2105,7 +2105,7 @@ parse_hdr10plus_block(struct di_edid_cta *cta,
+ }
+ 
+ static bool
+-parse_dolby_video_block(struct di_edid_cta *cta,
++parse_dolby_video_block(struct di_cta *cta,
+ 			 struct di_cta_dolby_video_block_priv *dv_priv,
+ 			 const uint8_t *data, size_t size)
+ {
+@@ -2356,7 +2356,7 @@ destroy_data_block(struct di_cta_data_block *data_block)
+ }
+ 
+ static bool
+-parse_vendor_specific_video_block(struct di_edid_cta *cta,
++parse_vendor_specific_video_block(struct di_cta *cta,
+ 				  enum di_cta_data_block_tag *tag,
+ 				  struct di_cta_data_block *data_block,
+ 				  const uint8_t *data, size_t size)
+@@ -2399,7 +2399,7 @@ skip:
+ }
+ 
+ static bool
+-parse_vendor_specific_block(struct di_edid_cta *cta,
++parse_vendor_specific_block(struct di_cta *cta,
+ 			    enum di_cta_data_block_tag *tag,
+ 			    struct di_cta_data_block *data_block,
+ 			    const uint8_t *data, size_t size)
+@@ -2439,12 +2439,15 @@ skip:
+ }
+ 
+ static bool
+-parse_data_block(struct di_edid_cta *cta, uint8_t raw_tag, const uint8_t *data, size_t size)
++parse_data_block(struct di_cta *cta, uint8_t raw_tag, const uint8_t *data, size_t size,
++		 struct di_cta_data_block **data_block_out)
+ {
+ 	enum di_cta_data_block_tag tag;
+ 	uint8_t extended_tag;
+ 	struct di_cta_data_block *data_block;
+ 
++	*data_block_out = NULL;
++
+ 	data_block = calloc(1, sizeof(*data_block));
+ 	if (!data_block) {
+ 		return false;
+@@ -2629,8 +2632,7 @@ parse_data_block(struct di_edid_cta *cta, uint8_t raw_tag, const uint8_t *data,
+ 	}
+ 
+ 	data_block->tag = tag;
+-	assert(cta->data_blocks_len < EDID_CTA_MAX_DATA_BLOCKS);
+-	cta->data_blocks[cta->data_blocks_len++] = data_block;
++	*data_block_out = data_block;
+ 	return true;
+ 
+ skip:
+@@ -2643,29 +2645,35 @@ error:
+ }
+ 
+ bool
+-_di_edid_cta_parse(struct di_edid_cta *cta, const uint8_t *data, size_t size,
++_di_edid_cta_parse(struct di_edid_cta *edid_cta, const uint8_t *data, size_t size,
+ 		   struct di_logger *logger)
+ {
++	struct di_cta *cta;
+ 	uint8_t flags, dtd_start;
+ 	uint8_t data_block_header, data_block_tag, data_block_size;
+ 	size_t i;
+ 	struct di_edid_detailed_timing_def_priv *detailed_timing_def;
++	struct di_cta_data_block *data_block;
+ 
+ 	assert(size == 128);
+ 	assert(data[0] == 0x02);
+ 
+-	cta->logger = logger;
+-
+-	cta->revision = data[1];
++	edid_cta->revision = data[1];
+ 	dtd_start = data[2];
+ 
++	cta = &(struct di_cta){
++		.revision = edid_cta->revision,
++		.flags = &edid_cta->flags,
++		.logger = logger,
++	};
++
+ 	flags = data[3];
+ 	if (cta->revision >= 2) {
+-		cta->flags.it_underscan = has_bit(flags, 7);
+-		cta->flags.basic_audio = has_bit(flags, 6);
+-		cta->flags.ycc444 = has_bit(flags, 5);
+-		cta->flags.ycc422 = has_bit(flags, 4);
+-		cta->flags.native_dtds = get_bit_range(flags, 3, 0);
++		edid_cta->flags.it_underscan = has_bit(flags, 7);
++		edid_cta->flags.basic_audio = has_bit(flags, 6);
++		edid_cta->flags.ycc444 = has_bit(flags, 5);
++		edid_cta->flags.ycc422 = has_bit(flags, 4);
++		edid_cta->flags.native_dtds = get_bit_range(flags, 3, 0);
+ 	} else if (flags != 0) {
+ 		/* Reserved */
+ 		add_failure(cta, "Non-zero byte 3.");
+@@ -2697,11 +2705,16 @@ _di_edid_cta_parse(struct di_edid_cta *cta, const uint8_t *data, size_t size,
+ 		}
+ 
+ 		if (!parse_data_block(cta, data_block_tag,
+-				      &data[i + 1], data_block_size)) {
+-			_di_edid_cta_finish(cta);
++				      &data[i + 1], data_block_size, &data_block)) {
++			_di_edid_cta_finish(edid_cta);
+ 			return false;
+ 		}
+ 
++		if (data_block != NULL) {
++			assert(edid_cta->data_blocks_len < EDID_CTA_MAX_DATA_BLOCKS);
++			edid_cta->data_blocks[edid_cta->data_blocks_len++] = data_block;
++		}
++
+ 		i += 1 + data_block_size;
+ 	}
+ 
+@@ -2717,11 +2730,11 @@ _di_edid_cta_parse(struct di_edid_cta *cta, const uint8_t *data, size_t size,
+ 
+ 		detailed_timing_def = _di_edid_parse_detailed_timing_def(&data[i]);
+ 		if (!detailed_timing_def) {
+-			_di_edid_cta_finish(cta);
++			_di_edid_cta_finish(edid_cta);
+ 			return false;
+ 		}
+-		assert(cta->detailed_timing_defs_len < EDID_CTA_MAX_DETAILED_TIMING_DEFS);
+-		cta->detailed_timing_defs[cta->detailed_timing_defs_len++] = detailed_timing_def;
++		assert(edid_cta->detailed_timing_defs_len < EDID_CTA_MAX_DETAILED_TIMING_DEFS);
++		edid_cta->detailed_timing_defs[edid_cta->detailed_timing_defs_len++] = detailed_timing_def;
+ 	}
+ 
+ 	/* All padding bytes after the last DTD must be zero */
+@@ -2733,7 +2746,6 @@ _di_edid_cta_parse(struct di_edid_cta *cta, const uint8_t *data, size_t size,
+ 		i++;
+ 	}
+ 
+-	cta->logger = NULL;
+ 	return true;
+ }
+ 
+diff --git a/include/cta.h b/include/cta.h
+index 25e1dfa..9405932 100644
+--- a/include/cta.h
++++ b/include/cta.h
+@@ -81,6 +81,16 @@
+  */
+ #define EDID_CTA_MAX_HDMI_AUDIO_BLOCK_ENTRIES 15
+ 
++/**
++ * Context for CTA parsing functions.
++ */
++struct di_cta {
++	int revision;
++	const struct di_edid_cta_flags *flags;
++
++	struct di_logger *logger;
++};
++
+ struct di_edid_cta {
+ 	int revision;
+ 	struct di_edid_cta_flags flags;
+@@ -92,8 +102,6 @@ struct di_edid_cta {
+ 	/* NULL-terminated */
+ 	struct di_edid_detailed_timing_def_priv *detailed_timing_defs[EDID_CTA_MAX_DETAILED_TIMING_DEFS + 1];
+ 	size_t detailed_timing_defs_len;
+-
+-	struct di_logger *logger;
+ };
+ 
+ struct di_cta_hdr_static_metadata_block_priv {
+-- 
+GitLab

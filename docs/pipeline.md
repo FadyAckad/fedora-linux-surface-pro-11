@@ -10,7 +10,8 @@ What each file is, for a user: `docs/guide/layout.md`. What matters to the pipel
   the support RPM's `VERSION=` lives in step 30.
 - `rpm/*.spec.in`: the spec templates; `render()` fills their `@KEY@` placeholders, a leftover one fails the build.
 - `scripts/NN-*.sh`: the pipeline steps, idempotent; `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30,
-  40, 45 and 50, then steps 35 and 46, which need step 50's live root (steps 30 and 45 run them when it exists).
+  40, 45, 47 and 50, then steps 35, 46 and 48, which need step 50's live root (steps 30, 45 and 47 run them when
+  it exists).
   Outside the pipeline: `70-export-bt-pairings.sh` (`docs/hardware.md`), `75-export-sensor-registry.sh`
   (`docs/sensors.md`), `sync-state-drivers.py`, step 20's check that the Denali device trees' rail and
   interconnect users all have a driver (`docs/kernel.md`), and `grub-font-cell.py`, step 30's fit of the GRUB
@@ -19,8 +20,8 @@ What each file is, for a user: `docs/guide/layout.md`. What matters to the pipel
   (the modem rule and GNSS feed in 5G builds only); `kernel-local`, a build input of step 20 and part of
   `KERNEL_SP11_REV` (the patch set itself is the kernel fork's, the submodule `linux-sp11` below); `sensors/`
   (`sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the libssc and iio-sensor-proxy patches, the
-  unpackaged posture probe); `camera/` (the unpackaged raw-capture probe); `README-iso.txt.in`, the note inside
-  the ISO.
+  unpackaged posture probe); `camera/` (the unpackaged raw-capture probe); `display/` (the libdisplay-info
+  patches and the unpackaged display probe); `README-iso.txt.in`, the note inside the ISO.
 - `linux-sp11/` and `hexagonrpc/`: the kernel fork and the hexagonrpc fork as submodules, checked out at the
   pinned commits. The gitlink in the index is the pin: `KERNEL_PATCH_COMMIT`, read by `lib.sh`, with the base
   pinned in `sp11.conf`; `HEXAGONRPC_COMMIT`, read by `sp11.conf` into the release string. Step 10 owns them: a
@@ -81,6 +82,22 @@ never touches the host.
   capability (F45 ships `protobuf-c` as `protobuf3-c`), and checks the installed stack, a write as `fastrpc` and
   the erase; `SENSORS_PREVIOUS_RPMS="<earlier RPMs>"` adds the in-place upgrade.
 
+### Steps 47 and 48: libdisplay-info
+
+- Step 47 rebuilds Fedora's libdisplay-info source RPM in mock with the upstream commits of
+  `payload/display/libdisplay-info/` (`docs/display.md`); the spec applies them with git, because the second
+  carries its test's EDID as a git binary patch. Upstream's tests run in the build (66 on 2026-11-12), and the
+  step refuses a build in which the two tests of that panel did not pass.
+- The step then compares the rebuild with Fedora's own binary RPM of the same build (`LIBDISPLAY_INFO_STOCK_RPM`):
+  the same files and requirements, every library capability and every exported symbol of Fedora's, plus the
+  three functions of the DisplayID 2.0 data blocks.
+- Step 48, in an overlay of the live root: Fedora's build first, whatever the root carries; the rebuild on top
+  with scriptlets; Fedora's build back over it. Each time every file linked against the library resolves its
+  symbols (`ldd -r`) and the compositor starts with `LD_BIND_NOW=1`.
+- Step 48 also calls the two lookups mutter decides HDR by, through the root's Python, on the EDID of upstream's
+  test panel: `type1=0 pq=0 bt2020_rgb=0` with Fedora's build, all three 1 with the rebuild. A rebuild that reads
+  no more than Fedora's fails the step.
+
 ### Step 60: the remastered root
 
 Optional, not in `build-all.sh`. Checks the remastered root step 50 leaves and the Denali firmware directory, and
@@ -100,10 +117,11 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
 - Support RPM: bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the payload changes, so `dnf upgrade`
   works; its `%posttrans` must run `sp11-grub-defaults` before regenerating `grub.cfg` (up to 2.3 a changed policy
   never reached the machine), which step 35 guards.
-- Input hashes: steps 30 and 45 record `inputs_sha256` (`lib.sh`; the payload, the spec template, the rendered
+- Input hashes: steps 30, 45 and 47 record `inputs_sha256` (`lib.sh`; the payload, the spec template, the rendered
   `sp11.conf` values, for step 30 also `grub-font-cell.py`, for step 45 also the registry export and the DriverStore
-  package) as `Inputs:` in the RPM description and die when the cached RPM of the same version was built from other
-  inputs, `FORCE=1` or not. The hash covers repo-relative paths, so a payload rename invalidates it too.
+  package, for step 47 the patches and the source RPM's checksum) as `Inputs:` in the RPM description and die when
+  the cached RPM of the same version was built from other inputs, `FORCE=1` or not. The hash covers repo-relative
+  paths, so a payload rename invalidates it too.
 - The input hash does not cover the host's toolchain: step 30 compiles `sp11-bt-set-addr` with the host's gcc and
   links glibc's startup code in. The helper of support 3.9 (built 2026-11-01 on the Fedora 44 host) and of 3.10
   (Fedora 45) differ in that code, 72512 and 72608 bytes; the helper's own object code is the same from both
@@ -115,8 +133,12 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
 - `IIO_SENSOR_PROXY_SRPM` pins the iio-sensor-proxy source RPM by URL and checksum, like the kernel's, to Koji's
   unsigned copy (Koji drops superseded builds' signed copies; the payloads are equal); a newer build changes the
   pin, then the template and its spec pin.
+- `LIBDISPLAY_INFO_SRPM` and `LIBDISPLAY_INFO_STOCK_RPM` pin libdisplay-info's source RPM and Fedora's binary RPM
+  of that build the same way (the binary's payload equals the Fedora-signed copy's, 2026-11-12);
+  `LIBDISPLAY_INFO_BASE_SPEC_SHA256` pins Fedora's spec the template was derived from. A Fedora update of the
+  package is taken over by all three pins and the template.
 
-Cache checks: steps 20, 30, 40 and 45 skip when the cached RPM matches, so a bump or a release switch rebuilds;
+Cache checks: steps 20, 30, 40, 45 and 47 skip when the cached RPM matches, so a bump or a release switch rebuilds;
 `build_rpm`, `mock_rebuild` and `mock_rebuild_family` delete older RPMs of the same name, so `build/rpms/` holds
 one release's set.
 
@@ -126,6 +148,7 @@ one release's set.
 | 30   | the support RPM's `%{VERSION}` and the `.fc<release>` dist tag                                     |
 | 40   | iptsd's version-release and commit                                                                 |
 | 45   | the sensors chain's version-release                                                                |
+| 47   | libdisplay-info's version-release; the cached RPM's package checks run again                       |
 
 ## Caches and build details
 

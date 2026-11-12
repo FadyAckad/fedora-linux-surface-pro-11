@@ -1,0 +1,90 @@
+From 471350512d14d6a95fa5aa5447ef9e26298394f6 Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Thu, 9 Oct 2025 18:43:36 +0200
+Subject: [PATCH] cta: expose _di_cta_data_block_{parse,destroy}
+
+These will be re-used for DisplayID v2.
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+[sp11: hunk positions as they apply to 0.3.0; the changed lines are upstream's]
+
+ cta.c         | 18 +++++++++---------
+ include/cta.h |  7 +++++++
+ 2 files changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/cta.c b/cta.c
+index b2ffd7c..f063c9d 100644
+--- a/cta.c
++++ b/cta.c
+@@ -2295,8 +2295,8 @@ parse_dolby_video_block(struct di_cta *cta,
+ 	return true;
+ }
+ 
+-static void
+-destroy_data_block(struct di_cta_data_block *data_block)
++void
++_di_cta_data_block_destroy(struct di_cta_data_block *data_block)
+ {
+ 	size_t i;
+ 	struct di_cta_video_block_priv *video;
+@@ -2438,9 +2438,9 @@ skip:
+ 	return false;
+ }
+ 
+-static bool
+-parse_data_block(struct di_cta *cta, uint8_t raw_tag, const uint8_t *data, size_t size,
+-		 struct di_cta_data_block **data_block_out)
++bool
++_di_cta_data_block_parse(struct di_cta *cta, uint8_t raw_tag, const uint8_t *data, size_t size,
++			 struct di_cta_data_block **data_block_out)
+ {
+ 	enum di_cta_data_block_tag tag;
+ 	uint8_t extended_tag;
+@@ -2640,7 +2640,7 @@ skip:
+ 	return true;
+ 
+ error:
+-	destroy_data_block(data_block);
++	_di_cta_data_block_destroy(data_block);
+ 	return false;
+ }
+ 
+@@ -2704,8 +2704,8 @@ _di_edid_cta_parse(struct di_edid_cta *edid_cta, const uint8_t *data, size_t siz
+ 					 "Definitions. Adjusted its size to attempt parsing.", i);
+ 		}
+ 
+-		if (!parse_data_block(cta, data_block_tag,
+-				      &data[i + 1], data_block_size, &data_block)) {
++		if (!_di_cta_data_block_parse(cta, data_block_tag,
++					      &data[i + 1], data_block_size, &data_block)) {
+ 			_di_edid_cta_finish(edid_cta);
+ 			return false;
+ 		}
+@@ -2755,7 +2755,7 @@ _di_edid_cta_finish(struct di_edid_cta *cta)
+ 	size_t i;
+ 
+ 	for (i = 0; i < cta->data_blocks_len; i++) {
+-		destroy_data_block(cta->data_blocks[i]);
++		_di_cta_data_block_destroy(cta->data_blocks[i]);
+ 	}
+ 
+ 	for (i = 0; i < cta->detailed_timing_defs_len; i++) {
+diff --git a/include/cta.h b/include/cta.h
+index 4c73e49..345fb65 100644
+--- a/include/cta.h
++++ b/include/cta.h
+@@ -283,4 +283,11 @@ _di_edid_cta_parse(struct di_edid_cta *cta, const uint8_t *data, size_t size,
+ void
+ _di_edid_cta_finish(struct di_edid_cta *cta);
+ 
++bool
++_di_cta_data_block_parse(struct di_cta *cta, uint8_t raw_tag, const uint8_t *data, size_t size,
++			 struct di_cta_data_block **data_block_out);
++
++void
++_di_cta_data_block_destroy(struct di_cta_data_block *data_block);
++
+ #endif
+-- 
+GitLab

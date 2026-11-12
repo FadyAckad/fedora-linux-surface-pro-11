@@ -1,0 +1,109 @@
+# Fedora's libdisplay-info spec (source RPM @VERSION@-@BASEREL@) with upstream's DisplayID v2 CTA-861 support.
+# Laptop OLED panels, the Surface Pro 11's among them, announce HDR (the BT.2020 colorimetry and the HDR static
+# metadata) only in a CTA-861 data block inside their DisplayID v2 extension. 0.3.0 reads neither, so a
+# compositor that asks this library sees no HDR capability (docs/display.md). The eleven patches are upstream's
+# commits of 0.4.0, in upstream's order, and keep the soname; 0.4.0 itself changes the soname and needs every
+# user of the library rebuilt. The release carries Fedora's number plus a suffix, so this build replaces
+# Fedora's in place and any later Fedora build replaces it in turn.
+# Refresh from the target release's source RPM when Fedora changes the spec (scripts/47 refuses one with patches
+# or another spec); the patches come from payload/display/libdisplay-info/, copied next to the sources by
+# scripts/47.
+# See https://gitlab.freedesktop.org/emersion/libdisplay-info/-/merge_requests/149
+# for library versioning explanation.
+%global sover 3
+
+Name:           libdisplay-info
+Version:        @VERSION@
+Release:        @BASEREL@.@SUFFIX@%{?dist}
+Summary:        EDID and DisplayID library
+
+# Main license: MIT
+# test/data: CC-BY-4.0, MIT (see test/data/README.md).
+License:        MIT
+URL:            https://gitlab.freedesktop.org/emersion/libdisplay-info
+Source0:        %{url}/-/releases/%{version}/downloads/%{name}-%{version}.tar.xz
+Source1:        %{url}/-/releases/%{version}/downloads/%{name}-%{version}.tar.xz.sig
+# 0FDE7BE0E88F5E48: emersion <contact@emersion.fr>
+Source2:        https://emersion.fr/.well-known/openpgpkey/hu/dj3498u4hyyarh35rkjfnghbjxug6b19#/gpgkey-0FDE7BE0E88F5E48.gpg
+
+# Upstream's commits, each named in its patch file: the DisplayID v2 data blocks (3), the CTA-861 data blocks
+# inside them (7), the high-level HDR static metadata and colorimetry lookups that search them (11), the
+# refactors those stand on (1, 4, 5, 6, 10), the decoder's output (8, 9) and upstream's test with a panel of the
+# same kind (2). Patch 2 carries that panel's EDID as a git binary patch, hence git as the patch tool.
+Patch1:         0001-displayid-drop-logger_add_failure.patch
+Patch2:         0002-test-add-asus-ux3405.patch
+Patch3:         0003-displayid2-decode-data-blocks-structure.patch
+Patch4:         0004-cta-introduce-struct-di_cta.patch
+Patch5:         0005-cta-make-di_cta.flags-optional.patch
+Patch6:         0006-cta-expose-_di_cta_data_block_-parse-destroy.patch
+Patch7:         0007-displayid2-add-support-for-CTA-861-data-blocks.patch
+Patch8:         0008-di-edid-decode-introduce-print_cta_data_block.patch
+Patch9:         0009-di-edid-decode-add-support-for-DisplayID-v2-CTA-861-.patch
+Patch10:        0010-info-don-t-use-di_-prefix-for-static-helpers.patch
+Patch11:        0011-info-search-CTA-blocks-in-DisplayID-v2-extensions.patch
+
+BuildRequires:  gcc
+BuildRequires:  git-core
+BuildRequires:  gnupg2
+BuildRequires:  meson >= 0.57
+BuildRequires:  pkgconfig(hwdata)
+
+%description
+%{summary}. Fedora's %{version}-@BASEREL@ build plus upstream's support for
+CTA-861 data blocks inside a DisplayID v2 extension, where the Surface Pro 11's
+panel announces its BT.2020 colorimetry and HDR static metadata.
+Inputs: @INPUTS@
+
+%package        tools
+Summary:        Command-line tools for %{name}
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+
+%description    tools
+%{summary}.
+
+%package        devel
+Summary:        Development files for %{name}
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+
+%description    devel
+The %{name}-devel package contains libraries and header files for
+developing applications that use %{name}.
+
+
+%prep
+%{gpgverify} --keyring='%{SOURCE2}' --signature='%{SOURCE1}' --data='%{SOURCE0}'
+%autosetup -S git -p1
+
+
+%build
+%meson
+%meson_build
+
+
+%install
+%meson_install
+
+
+%check
+%meson_test
+
+
+%files
+%license LICENSE
+%doc README.md
+%{_libdir}/%{name}.so.%{sover}
+%{_libdir}/%{name}.so.%{version}
+
+%files tools
+%{_bindir}/di-edid-decode
+
+%files devel
+%{_includedir}/%{name}
+%{_libdir}/%{name}.so
+%{_libdir}/pkgconfig/%{name}.pc
+
+
+%changelog
+* Thu Nov 12 2026 SP11 build <sp11@localhost> - @VERSION@-@BASEREL@.@SUFFIX@
+- Backport upstream's DisplayID v2 CTA-861 data block support of 0.4.0: the HDR static metadata and the
+  colorimetry of panels that announce them only in a DisplayID v2 extension

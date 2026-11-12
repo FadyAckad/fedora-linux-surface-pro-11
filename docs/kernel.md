@@ -50,6 +50,7 @@ removal, SELinux.
 | 7.2.15 revision 2 | 2026-11-06 | `kernel-7.2.15-300.fc45` | The QRTR-over-glink probe no longer deadlocks when its channel open fails |
 | 7.3.3 revision 1 | 2026-11-08 | `kernel-7.3.3-300.fc45` | Rebased onto `v7.3.3` (nine patches now upstream dropped); the crypto engine's node disabled |
 | 7.3.3 revision 2 | 2026-11-09 | `kernel-7.3.3-300.fc45` | GPIO wake interrupts kept off the PDC: a suspend with the lid open no longer wakes at once |
+| 7.3.3 revision 3 | 2026-11-12 | `kernel-7.3.3-300.fc45` | HDR on DisplayPort and eDP: the connector properties and the packets GNOME's HDR switch needs (`docs/display.md`) |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to
@@ -223,7 +224,8 @@ onto the new stable tag, whatever lies between (a stable tag contains every earl
   `20-grub.install` makes the added kernel the saved default when `/etc/sysconfig/kernel` has `UPDATEDEFAULT=yes`
   and `DEFAULTKERNEL=kernel-core`. After `kernel-install remove`, `saved_entry` still names the removed entry and
   GRUB boots the first one.
-- Space in `/boot`: each SP11 kernel takes about 195 MB (103 MB of it the device trees of every arm64 machine).
+- Space in `/boot`: a 7.3.3 kernel takes 212 MB (step 36, revision 3; about 195 MB up to 7.2, 103 MB of it the
+  device trees of every arm64 machine).
   Run `df -h /boot` before an install: in a full `/boot` dracut fails inside `kernel-install`, whose status the
   scriptlets ignore (`|| :`, as Fedora does), so the package installs without an entry and only the transaction's
   output says so.

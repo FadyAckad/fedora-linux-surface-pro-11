@@ -58,12 +58,12 @@ release.
 2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, checks them against the
    supported models and writes `build/hardware.env`. The SKU decides the device tree (the 5G SKU's carries its
    modem) and whether the support RPM carries the modem's files.
-3. `scripts/10-fetch-sources.sh` downloads and verifies the sources: the Fedora ISO, Fedora's kernel and
-   iio-sensor-proxy source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11 patch set (the kernel
-   fork's pinned commit, fetched into the submodule `linux-sp11` without the fork's history: about 290 MB, once; a
-   plain `git clone` of this repository is enough), the hexagonrpc fork's pinned commit into the submodule
-   `hexagonrpc` the same way, the pinned checkouts (iptsd, OE, libssc) and the Bluetooth helper source, plus the
-   runtime packages the live root and the sensors stack need, with dnf.
+3. `scripts/10-fetch-sources.sh` downloads and verifies the sources: the Fedora ISO, Fedora's kernel,
+   iio-sensor-proxy and libdisplay-info source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11
+   patch set (the kernel fork's pinned commit, fetched into the submodule `linux-sp11` without the fork's
+   history: about 290 MB, once; a plain `git clone` of this repository is enough), the hexagonrpc fork's pinned
+   commit into the submodule `hexagonrpc` the same way, the pinned checkouts (iptsd, OE, libssc) and the
+   Bluetooth helper source, plus the runtime packages the live root and the sensors stack need, with dnf.
 4. `scripts/20-build-kernel.sh` rebuilds Fedora's kernel source RPM into Fedora's kernel packages, in a mock
    buildroot of the target release, with the patch set, `payload/kernel-local` and the buildid `.sp11.<revision>`.
    `sp11.conf` pins the content of the declared revision (`KERNEL_SP11_REV_SHA256`): a changed patch set or
@@ -79,18 +79,23 @@ release.
 7. `scripts/45-build-sensors-rpms.sh` builds the sensors stack: `hexagonrpc`, `libssc` and the SSC-enabled
    `iio-sensor-proxy` in a mock buildroot of the target release, and `sp11-sensors` from this unit's registry
    export (step 75) and the Windows sensor configuration. The step runs step 46 when a live root is there.
-8. `scripts/50-build-iso.sh` builds the ISO: it replaces the live root's stock kernel packages with the SP11 build
+8. `scripts/47-build-libdisplay-info-rpm.sh` rebuilds Fedora's `libdisplay-info` in a mock buildroot of the
+   target release with the upstream commits that read the panel's HDR data
+   ([`docs/display.md`](../display.md)), compares the result with Fedora's own build and runs step 48 when a
+   live root is there.
+9. `scripts/50-build-iso.sh` builds the ISO: it replaces the live root's stock kernel packages with the SP11 build
    of the same packages, installs the support, iptsd and sensors RPMs, builds the live initramfs, adds the device
    tree, the kernel arguments and the console font to Fedora's own live GRUB menu, then assembles the ISO and
    implants the media-check checksum. The result is, for example,
-   `build/out/Fedora-Workstation-Live-45-1.4-SP11-7.3.3-300.sp11.2.fc45.aarch64.iso`, plus `.sha256`.
+   `build/out/Fedora-Workstation-Live-45-1.4-SP11-7.3.3-300.sp11.3.fc45.aarch64.iso`, plus `.sha256`.
 
 ## Checks
 
-`build-all.sh` runs the steps above and then `scripts/35-verify-support-rpm.sh` and
-`scripts/46-verify-sensors-rpms.sh`. `scripts/36-verify-kernel-install.sh` and `scripts/60-verify-rootfs.sh` run by
-hand. Each check works in an overlay of the live root that step 50 extracts, so it never touches the host. What
-each one installs and asserts is in [`docs/pipeline.md`](../pipeline.md).
+`build-all.sh` runs the steps above and then `scripts/35-verify-support-rpm.sh`,
+`scripts/46-verify-sensors-rpms.sh` and `scripts/48-verify-libdisplay-info-rpm.sh`.
+`scripts/36-verify-kernel-install.sh` and `scripts/60-verify-rootfs.sh` run by hand. Each check works in an
+overlay of the live root that step 50 extracts, so it never touches the host. What each one installs and asserts
+is in [`docs/pipeline.md`](../pipeline.md).
 
 - Step 35 installs the support RPM the two ways it reaches a machine, with its scriptlets over the version the live
   root carries, as `dnf upgrade` does, and without them, as step 50 does, and checks the GRUB policy and the

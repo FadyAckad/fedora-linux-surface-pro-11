@@ -1,0 +1,59 @@
+From 55b45d4d0debc50162602eed2a7dd50e889c6531 Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Fri, 25 Jul 2025 15:10:58 +0200
+Subject: [PATCH] displayid: drop logger_add_failure()
+
+d0c43cb795e4 ("edid: do not fail when extension block has invalid
+checksum") has introduced _di_logger_add_failure(), which does the
+same as logger_add_failure().
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+ displayid.c | 18 ++++--------------
+ 1 file changed, 4 insertions(+), 14 deletions(-)
+
+diff --git a/displayid.c b/displayid.c
+index 2ea63be..8e86f35 100644
+--- a/displayid.c
++++ b/displayid.c
+@@ -56,16 +56,6 @@ add_failure(struct di_displayid *displayid, const char fmt[], ...)
+ 	va_end(args);
+ }
+ 
+-static void
+-logger_add_failure(struct di_logger *logger, const char fmt[], ...)
+-{
+-	va_list args;
+-
+-	va_start(args, fmt);
+-	_di_logger_va_add_failure(logger, fmt, args);
+-	va_end(args);
+-}
+-
+ static void
+ check_data_block_revision(struct di_displayid *displayid,
+ 			  const uint8_t data[static DISPLAYID_DATA_BLOCK_HEADER_SIZE],
+@@ -175,8 +165,8 @@ _di_displayid_parse_type_1_7_timing(struct di_displayid_type_i_ii_vii_timing *t,
+ 		t->stereo_3d = stereo_3d;
+ 		break;
+ 	default:
+-		logger_add_failure(logger, "%s: Reserved stereo 0x%02x.",
+-				   prefix, stereo_3d);
++		_di_logger_add_failure(logger, "%s: Reserved stereo 0x%02x.",
++				       prefix, stereo_3d);
+ 		break;
+ 	}
+ 
+@@ -185,8 +175,8 @@ _di_displayid_parse_type_1_7_timing(struct di_displayid_type_i_ii_vii_timing *t,
+ 		t->aspect_ratio = aspect_ratio;
+ 	} else {
+ 		t->aspect_ratio = DI_DISPLAYID_TIMING_ASPECT_RATIO_UNDEFINED;
+-		logger_add_failure(logger, "%s: Unknown aspect 0x%02x.",
+-				   prefix, aspect_ratio);
++		_di_logger_add_failure(logger, "%s: Unknown aspect 0x%02x.",
++				       prefix, aspect_ratio);
+ 	}
+ 
+ 	t->horiz_active = 1 + (data[4] | (data[5] << 8));
+-- 
+GitLab

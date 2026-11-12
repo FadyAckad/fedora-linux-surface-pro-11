@@ -1,0 +1,119 @@
+From 73ec53d800275cce4b8a4af6af03ea2aac9912fd Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Thu, 9 Oct 2025 18:55:18 +0200
+Subject: [PATCH] info: search CTA blocks in DisplayID v2 extensions
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+ info.c                      | 65 ++++++++++++++++++++++++++++++++-----
+ test/data/asus-ux3405.print |  8 ++---
+ 2 files changed, 61 insertions(+), 12 deletions(-)
+
+diff --git a/info.c b/info.c
+index 819f6a4..08ef31b 100644
+--- a/info.c
++++ b/info.c
+@@ -35,6 +35,42 @@ cta_data_block_allowed_multiple(enum di_cta_data_block_tag tag)
+ 	}
+ }
+ 
++static const struct di_cta_data_block *
++find_cta_data_block(const struct di_cta_data_block *const *blocks, enum di_cta_data_block_tag tag)
++{
++	size_t i;
++
++	for (i = 0; blocks[i] != NULL; i++) {
++		if (di_cta_data_block_get_tag(blocks[i]) == tag)
++			return blocks[i];
++	}
++
++	return NULL;
++}
++
++static const struct di_cta_data_block *
++displayid2_get_cta_data_block(const struct di_displayid2 *displayid2, enum di_cta_data_block_tag tag)
++{
++	size_t i;
++	const struct di_displayid2_data_block *const *data_blocks;
++	const struct di_cta_data_block *const *cta_data_blocks, *match;
++
++	data_blocks = di_displayid2_get_data_blocks(displayid2);
++	for (i = 0; data_blocks[i] != NULL; i++) {
++		cta_data_blocks = di_displayid2_data_block_get_cta_data_blocks(data_blocks[i]);
++		if (cta_data_blocks == NULL) {
++			continue;
++		}
++
++		match = find_cta_data_block(cta_data_blocks, tag);
++		if (match != NULL) {
++			return match;
++		}
++	}
++
++	return NULL;
++}
++
+ static const struct di_cta_data_block *
+ edid_get_cta_data_block(const struct di_edid *edid, enum di_cta_data_block_tag tag)
+ {
+@@ -48,15 +84,28 @@ edid_get_cta_data_block(const struct di_edid *edid, enum di_cta_data_block_tag t
+ 
+ 	for (ext = di_edid_get_extensions(edid); *ext; ext++) {
+ 		const struct di_edid_cta *cta;
+-		const struct di_cta_data_block *const *block;
+-
+-		if (di_edid_ext_get_tag(*ext) != DI_EDID_EXT_CEA)
+-			continue;
++		const struct di_displayid2 *displayid2;
++		const struct di_cta_data_block *match;
++
++		match = NULL;
++		switch (di_edid_ext_get_tag(*ext)) {
++		case DI_EDID_EXT_CEA:
++			cta = di_edid_ext_get_cta(*ext);
++			match = find_cta_data_block(di_edid_cta_get_data_blocks(cta), tag);
++			break;
++		case DI_EDID_EXT_DISPLAYID:
++			displayid2 = di_edid_ext_get_displayid2(*ext);
++			if (displayid2 == NULL) {
++				break;
++			}
++			match = displayid2_get_cta_data_block(displayid2, tag);
++			break;
++		default:
++			break; /* Ignore */
++		}
+ 
+-		cta = di_edid_ext_get_cta(*ext);
+-		for (block = di_edid_cta_get_data_blocks(cta); *block; block++) {
+-			if (di_cta_data_block_get_tag(*block) == tag)
+-				return *block;
++		if (match != NULL) {
++			return match;
+ 		}
+ 	}
+ 
+diff --git a/test/data/asus-ux3405.print b/test/data/asus-ux3405.print
+index 5e1f089..001fc57 100644
+--- a/test/data/asus-ux3405.print
++++ b/test/data/asus-ux3405.print
+@@ -2,13 +2,13 @@ make: Samsung Display Corp.
+ model: 0x419D
+ serial: {null}
+ HDR static metadata:
+-luminance 0.000000-0.000000, maxFALL 0.000000
+-metadata type1=no
+-EOTF tSDR=yes, tHDR=no, PQ=no, HLG=no
++luminance 0.000379-616.884338, maxFALL 400.000000
++metadata type1=yes
++EOTF tSDR=yes, tHDR=no, PQ=yes, HLG=no
+ default color primaries:
+     red: 0.683, 0.316
+   green: 0.245, 0.714
+    blue: 0.140, 0.044
+ default white: 0.312, 0.329
+ default gamma: 2.20
+-signal colorimetry:
++signal colorimetry: BT2020_RGB
+-- 
+GitLab

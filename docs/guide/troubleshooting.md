@@ -25,6 +25,15 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   Kernel 7.3 routes the cover switch's wake interrupt through another interrupt controller, where a sleep started
   with the cover open ended at once; revision 2 keeps that path off as 7.2 did, and the cover's wake went with it
   ([`docs/sleep.md`](../sleep.md)).
+- HDR switches itself off when the tablet is rotated (GNOME 51.1): mutter loses the colour mode in the
+  configuration it applies for a rotation. Fixed upstream for mutter 51.2; until Fedora ships it, switch HDR on
+  again in Settings, Displays ([`docs/display.md`](../display.md), Known issues).
+- The HDR switch is gone after a system update: a newer Fedora build of `libdisplay-info` has replaced the
+  rebuild (`rpm -q libdisplay-info` shows no `sp11` in the release). Build the RPM again on that Fedora build
+  and install it ([`docs/guide/build-rpms.md`](build-rpms.md), [`docs/guide/update.md`](update.md)); from
+  libdisplay-info 0.4.0 on the rebuild is not needed.
+- Switching HDR on or off, like every change of the display mode, blanks the screen for about a second: the
+  panel is powered off and on.
 - GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from
   windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
   ([`docs/gnss.md`](../gnss.md)).

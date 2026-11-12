@@ -14,7 +14,8 @@ says only what concretely works. Update the guide whose procedure or result chan
   (spec templates).
 - `payload/`: payload of the support RPM (`payload/15-sp11-surface.install` is the kernel-install plugin), the
   kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files, the libssc and
-  iio-sensor-proxy patches and the unpackaged posture probe) and `payload/camera/` (the unpackaged raw-capture
+  iio-sensor-proxy patches and the unpackaged posture probe), `payload/camera/` (the unpackaged raw-capture
+  probe) and `payload/display/` (the libdisplay-info patches, upstream's commits, and the unpackaged display
   probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), the
   submodule `linux-sp11`: its gitlink pins the head, `sp11.conf` the base; step 10 fetches only the pinned commit.
   The hexagonrpc fork is the submodule `hexagonrpc` under the same scheme (its gitlink is the pin step 45 builds
@@ -56,7 +57,10 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   `payload/sensors/libssc/`),
   `IIO_SENSOR_PROXY_RPM_SUFFIX` (its template or its patches in `payload/sensors/iio-sensor-proxy/`; for a new SRPM
   its pin `IIO_SENSOR_PROXY_SRPM` with URL and checksum, and `IIO_SENSOR_PROXY_BASE_SPEC_SHA256`),
-  `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the registry export).
+  `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the registry export),
+  `LIBDISPLAY_INFO_RPM_SUFFIX` (its template or its patches in `payload/display/libdisplay-info/`; for a new SRPM
+  its pins `LIBDISPLAY_INFO_SRPM` and `LIBDISPLAY_INFO_STOCK_RPM` with URL and checksum, and
+  `LIBDISPLAY_INFO_BASE_SPEC_SHA256`).
 - The spec templates are part of the RPM input hashes: a comment change there needs the release bump too.
 
 ## Conventions

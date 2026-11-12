@@ -63,13 +63,19 @@ in `docs/sensors.md` (Known issues).
   (`failed to suspend device: -16`; the MHI core refuses while ModemManager probes the restarted modem), so systemd
   fell back to `s2idle` for 3 h 23 min: 1.40 W. Revision 5 (patch 0073) powers a busy modem down for the suspend
   instead (`device busy, powering it down for system suspend`); every sleep stays deep and GPS answers afterwards.
+- The Surface Aggregator's hub can refuse a suspend as well: on 2026-11-12 (7.3.3 revision 3) a suspend started
+  20 s after a wake waited 9 s for the EC's answer to its display-off notice (`ssam_serial_hub_pm_prepare`
+  returns -110), and systemd fell back to `s2idle` for that sleep. The nine other suspends of the day, up to 8
+  hours long, were deep; seen this once.
 - Revision 5, 8 hours on battery: 0.33 W with 47 s awake, `ddr` 27335 of 28988 s suspended, the ADSP 10 sleep
   entries a second (about 100 before revision 4). Revision 9 (the modem powered through the sleep, registered and
   kept by ModemManager): 0.32 W over 28885 s, `ddr` 27148 s, the ADSP 10 a second (2026-10-31). 7.2.14 revision 2
   (the PCIe controllers suspended in parallel, mobile data connecting by itself): 0.32 W over 29027 s, `ddr` 27253
   of 28957 s, the ADSP 10 a second, no wake in the night (2026-11-03). 7.3.3 revision 2 (the first 7.3 kernel,
   the crypto engine's node disabled): 0.25 W over 28883 s (35.95 to 33.93 Wh), `ddr` 27112 s, one suspend for
-  the night, no wake (2026-11-09). Up to revision 8 the PM core logs
+  the night, no wake (2026-11-09). 7.3.3 revision 3 (the DisplayPort HDR series, HDR on): 0.31 W over 28951 s
+  (35.82 to 33.33 Wh), `ddr` 27167 s, one suspend, no wake (2026-11-12); the same share of memory sleep as
+  revision 2, the 0.06 W between the two single sleeps not explained. Up to revision 8 the PM core logs
   `parent mhi0 should not be sleeping` once per channel device the modem's restart re-creates while the next
   suspend is prepared; harmless.
 - `cxsd` and `aosd` stayed 0 in every configuration: CX never collapses. Linux runs at EL1 under the firmware's
@@ -212,3 +218,5 @@ remove only the firmware's part, at 1.40 W a night (above).
 - 2026-11-08/09: 7.3.3 revision 1 left a suspend started with the cover open after 2 s (the cover switch's
   interrupt through the PDC); revision 2 keeps the GPIO wakes off the PDC: the suspend holds, the night draws
   0.25 W, opening the cover no longer wakes.
+- 2026-11-12: 7.3.3 revision 3's 8 hours asleep at 0.31 W with HDR on; one suspend of ten refused by the
+  Surface Aggregator's hub and slept in `s2idle`.

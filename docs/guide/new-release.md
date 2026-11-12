@@ -22,15 +22,20 @@ release can touch, each of which stops the build rather than guessing:
     [`reference.md`](../../.claude/skills/sp11-kernel-update/reference.md) does for the kernel's;
   - `rpm/iio-sensor-proxy.spec.in`, a copy of Fedora's spec whose source is pinned by
     `IIO_SENSOR_PROXY_BASE_SPEC_SHA256` (refresh the template, then the pin);
+  - the libdisplay-info source RPM of that release and Fedora's binary RPM of the same build
+    (`LIBDISPLAY_INFO_SRPM` and `LIBDISPLAY_INFO_STOCK_RPM` with their Koji URLs and checksums), and
+    `rpm/libdisplay-info.spec.in` with its pin `LIBDISPLAY_INFO_BASE_SPEC_SHA256`. A release that ships
+    libdisplay-info 0.4.0 or later reads the panel's HDR data itself and needs no rebuild
+    ([`docs/display.md`](../display.md));
   - the package names in `LIVE_EXTRA_PKGS` and `SENSORS_DEPS_PKGS`;
   - the dracut module names in `LIVE_DRACUT_OMIT` (`scripts/50-build-iso.sh`, Fedora 45's);
   - the version floors in `rpm/sp11-sensors.spec.in`;
   - the UCM matcher patch in `scripts/30-build-support-rpm.sh`, which expects ooaklee's v19c `x1e80100.conf`
     matcher line.
 
-`KERNEL_SP11_REV` (default 2, for 7.3.3) is everything the project changes in Fedora's kernel: the patch set's
+`KERNEL_SP11_REV` (default 3, for 7.3.3) is everything the project changes in Fedora's kernel: the patch set's
 pinned commit and `payload/kernel-local`. It becomes the buildid `.sp11.<revision>`, as in
-`kernel-7.3.3-300.sp11.2.fc45`. The kernel packages are install-only, and a rebuild with the same version would
+`kernel-7.3.3-300.sp11.3.fc45`. The kernel packages are install-only, and a rebuild with the same version would
 own the same `/boot` and module paths as the installed one, so bump the revision with every change to the pinned
 commit or to `kernel-local`; a new Fedora kernel version starts again at 1. `sp11.conf` pins each revision's content
 in `KERNEL_SP11_REV_SHA256` (the revision number, `kernel-local`'s effective lines and the two pinned commits);

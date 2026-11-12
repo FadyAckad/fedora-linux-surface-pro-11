@@ -1,0 +1,302 @@
+From 0dee020f5fb6333039e851044070494fe0ec6133 Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Fri, 25 Jul 2025 15:15:44 +0200
+Subject: [PATCH] test: add asus-ux3405
+
+This EDID contains various DisplayID v2 data blocks.
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+ test/data/README.md         |   1 +
+ test/data/asus-ux3405.diff  |  93 +++++++++++++++++++++++++++++
+ test/data/asus-ux3405.edid  | Bin 0 -> 256 bytes
+ test/data/asus-ux3405.print |  14 +++++
+ test/data/asus-ux3405.ref   | 116 ++++++++++++++++++++++++++++++++++++
+ test/meson.build            |   1 +
+ 6 files changed, 225 insertions(+)
+ create mode 100644 test/data/asus-ux3405.diff
+ create mode 100644 test/data/asus-ux3405.edid
+ create mode 100644 test/data/asus-ux3405.print
+ create mode 100644 test/data/asus-ux3405.ref
+
+diff --git a/test/data/README.md b/test/data/README.md
+index 69a5817..372413c 100644
+--- a/test/data/README.md
++++ b/test/data/README.md
+@@ -40,6 +40,7 @@ project:
+ name | source
+ ---- | ------
+ amazon-fire-tv-48	| display
++asus-ux3405		| display
+ ayaneo-wxga		| display
+ cvt			| handcrafted
+ goldstar-e2441		| display
+diff --git a/test/data/asus-ux3405.diff b/test/data/asus-ux3405.diff
+new file mode 100644
+index 0000000..149eb90
+--- /dev/null
++++ b/test/data/asus-ux3405.diff
+@@ -0,0 +1,93 @@
++--- ref
+++++ di
++@@ -26,7 +26,6 @@
++                  Vfront    8 Vsync   8 Vback 1832 Vpol N
++     Display Range Limits:
++       Monitor ranges (Range Limits Only): 48-120 Hz V, 218-218 kHz H, max dotclock 660 MHz
++-    Manufacturer-Specified Display Descriptor (0x00): 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 '................'
++     Alphanumeric Data String: 'ATNA40CU06-0 '
++   Extension blocks: 1
++ Checksum: 0x25
++@@ -35,82 +34,14 @@
++ 
++ Block 1, DisplayID Extension Block:
++   Version: 2.0
++-  Extension Count: 0
++   Display Product Primary Use Case: None of the listed primary use cases; generic display
++-  Product Identification Data Block (0x20), OUI 4C-83-00:
++-    Product Code: 16797
++-    Year of Manufacture: 2032
++-  Display Parameters Data Block (0x21):
++-    Image size: 300.0 mm x 190.0 mm
++-    Display native pixel format: 2880x1800
++-    Scan Orientation: Left to Right, Top to Bottom
++-    Luminance Information: Minimum guaranteed value
++-    Color Information: CIE 1931
++-    Audio Speaker Information: integrated
++-    Native Color Chromaticity:
++-      Primary #1:  (0.683105, 0.315918)
++-      Primary #2:  (0.245117, 0.714111)
++-      Primary #3:  (0.139893, 0.043945)
++-      White Point: (0.312744, 0.329102)
++-    Native Maximum Luminance (Full Coverage): 400.000000 cd/m^2
++-    Native Maximum Luminance (10% Rectangular Coverage): 616.000000 cd/m^2
++-    Native Minimum Luminance: 0.000500 cd/m^2
++-    Native Color Depth: 12 bpc
++-    Display Device Technology: Organic LED
++-    Native Gamma EOTF: 2.20
++-  Display Interface Features Data Block:
++-    Supported bpc for RGB encoding: 6, 8, 10
++-    Supported bpc for YCbCr 4:4:4 encoding: 8, 10
++-    Supported bpc for YCbCr 4:2:2 encoding: 8, 10
++-    Supported color space and EOTF standard combination 1: DCI-P3, BT.2020/SMPTE ST 2084
++-  Video Timing Modes Type 7 - Detailed Timings Data Block:
++-    DTD:  2880x1800  120.000294 Hz  16:10   218.881 kHz    652.264000 MHz (aspect 16:10, no 3D stereo, preferred)
++-               Hfront   32 Hsync   8 Hback   60 Hpol N
++-               Vfront    8 Vsync   8 Vback    8 Vpol N
++-  CTA-861 DisplayID Data Block:
++-  Vendor-Specific Data Block (AMD), OUI 00-00-1A:
++-    Version: 3
++-    Feature Caps: 0x03
++-    Minimum Refresh Rate: 48 Hz
++-    Maximum Refresh Rate: 120 Hz
++-    Flags 1.x: 0x00
++-    Flags 2.x: 0xa0
++-    Maximum luminance: 116 (616.884 cd/m^2)
++-    Minimum luminance: 2 (0.000 cd/m^2)
++-    Unknown: 0x60 0x02
++-  Colorimetry Data Block:
++-    BT2020RGB
++-  HDR Static Metadata Data Block:
++-    Electro optical transfer functions:
++-      Traditional gamma - SDR luminance range
++-      SMPTE ST2084
++-    Supported static metadata descriptors:
++-      Static metadata type 1
++-    Desired content max luminance: 116 (616.884 cd/m^2)
++-    Desired content max frame-average luminance: 96 (400.000 cd/m^2)
++-    Desired content min luminance: 2 (0.000 cd/m^2)
++-  Checksum: 0x91
++ Checksum: 0x90
++ 
++ ----------------
++ 
++-Warnings:
++-
++-Block 0, Base EDID:
++-  Missing Display Product Name.
++-Block 1, DisplayID Extension Block:
++-  Product Identification Data Block (0x20), OUI 4C-83-00: Unknown OUI 4C-83-00.
++-  Colorimetry Data Block: Set the sRGB colorimetry bit to avoid interop issues.
++-EDID:
++-  Base EDID: Some timings are out of range of the Monitor Ranges:
++-    Horizontal Freq: 218.880 - 218.882 kHz (Monitor: 218.000 - 218.000 kHz)
++-    Could be due to a Monitor Range off-by-one rounding issue
++-
++ Failures:
++ 
++ Block 0, Base EDID:
++   Display Range Limits: Byte 11 is 0x00 instead of 0x0a.
++   Display Range Limits: Bytes 12-17 must be 0x20.
++-  Alphanumeric Data String: No newline, but one or more trailing spaces.
++-
++ EDID conformity: FAIL
+diff --git a/test/data/asus-ux3405.edid b/test/data/asus-ux3405.edid
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a0d15a5261e55b674361aa471d055b0cac3e108
+GIT binary patch
+literal 256
+zcmZSh4+acA&2t?YKtO?!WviTU1@rlf>jLezDRT#e00kM*!0CSuDH}K}$`v>|81(iE
+zFfd3175!x}sJL~@i4kN9I)DlOV{i=db2Kq<4mB{-HBewwEl{XrVo+e<@o8p&Ie<Zt
+zL3Rgs4!Z+42Rp;NR{?J>Z?kpcW^@g4h`W#=A)s8L#=yzW#tgI~fPq1YLFD;o&Q^Qw
+zWCnQ#b_RBKaS+MS$RJ-V#lXPKY*4|lpoA%bsRHDp-p8yB4A0nD8A}qFz%HCP0RXB`
+BH30ws
+
+literal 0
+HcmV?d00001
+
+diff --git a/test/data/asus-ux3405.print b/test/data/asus-ux3405.print
+new file mode 100644
+index 0000000..5e1f089
+--- /dev/null
++++ b/test/data/asus-ux3405.print
+@@ -0,0 +1,14 @@
++make: Samsung Display Corp.
++model: 0x419D
++serial: {null}
++HDR static metadata:
++luminance 0.000000-0.000000, maxFALL 0.000000
++metadata type1=no
++EOTF tSDR=yes, tHDR=no, PQ=no, HLG=no
++default color primaries:
++    red: 0.683, 0.316
++  green: 0.245, 0.714
++   blue: 0.140, 0.044
++default white: 0.312, 0.329
++default gamma: 2.20
++signal colorimetry:
+diff --git a/test/data/asus-ux3405.ref b/test/data/asus-ux3405.ref
+new file mode 100644
+index 0000000..13148a3
+--- /dev/null
++++ b/test/data/asus-ux3405.ref
+@@ -0,0 +1,116 @@
++Block 0, Base EDID:
++  EDID Structure Version & Revision: 1.4
++  Vendor & Product Identification:
++    Manufacturer: SDC
++    Model: 16797
++    Made in: 2022
++  Basic Display Parameters & Features:
++    Digital display
++    Bits per primary color channel: 10
++    DisplayPort interface
++    Maximum image size: 30 cm x 19 cm
++    Gamma: 2.20
++    Supported color formats: RGB 4:4:4
++    First detailed timing includes the native pixel format and preferred refresh rate
++    Display supports continuous frequencies
++  Color Characteristics:
++    Red  : 0.6826, 0.3164
++    Green: 0.2451, 0.7138
++    Blue : 0.1396, 0.0439
++    White: 0.3125, 0.3291
++  Established Timings I & II: none
++  Standard Timings: none
++  Detailed Timing Descriptors:
++    DTD 1:  2880x1800   60.000699 Hz  16:10   218.883 kHz    652.270000 MHz (302 mm x 189 mm)
++                 Hfront   32 Hsync   8 Hback   60 Hpol P
++                 Vfront    8 Vsync   8 Vback 1832 Vpol N
++    Display Range Limits:
++      Monitor ranges (Range Limits Only): 48-120 Hz V, 218-218 kHz H, max dotclock 660 MHz
++    Manufacturer-Specified Display Descriptor (0x00): 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 '................'
++    Alphanumeric Data String: 'ATNA40CU06-0 '
++  Extension blocks: 1
++Checksum: 0x25
++
++----------------
++
++Block 1, DisplayID Extension Block:
++  Version: 2.0
++  Extension Count: 0
++  Display Product Primary Use Case: None of the listed primary use cases; generic display
++  Product Identification Data Block (0x20), OUI 4C-83-00:
++    Product Code: 16797
++    Year of Manufacture: 2032
++  Display Parameters Data Block (0x21):
++    Image size: 300.0 mm x 190.0 mm
++    Display native pixel format: 2880x1800
++    Scan Orientation: Left to Right, Top to Bottom
++    Luminance Information: Minimum guaranteed value
++    Color Information: CIE 1931
++    Audio Speaker Information: integrated
++    Native Color Chromaticity:
++      Primary #1:  (0.683105, 0.315918)
++      Primary #2:  (0.245117, 0.714111)
++      Primary #3:  (0.139893, 0.043945)
++      White Point: (0.312744, 0.329102)
++    Native Maximum Luminance (Full Coverage): 400.000000 cd/m^2
++    Native Maximum Luminance (10% Rectangular Coverage): 616.000000 cd/m^2
++    Native Minimum Luminance: 0.000500 cd/m^2
++    Native Color Depth: 12 bpc
++    Display Device Technology: Organic LED
++    Native Gamma EOTF: 2.20
++  Display Interface Features Data Block:
++    Supported bpc for RGB encoding: 6, 8, 10
++    Supported bpc for YCbCr 4:4:4 encoding: 8, 10
++    Supported bpc for YCbCr 4:2:2 encoding: 8, 10
++    Supported color space and EOTF standard combination 1: DCI-P3, BT.2020/SMPTE ST 2084
++  Video Timing Modes Type 7 - Detailed Timings Data Block:
++    DTD:  2880x1800  120.000294 Hz  16:10   218.881 kHz    652.264000 MHz (aspect 16:10, no 3D stereo, preferred)
++               Hfront   32 Hsync   8 Hback   60 Hpol N
++               Vfront    8 Vsync   8 Vback    8 Vpol N
++  CTA-861 DisplayID Data Block:
++  Vendor-Specific Data Block (AMD), OUI 00-00-1A:
++    Version: 3
++    Feature Caps: 0x03
++    Minimum Refresh Rate: 48 Hz
++    Maximum Refresh Rate: 120 Hz
++    Flags 1.x: 0x00
++    Flags 2.x: 0xa0
++    Maximum luminance: 116 (616.884 cd/m^2)
++    Minimum luminance: 2 (0.000 cd/m^2)
++    Unknown: 0x60 0x02
++  Colorimetry Data Block:
++    BT2020RGB
++  HDR Static Metadata Data Block:
++    Electro optical transfer functions:
++      Traditional gamma - SDR luminance range
++      SMPTE ST2084
++    Supported static metadata descriptors:
++      Static metadata type 1
++    Desired content max luminance: 116 (616.884 cd/m^2)
++    Desired content max frame-average luminance: 96 (400.000 cd/m^2)
++    Desired content min luminance: 2 (0.000 cd/m^2)
++  Checksum: 0x91
++Checksum: 0x90
++
++----------------
++
++Warnings:
++
++Block 0, Base EDID:
++  Missing Display Product Name.
++Block 1, DisplayID Extension Block:
++  Product Identification Data Block (0x20), OUI 4C-83-00: Unknown OUI 4C-83-00.
++  Colorimetry Data Block: Set the sRGB colorimetry bit to avoid interop issues.
++EDID:
++  Base EDID: Some timings are out of range of the Monitor Ranges:
++    Horizontal Freq: 218.880 - 218.882 kHz (Monitor: 218.000 - 218.000 kHz)
++    Could be due to a Monitor Range off-by-one rounding issue
++
++Failures:
++
++Block 0, Base EDID:
++  Display Range Limits: Byte 11 is 0x00 instead of 0x0a.
++  Display Range Limits: Bytes 12-17 must be 0x20.
++  Alphanumeric Data String: No newline, but one or more trailing spaces.
++
++EDID conformity: FAIL
+diff --git a/test/meson.build b/test/meson.build
+index 1148bdb..a3b3759 100644
+--- a/test/meson.build
++++ b/test/meson.build
+@@ -13,6 +13,7 @@ test_cases = [
+ 	'acer-p1276',
+ 	'amazon-fire-tv-48',
+ 	'apple-xdr-dp',
++	'asus-ux3405',
+ 	'ayaneo-wxga',
+ 	'cta-timings',
+ 	'cta-timings',
+-- 
+GitLab

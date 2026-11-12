@@ -1,0 +1,104 @@
+From 6feabfe38685ff7eb3e7cf9ab5f059c97c016d7c Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Thu, 9 Oct 2025 18:45:07 +0200
+Subject: [PATCH] di-edid-decode: add support for DisplayID v2 CTA-861 data
+ blocks
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+ di-edid-decode/displayid2.c | 28 +++++++++++++++++++++++-----
+ test/data/asus-ux3405.diff  | 20 +++++++++-----------
+ 2 files changed, 32 insertions(+), 16 deletions(-)
+
+diff --git a/di-edid-decode/displayid2.c b/di-edid-decode/displayid2.c
+index 7a8bc59..b623652 100644
+--- a/di-edid-decode/displayid2.c
++++ b/di-edid-decode/displayid2.c
+@@ -69,13 +69,33 @@ displayid2_data_block_tag_name(enum di_displayid2_data_block_tag tag)
+ 	abort(); /* unreachable */
+ }
+ 
++static void
++print_data_block(const struct di_displayid2_data_block *data_block)
++{
++	enum di_displayid2_data_block_tag tag;
++	const struct di_cta_data_block *const *cta_data_blocks;
++	size_t i;
++
++	tag = di_displayid2_data_block_get_tag(data_block);
++	printf("  %s:\n", displayid2_data_block_tag_name(tag));
++
++	switch (tag) {
++	case DI_DISPLAYID2_DATA_BLOCK_CTA861:
++		cta_data_blocks = di_displayid2_data_block_get_cta_data_blocks(data_block);
++		for (i = 0; cta_data_blocks[i] != NULL; i++) {
++			print_cta_data_block(cta_data_blocks[i], cta_data_blocks);
++		}
++		break;
++	default:
++		break; /* Ignore */
++	}
++}
++
+ void
+ print_displayid2(const struct di_displayid2 *displayid2)
+ {
+ 	enum di_displayid2_product_primary_use_case use_case;
+ 	const struct di_displayid2_data_block *const *data_blocks;
+-	const struct di_displayid2_data_block *data_block;
+-	enum di_displayid2_data_block_tag tag;
+ 	size_t i;
+ 
+ 	printf("  Version: 2.%d\n", di_displayid2_get_revision(displayid2));
+@@ -86,8 +106,6 @@ print_displayid2(const struct di_displayid2 *displayid2)
+ 
+ 	data_blocks = di_displayid2_get_data_blocks(displayid2);
+ 	for (i = 0; data_blocks[i] != NULL; i++) {
+-		data_block = data_blocks[i];
+-		tag = di_displayid2_data_block_get_tag(data_block);
+-		printf("  %s:\n", displayid2_data_block_tag_name(tag));
++		print_data_block(data_blocks[i]);
+ 	}
+ }
+diff --git a/test/data/asus-ux3405.diff b/test/data/asus-ux3405.diff
+index 76dbedd..cd259a1 100644
+--- a/test/data/asus-ux3405.diff
++++ b/test/data/asus-ux3405.diff
+@@ -8,7 +8,7 @@
+      Alphanumeric Data String: 'ATNA40CU06-0 '
+    Extension blocks: 1
+  Checksum: 0x25
+-@@ -35,82 +34,19 @@
++@@ -35,49 +34,12 @@
+  
+  Block 1, DisplayID Extension Block:
+    Version: 2.0
+@@ -56,18 +56,16 @@
+ -    Maximum luminance: 116 (616.884 cd/m^2)
+ -    Minimum luminance: 2 (0.000 cd/m^2)
+ -    Unknown: 0x60 0x02
+--  Colorimetry Data Block:
+--    BT2020RGB
+--  HDR Static Metadata Data Block:
+--    Electro optical transfer functions:
+--      Traditional gamma - SDR luminance range
+--      SMPTE ST2084
+--    Supported static metadata descriptors:
+--      Static metadata type 1
+--    Desired content max luminance: 116 (616.884 cd/m^2)
+--    Desired content max frame-average luminance: 96 (400.000 cd/m^2)
++   Colorimetry Data Block:
++     BT2020RGB
++   HDR Static Metadata Data Block:
++@@ -88,29 +50,14 @@
++       Static metadata type 1
++     Desired content max luminance: 116 (616.884 cd/m^2)
++     Desired content max frame-average luminance: 96 (400.000 cd/m^2)
+ -    Desired content min luminance: 2 (0.000 cd/m^2)
+ -  Checksum: 0x91
+++    Desired content min luminance: 1 (0.000 cd/m^2)
+  Checksum: 0x90
+  
+  ----------------
+-- 
+GitLab

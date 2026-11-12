@@ -1,7 +1,7 @@
 # Build one set of RPMs alone
 
-Building the kernel, support, pen daemon or sensors RPMs for a system that is already installed, without a new
-ISO. Installing the result: [`docs/guide/update.md`](update.md); the full pipeline:
+Building the kernel, support, pen daemon, sensors or `libdisplay-info` RPMs for a system that is already
+installed, without a new ISO. Installing the result: [`docs/guide/update.md`](update.md); the full pipeline:
 [`docs/guide/build.md`](build.md).
 
 Every set needs a full `scripts/build-all.sh` run first: it provides the host setup, the downloads and the live
@@ -82,3 +82,18 @@ This builds `hexagonrpc` (from this project's fork, [`docs/guide/credits.md`](cr
 extracted live root. `SENSORS_VERSION` in `sp11.conf` versions `sp11-sensors`; a changed payload at the same
 version stops the step, as does a change in Fedora's iio-sensor-proxy spec until the template is refreshed.
 Installing them: [`docs/guide/sensors.md`](sensors.md).
+
+## libdisplay-info
+
+```bash
+scripts/47-build-libdisplay-info-rpm.sh
+```
+
+This rebuilds Fedora's own `libdisplay-info` source RPM in a mock buildroot of the target release with the
+upstream commits that read a panel's HDR data from a DisplayID 2.0 extension
+([`docs/display.md`](../display.md)), runs upstream's tests in the build and compares the result with Fedora's
+build: the same files, requirements and library name, three functions more. Then step 48 installs it over
+Fedora's in the extracted live root, checks what links against it and takes it back out.
+`LIBDISPLAY_INFO_RPM_SUFFIX` in `sp11.conf` versions the rebuild; changed patches or a changed template under the
+same suffix stop the step, as does a change in Fedora's spec until the template is refreshed. Installing the
+result: [`docs/guide/update.md`](update.md).

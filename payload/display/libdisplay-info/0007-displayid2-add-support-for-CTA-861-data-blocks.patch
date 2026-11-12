@@ -1,0 +1,190 @@
+From 7324cca007730b9534c691f2c59ce941c68eb5cd Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Thu, 9 Oct 2025 18:44:37 +0200
+Subject: [PATCH] displayid2: add support for CTA-861 data blocks
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+ displayid2.c                         | 72 +++++++++++++++++++++++++++-
+ include/displayid2.h                 | 18 +++++++
+ include/libdisplay-info/displayid2.h | 10 ++++
+ 3 files changed, 98 insertions(+), 2 deletions(-)
+
+diff --git a/displayid2.c b/displayid2.c
+index 612f580..6ab9c7b 100644
+--- a/displayid2.c
++++ b/displayid2.c
+@@ -34,6 +34,50 @@ add_failure(struct di_displayid2 *displayid2, const char fmt[], ...)
+ 	va_end(args);
+ }
+ 
++static bool
++parse_cta861_block(struct di_displayid2 *displayid2, struct di_displayid2_data_block *data_block,
++		   const uint8_t *data, size_t size)
++{
++	struct di_cta cta;
++	size_t i;
++	uint8_t data_block_tag, data_block_size;
++	struct di_cta_data_block *cta_data_block;
++
++	cta = (struct di_cta){
++		/* The DisplayID block doesn't specify the CTA revision. Use
++		 * the latest one to silence warnings. */
++		.revision = 3,
++		.logger = displayid2->logger,
++	};
++
++	i = 0x03;
++	while (i < size) {
++		data_block_size = get_bit_range(data[i], 4, 0);
++		data_block_tag = get_bit_range(data[i], 7, 5);
++
++		if (data_block_size > size - i - 1) {
++			add_failure(displayid2,
++				    "CTA data block size (%" PRIu8 ") exceeds number of remaining bytes (%zu)",
++				    data_block_size, size - i - 1);
++			break;
++		}
++
++		if (!_di_cta_data_block_parse(&cta, data_block_tag,
++					      &data[i + 1], data_block_size, &cta_data_block)) {
++			return false;
++		}
++
++		if (cta_data_block != NULL) {
++			assert(data_block->cta861.data_blocks_len < DISPLAYID2_CTA861_MAX_DATA_BLOCKS);
++			data_block->cta861.data_blocks[data_block->cta861.data_blocks_len++] = cta_data_block;
++		}
++
++		i += 1 + data_block_size;
++	}
++
++	return true;
++}
++
+ static ssize_t
+ parse_data_block(struct di_displayid2 *displayid2, const uint8_t *data,
+ 		 size_t size)
+@@ -58,6 +102,11 @@ parse_data_block(struct di_displayid2 *displayid2, const uint8_t *data,
+ 		goto error;
+ 
+ 	switch (tag) {
++	case DI_DISPLAYID2_DATA_BLOCK_CTA861:
++		if (!parse_cta861_block(displayid2, data_block, data, data_block_size)) {
++			goto error;
++		}
++		break;
+ 	case DI_DISPLAYID2_DATA_BLOCK_PRODUCT_ID:
+ 	case DI_DISPLAYID2_DATA_BLOCK_DISPLAY_PARAMS:
+ 	case DI_DISPLAYID2_DATA_BLOCK_TYPE_VII_TIMING:
+@@ -72,7 +121,6 @@ parse_data_block(struct di_displayid2 *displayid2, const uint8_t *data,
+ 	case DI_DISPLAYID2_DATA_BLOCK_ADAPTIVE_SYNC:
+ 	case DI_DISPLAYID2_DATA_BLOCK_ARVR_HMD:
+ 	case DI_DISPLAYID2_DATA_BLOCK_ARVR_LAYER:
+-	case DI_DISPLAYID2_DATA_BLOCK_CTA861:
+ 		break; /* Supported */
+ 	case 0x7E:
+ 		goto skip; /* Vendor-specific */
+@@ -211,13 +259,24 @@ _di_displayid2_parse(struct di_displayid2 *displayid2, const uint8_t *data,
+ 	return true;
+ }
+ 
++static void
++data_block_destroy(struct di_displayid2_data_block *data_block)
++{
++	size_t i;
++
++	for (i = 0; i < data_block->cta861.data_blocks_len; i++)
++		_di_cta_data_block_destroy(data_block->cta861.data_blocks[i]);
++
++	free(data_block);
++}
++
+ void
+ _di_displayid2_finish(struct di_displayid2 *displayid2)
+ {
+ 	size_t i;
+ 
+ 	for (i = 0; i < displayid2->data_blocks_len; i++)
+-		free(displayid2->data_blocks[i]);
++		data_block_destroy(displayid2->data_blocks[i]);
+ }
+ 
+ int
+@@ -243,3 +302,12 @@ di_displayid2_data_block_get_tag(const struct di_displayid2_data_block *data_blo
+ {
+ 	return data_block->tag;
+ }
++
++const struct di_cta_data_block *const *
++di_displayid2_data_block_get_cta_data_blocks(const struct di_displayid2_data_block *data_block)
++{
++	if (data_block->tag != DI_DISPLAYID2_DATA_BLOCK_CTA861) {
++		return NULL;
++	}
++	return (const struct di_cta_data_block *const *) data_block->cta861.data_blocks;
++}
+diff --git a/include/displayid2.h b/include/displayid2.h
+index 0a85a3b..a58c87f 100644
+--- a/include/displayid2.h
++++ b/include/displayid2.h
+@@ -11,6 +11,7 @@
+ 
+ #include <libdisplay-info/displayid2.h>
+ 
++#include "cta.h"
+ #include "log.h"
+ 
+ /**
+@@ -22,6 +23,16 @@
+  */
+ #define DISPLAYID2_MAX_DATA_BLOCKS 83
+ 
++/**
++ * The maximum number of CTA data blocks in a DisplayID v2 CTA-861 data block.
++ *
++ * A DisplayID v2 section has a maximum payload size of 251 bytes (256 bytes
++ * maximum size, 5 bytes header), a DisplayID v2 data block has a maximum
++ * payload size of 248 bytes (3 bytes header), and each CTA data block takes at
++ * least 1 byte.
++ */
++#define DISPLAYID2_CTA861_MAX_DATA_BLOCKS 248
++
+ struct di_displayid2 {
+ 	int revision;
+ 	enum di_displayid2_product_primary_use_case product_primary_use_case;
+@@ -34,6 +45,13 @@ struct di_displayid2 {
+ 
+ struct di_displayid2_data_block {
+ 	enum di_displayid2_data_block_tag tag;
++
++	/* Used for DI_DISPLAYID2_DATA_BLOCK_CTA861 */
++	struct {
++		/* NULL-terminated */
++		struct di_cta_data_block *data_blocks[DISPLAYID2_CTA861_MAX_DATA_BLOCKS + 1];
++		size_t data_blocks_len;
++	} cta861;
+ };
+ 
+ bool
+diff --git a/include/libdisplay-info/displayid2.h b/include/libdisplay-info/displayid2.h
+index 97e8e00..27b147b 100644
+--- a/include/libdisplay-info/displayid2.h
++++ b/include/libdisplay-info/displayid2.h
+@@ -108,4 +108,14 @@ di_displayid2_data_block_get_tag(const struct di_displayid2_data_block *data_blo
+ enum di_displayid2_product_primary_use_case
+ di_displayid2_get_product_primary_use_case(const struct di_displayid2 *displayid2);
+ 
++/**
++ * Get CTA data blocks from a DisplayID v2 CTA-861 data block.
++ *
++ * The returned array is NULL-terminated.
++ *
++ * Returns NULL if the data block tag isn't DI_DISPLAYID2_DATA_BLOCK_CTA861.
++ */
++const struct di_cta_data_block *const *
++di_displayid2_data_block_get_cta_data_blocks(const struct di_displayid2_data_block *data_block);
++
+ #endif
+-- 
+GitLab

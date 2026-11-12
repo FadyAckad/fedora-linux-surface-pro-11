@@ -1,0 +1,486 @@
+From 788c056e24eaf412832889afd46aaa41bec94e6a Mon Sep 17 00:00:00 2001
+From: Simon Ser <contact@emersion.fr>
+Date: Fri, 25 Jul 2025 15:13:00 +0200
+Subject: [PATCH] displayid2: decode data blocks structure
+
+Parse data blocks length and tags, expose these in the public API.
+
+Signed-off-by: Simon Ser <contact@emersion.fr>
+---
+ di-edid-decode/displayid2.c          |  49 +++++++++
+ displayid2.c                         | 157 ++++++++++++++++++++++++++-
+ edid.c                               |   1 +
+ include/displayid2.h                 |  19 ++++
+ include/libdisplay-info/displayid2.h |  55 ++++++++++
+ test/data/asus-ux3405.diff           |  11 +-
+ test/data/jdi-lpm135m467-edp.diff    |  11 +-
+ 7 files changed, 290 insertions(+), 13 deletions(-)
+
+diff --git a/di-edid-decode/displayid2.c b/di-edid-decode/displayid2.c
+index 255ee78..7a8bc59 100644
+--- a/di-edid-decode/displayid2.c
++++ b/di-edid-decode/displayid2.c
+@@ -31,14 +31,63 @@ displayid2_product_primary_use_case_name(enum di_displayid2_product_primary_use_
+ 	abort(); /* unreachable */
+ }
+ 
++static const char *
++displayid2_data_block_tag_name(enum di_displayid2_data_block_tag tag)
++{
++	switch (tag) {
++	case DI_DISPLAYID2_DATA_BLOCK_PRODUCT_ID:
++		return "Product Identification Data Block (0x20)";
++	case DI_DISPLAYID2_DATA_BLOCK_DISPLAY_PARAMS:
++		return "Display Parameters Data Block (0x21)";
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_VII_TIMING:
++		return "Video Timing Modes Type 7 - Detailed Timings Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_VIII_TIMING:
++		return "Video Timing Modes Type 8 - Enumerated Timing Codes Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_IX_TIMING:
++		return "Video Timing Modes Type 9 - Formula-based Timings Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_DYN_TIMING_RANGE_LIMITS:
++		return "Dynamic Video Timing Range Limits Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_DISPLAY_INTERFACE_FEATURES:
++		return "Display Interface Features Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_STEREO_DISPLAY_INTERFACE:
++		return "Stereo Display Interface Data Block (0x27)";
++	case DI_DISPLAYID2_DATA_BLOCK_TILED_DISPLAY_TOPO:
++		return "Tiled Display Topology Data Block (0x28)";
++	case DI_DISPLAYID2_DATA_BLOCK_CONTAINERID:
++		return "ContainerID Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_X_TIMING:
++		return "Video Timing Modes Type 10 - Formula-based Timings Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_ADAPTIVE_SYNC:
++		return "Adaptive Sync Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_ARVR_HMD:
++		return "ARVR_HMD Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_ARVR_LAYER:
++		return "ARVR_Layer Data Block";
++	case DI_DISPLAYID2_DATA_BLOCK_CTA861:
++		return "CTA-861 DisplayID Data Block";
++	}
++	abort(); /* unreachable */
++}
++
+ void
+ print_displayid2(const struct di_displayid2 *displayid2)
+ {
+ 	enum di_displayid2_product_primary_use_case use_case;
++	const struct di_displayid2_data_block *const *data_blocks;
++	const struct di_displayid2_data_block *data_block;
++	enum di_displayid2_data_block_tag tag;
++	size_t i;
+ 
+ 	printf("  Version: 2.%d\n", di_displayid2_get_revision(displayid2));
+ 
+ 	use_case = di_displayid2_get_product_primary_use_case(displayid2);
+ 	printf("  Display Product Primary Use Case: %s\n",
+ 	       displayid2_product_primary_use_case_name(use_case));
++
++	data_blocks = di_displayid2_get_data_blocks(displayid2);
++	for (i = 0; data_blocks[i] != NULL; i++) {
++		data_block = data_blocks[i];
++		tag = di_displayid2_data_block_get_tag(data_block);
++		printf("  %s:\n", displayid2_data_block_tag_name(tag));
++	}
+ }
+diff --git a/displayid2.c b/displayid2.c
+index 41167fa..612f580 100644
+--- a/displayid2.c
++++ b/displayid2.c
+@@ -1,17 +1,123 @@
+ #include <errno.h>
++#include <inttypes.h>
++#include <stdlib.h>
++#include <sys/types.h>
+ 
+ #include "bits.h"
+ #include "displayid.h"
+ #include "displayid2.h"
+ 
+ /**
+- * The size of the mandatory fields in a DisplayID v2 section.
++ * The size of a DisplayID v2 section header.
+  */
+-#define DISPLAYID2_MIN_SIZE 5
++#define DISPLAYID2_HEADER_SIZE 4
++/**
++ * The size of the mandatory fields in a DisplayID v2 section (header + checksum).
++ */
++#define DISPLAYID2_MIN_SIZE (DISPLAYID2_HEADER_SIZE + 1)
+ /**
+  * The maximum size of a DisplayID v2 section.
+  */
+ #define DISPLAYID2_MAX_SIZE 256
++/**
++ * The size of a DisplayID v2 data block header (tag, revision and size).
++ */
++#define DISPLAYID2_DATA_BLOCK_HEADER_SIZE 3
++
++static void
++add_failure(struct di_displayid2 *displayid2, const char fmt[], ...)
++{
++	va_list args;
++
++	va_start(args, fmt);
++	_di_logger_va_add_failure(displayid2->logger, fmt, args);
++	va_end(args);
++}
++
++static ssize_t
++parse_data_block(struct di_displayid2 *displayid2, const uint8_t *data,
++		 size_t size)
++{
++	uint8_t tag;
++	size_t data_block_size;
++	struct di_displayid2_data_block *data_block = NULL;
++
++	assert(size >= DISPLAYID2_DATA_BLOCK_HEADER_SIZE);
++
++	tag = data[0x00];
++	data_block_size = (size_t) data[0x02] + DISPLAYID2_DATA_BLOCK_HEADER_SIZE;
++	if (data_block_size > size) {
++		add_failure(displayid2,
++			    "The length of this DisplayID data block (%d) exceeds the number of bytes remaining (%zu)",
++			    data_block_size, size);
++		goto skip;
++	}
++
++	data_block = calloc(1, sizeof(*data_block));
++	if (!data_block)
++		goto error;
++
++	switch (tag) {
++	case DI_DISPLAYID2_DATA_BLOCK_PRODUCT_ID:
++	case DI_DISPLAYID2_DATA_BLOCK_DISPLAY_PARAMS:
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_VII_TIMING:
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_VIII_TIMING:
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_IX_TIMING:
++	case DI_DISPLAYID2_DATA_BLOCK_DYN_TIMING_RANGE_LIMITS:
++	case DI_DISPLAYID2_DATA_BLOCK_DISPLAY_INTERFACE_FEATURES:
++	case DI_DISPLAYID2_DATA_BLOCK_STEREO_DISPLAY_INTERFACE:
++	case DI_DISPLAYID2_DATA_BLOCK_TILED_DISPLAY_TOPO:
++	case DI_DISPLAYID2_DATA_BLOCK_CONTAINERID:
++	case DI_DISPLAYID2_DATA_BLOCK_TYPE_X_TIMING:
++	case DI_DISPLAYID2_DATA_BLOCK_ADAPTIVE_SYNC:
++	case DI_DISPLAYID2_DATA_BLOCK_ARVR_HMD:
++	case DI_DISPLAYID2_DATA_BLOCK_ARVR_LAYER:
++	case DI_DISPLAYID2_DATA_BLOCK_CTA861:
++		break; /* Supported */
++	case 0x7E:
++		goto skip; /* Vendor-specific */
++	default:
++		add_failure(displayid2,
++			    "Unknown DisplayID v2 Data Block (0x%" PRIx8 ", length %" PRIu8 ")",
++			    tag, data_block_size - DISPLAYID2_DATA_BLOCK_HEADER_SIZE);
++		goto skip;
++	}
++
++	data_block->tag = tag;
++
++	assert(displayid2->data_blocks_len < DISPLAYID2_MAX_DATA_BLOCKS);
++	displayid2->data_blocks[displayid2->data_blocks_len++] = data_block;
++	return (ssize_t) data_block_size;
++
++skip:
++	free(data_block);
++	return (ssize_t) data_block_size;
++
++error:
++	free(data_block);
++	return -1;
++}
++
++static bool
++is_all_zeroes(const uint8_t *data, size_t size)
++{
++	size_t i;
++
++	for (i = 0; i < size; i++) {
++		if (data[i] != 0)
++			return false;
++	}
++
++	return true;
++}
++
++static bool
++is_data_block_end(const uint8_t *data, size_t size)
++{
++	if (size < DISPLAYID2_DATA_BLOCK_HEADER_SIZE)
++		return true;
++	return is_all_zeroes(data, DISPLAYID2_DATA_BLOCK_HEADER_SIZE);
++}
+ 
+ static bool
+ validate_checksum(const uint8_t *data, size_t size)
+@@ -30,7 +136,8 @@ bool
+ _di_displayid2_parse(struct di_displayid2 *displayid2, const uint8_t *data,
+ 		     size_t size, struct di_logger *logger)
+ {
+-	size_t section_size;
++	size_t section_size, i, max_data_block_size;
++	ssize_t data_block_size;
+ 	int version;
+ 	uint8_t product_primary_use_case;
+ 
+@@ -77,10 +184,42 @@ _di_displayid2_parse(struct di_displayid2 *displayid2, const uint8_t *data,
+ 		return false;
+ 	}
+ 
++	i = DISPLAYID2_HEADER_SIZE;
++	max_data_block_size = 0;
++	while (i < section_size - 1) {
++		max_data_block_size = section_size - 1 - i;
++		if (is_data_block_end(&data[i], max_data_block_size))
++			break;
++		data_block_size = parse_data_block(displayid2, &data[i],
++						   max_data_block_size);
++		if (data_block_size < 0)
++			return false;
++		assert(data_block_size > 0);
++		i += (size_t) data_block_size;
++	}
++	if (!is_all_zeroes(&data[i], max_data_block_size)) {
++		if (max_data_block_size < DISPLAYID2_DATA_BLOCK_HEADER_SIZE) {
++			add_failure(displayid2,
++				    "Not enough bytes remain (%zu) for a DisplayID data block and the DisplayID filler is non-0.",
++				    max_data_block_size);
++		} else {
++			add_failure(displayid2, "Padding: Contains non-zero bytes.");
++		}
++	}
++
+ 	displayid2->logger = NULL;
+ 	return true;
+ }
+ 
++void
++_di_displayid2_finish(struct di_displayid2 *displayid2)
++{
++	size_t i;
++
++	for (i = 0; i < displayid2->data_blocks_len; i++)
++		free(displayid2->data_blocks[i]);
++}
++
+ int
+ di_displayid2_get_revision(const struct di_displayid2 *displayid2)
+ {
+@@ -92,3 +231,15 @@ di_displayid2_get_product_primary_use_case(const struct di_displayid2 *displayid
+ {
+ 	return displayid2->product_primary_use_case;
+ }
++
++const struct di_displayid2_data_block *const *
++di_displayid2_get_data_blocks(const struct di_displayid2 *displayid2)
++{
++	return (const struct di_displayid2_data_block *const *) displayid2->data_blocks;
++}
++
++enum di_displayid2_data_block_tag
++di_displayid2_data_block_get_tag(const struct di_displayid2_data_block *data_block)
++{
++	return data_block->tag;
++}
+diff --git a/edid.c b/edid.c
+index 45ad13f..fa5da8f 100644
+--- a/edid.c
++++ b/edid.c
+@@ -1380,6 +1380,7 @@ _di_edid_destroy(struct di_edid *edid)
+ 			break;
+ 		case DI_EDID_EXT_DISPLAYID:
+ 			_di_displayid_finish(&ext->displayid);
++			_di_displayid2_finish(&ext->displayid2);
+ 			break;
+ 		default:
+ 			break; /* Nothing to do */
+diff --git a/include/displayid2.h b/include/displayid2.h
+index e82eae6..0a85a3b 100644
+--- a/include/displayid2.h
++++ b/include/displayid2.h
+@@ -13,15 +13,34 @@
+ 
+ #include "log.h"
+ 
++/**
++ * The maximum number of data blocks in a DisplayID v2 section.
++ *
++ * A DisplayID v2 section has a maximum payload size of 251 bytes (256 bytes
++ * maximum size, 5 bytes header), and each data block has a minimum size of
++ * 3 bytes.
++ */
++#define DISPLAYID2_MAX_DATA_BLOCKS 83
++
+ struct di_displayid2 {
+ 	int revision;
+ 	enum di_displayid2_product_primary_use_case product_primary_use_case;
+ 
++	struct di_displayid2_data_block *data_blocks[DISPLAYID2_MAX_DATA_BLOCKS + 1];
++	size_t data_blocks_len;
++
+ 	struct di_logger *logger;
+ };
+ 
++struct di_displayid2_data_block {
++	enum di_displayid2_data_block_tag tag;
++};
++
+ bool
+ _di_displayid2_parse(struct di_displayid2 *displayid2, const uint8_t *data,
+ 		     size_t size, struct di_logger *logger);
+ 
++void
++_di_displayid2_finish(struct di_displayid2 *displayid2);
++
+ #endif
+diff --git a/include/libdisplay-info/displayid2.h b/include/libdisplay-info/displayid2.h
+index 028a2d9..97e8e00 100644
+--- a/include/libdisplay-info/displayid2.h
++++ b/include/libdisplay-info/displayid2.h
+@@ -23,6 +23,14 @@ struct di_displayid2;
+ int
+ di_displayid2_get_revision(const struct di_displayid2 *displayid2);
+ 
++/**
++ * Get DisplayID v2 data blocks.
++ *
++ * The returned array is NULL-terminated.
++ */
++const struct di_displayid2_data_block *const *
++di_displayid2_get_data_blocks(const struct di_displayid2 *displayid2);
++
+ /**
+  * Product primary use case identifier, defined in table 2-3.
+  */
+@@ -47,6 +55,53 @@ enum di_displayid2_product_primary_use_case {
+ 	DI_DISPLAYID2_PRODUCT_PRIMARY_USE_CASE_HMD_AR = 0x08,
+ };
+ 
++/**
++ * DisplayID v2 data block tag.
++ */
++enum di_displayid2_data_block_tag {
++	/* Product Identification Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_PRODUCT_ID = 0x20,
++	/* Display Parameters Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_DISPLAY_PARAMS = 0x21,
++	/* Type VII Timing – Detailed Timing Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_TYPE_VII_TIMING = 0x22,
++	/* Type VIII Timing – Enumerated Timing Code Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_TYPE_VIII_TIMING = 0x23,
++	/* Type IX Timing – Formula-based Timing Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_TYPE_IX_TIMING = 0x24,
++	/* Dynamic Video Timing Range Limits Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_DYN_TIMING_RANGE_LIMITS = 0x25,
++	/* Display Interface Features Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_DISPLAY_INTERFACE_FEATURES = 0x26,
++	/* Stereo Display Interface Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_STEREO_DISPLAY_INTERFACE = 0x27,
++	/* Tiled Display Topology Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_TILED_DISPLAY_TOPO = 0x28,
++	/* ContainerID Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_CONTAINERID = 0x29,
++	/* Type X Timing – Formula-based Timing Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_TYPE_X_TIMING = 0x2A,
++	/* Adaptive-Sync Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_ADAPTIVE_SYNC = 0x2B,
++	/* ARVR_HMD Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_ARVR_HMD = 0x2C,
++	/* ARVR_Layer Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_ARVR_LAYER = 0x2D,
++	/* CTA-861 Data Block Encapsulation DisplayID Data Block */
++	DI_DISPLAYID2_DATA_BLOCK_CTA861 = 0x81,
++};
++
++/**
++ * A DisplayID v2 data block.
++ */
++struct di_displayid2_data_block;
++
++/**
++ * Get a DisplayID v2 data block tag.
++ */
++enum di_displayid2_data_block_tag
++di_displayid2_data_block_get_tag(const struct di_displayid2_data_block *data_block);
++
+ /**
+  * Get the DisplayID v2 product primary use case.
+  */
+diff --git a/test/data/asus-ux3405.diff b/test/data/asus-ux3405.diff
+index 149eb90..76dbedd 100644
+--- a/test/data/asus-ux3405.diff
++++ b/test/data/asus-ux3405.diff
+@@ -8,7 +8,7 @@
+      Alphanumeric Data String: 'ATNA40CU06-0 '
+    Extension blocks: 1
+  Checksum: 0x25
+-@@ -35,82 +34,14 @@
++@@ -35,82 +34,19 @@
+  
+  Block 1, DisplayID Extension Block:
+    Version: 2.0
+@@ -17,7 +17,8 @@
+ -  Product Identification Data Block (0x20), OUI 4C-83-00:
+ -    Product Code: 16797
+ -    Year of Manufacture: 2032
+--  Display Parameters Data Block (0x21):
+++  Product Identification Data Block (0x20):
++   Display Parameters Data Block (0x21):
+ -    Image size: 300.0 mm x 190.0 mm
+ -    Display native pixel format: 2880x1800
+ -    Scan Orientation: Left to Right, Top to Bottom
+@@ -35,16 +36,16 @@
+ -    Native Color Depth: 12 bpc
+ -    Display Device Technology: Organic LED
+ -    Native Gamma EOTF: 2.20
+--  Display Interface Features Data Block:
++   Display Interface Features Data Block:
+ -    Supported bpc for RGB encoding: 6, 8, 10
+ -    Supported bpc for YCbCr 4:4:4 encoding: 8, 10
+ -    Supported bpc for YCbCr 4:2:2 encoding: 8, 10
+ -    Supported color space and EOTF standard combination 1: DCI-P3, BT.2020/SMPTE ST 2084
+--  Video Timing Modes Type 7 - Detailed Timings Data Block:
++   Video Timing Modes Type 7 - Detailed Timings Data Block:
+ -    DTD:  2880x1800  120.000294 Hz  16:10   218.881 kHz    652.264000 MHz (aspect 16:10, no 3D stereo, preferred)
+ -               Hfront   32 Hsync   8 Hback   60 Hpol N
+ -               Vfront    8 Vsync   8 Vback    8 Vpol N
+--  CTA-861 DisplayID Data Block:
++   CTA-861 DisplayID Data Block:
+ -  Vendor-Specific Data Block (AMD), OUI 00-00-1A:
+ -    Version: 3
+ -    Feature Caps: 0x03
+diff --git a/test/data/jdi-lpm135m467-edp.diff b/test/data/jdi-lpm135m467-edp.diff
+index c6b3f3c..c5167a0 100644
+--- a/test/data/jdi-lpm135m467-edp.diff
++++ b/test/data/jdi-lpm135m467-edp.diff
+@@ -1,6 +1,6 @@
+ --- ref
+ +++ di
+-@@ -36,32 +36,9 @@
++@@ -36,32 +36,13 @@
+  
+  Block 1, DisplayID Extension Block:
+    Version: 2.0
+@@ -22,8 +22,8 @@
+ -Block 0, Base EDID:
+ -  Missing Display Product Name.
+ -
+--Failures:
+--
++ Failures:
++ 
+ -Block 0, Base EDID:
+ -  Alphanumeric Data String: No newline, but one or more trailing spaces.
+ -  Alphanumeric Data String: No newline, but one or more trailing spaces.
+@@ -33,5 +33,6 @@
+ -  DisplayID: Missing DisplayID Type VII Detailed Timing Data Block.
+ -  DisplayID: DisplayID expects at least one preferred timing.
+ -
+--EDID conformity: FAIL
+-+EDID conformity: PASS
+++Block 1, DisplayID Extension Block:
+++  Padding: Contains non-zero bytes.
++ EDID conformity: FAIL
+-- 
+GitLab
