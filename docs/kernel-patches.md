@@ -309,9 +309,9 @@ after their trailers that names the source and the change.
   packages hold the same modules.
 - Passed its device round on 2026-11-13: three recorded boots (revision 3 with two mode sets before the login
   screen settles, revision 4 with none, and with one at a login into HDR), Night Light, an HDR switch, three
-  suspends and the standard checks (`docs/verified.md`, `docs/display.md`). Pushed the same day: `sp11/7.3.3`
-  moved forward by the three commits (head `216231c9`, tree `ac3d82da`, the tree the kernel was built from),
-  signed in place in the submodule.
+  suspends, an 8.9-hour sleep and the standard checks (`docs/verified.md`, `docs/display.md`). Pushed the same
+  day: `sp11/7.3.3` moved forward by the three commits (head `216231c9`, tree `ac3d82da`, the tree the kernel
+  was built from), signed in place in the submodule.
 
 ## Contents
 

@@ -30,8 +30,12 @@ in `docs/sensors.md` (Known issues).
 - `cat /sys/power/pm_wakeup_irq` names the wake-armed interrupt of the last wake; after an ADSP wake it answers
   `No data available`. With `pm_debug_messages` on, a wake by the cover logs `gpio_keys`, one by the power key
   `pmic_pwrkey`.
+- Without `pm_debug_messages` the journal still tells a key wake: logind logs `Power key pressed short.` at
+  the resume. A cover moved during the sleep is reported at the next resume (`Lid closed.` or `Lid opened.`),
+  whatever woke the tablet.
 - BlueZ logs `Controller resume with wake event 0x1` after every resume; it is not a wake cause (the Bluetooth
-  UART is not wake-armed).
+  UART is not wake-armed). The Surface Aggregator's `rtl: dropping unexpected command message` and the
+  keyboard's Bluetooth reconnect follow every resume as well.
 
 ## What sleeps
 
@@ -71,13 +75,17 @@ in `docs/sensors.md` (Known issues).
   entries a second (about 100 before revision 4). Revision 9 (the modem powered through the sleep, registered and
   kept by ModemManager): 0.32 W over 28885 s, `ddr` 27148 s, the ADSP 10 a second (2026-10-31). 7.2.14 revision 2
   (the PCIe controllers suspended in parallel, mobile data connecting by itself): 0.32 W over 29027 s, `ddr` 27253
-  of 28957 s, the ADSP 10 a second, no wake in the night (2026-11-03). 7.3.3 revision 2 (the first 7.3 kernel,
-  the crypto engine's node disabled): 0.25 W over 28883 s (35.95 to 33.93 Wh), `ddr` 27112 s, one suspend for
-  the night, no wake (2026-11-09). 7.3.3 revision 3 (the DisplayPort HDR series, HDR on): 0.31 W over 28951 s
-  (35.82 to 33.33 Wh), `ddr` 27167 s, one suspend, no wake (2026-11-12); the same share of memory sleep as
-  revision 2, the 0.06 W between the two single sleeps not explained. Up to revision 8 the PM core logs
+  of 28957 s, the ADSP 10 a second, no wake in the night (2026-11-03). Up to revision 8 the PM core logs
   `parent mhi0 should not be sleeping` once per channel device the modem's restart re-creates while the next
   suspend is prepared; harmless.
+- 7.3.3 revision 2 (the first 7.3 kernel, the crypto engine's node disabled): 0.25 W over 28883 s (35.95 to
+  33.93 Wh), `ddr` 27112 s, one suspend for the night, no wake (2026-11-09). Revision 3 (the DisplayPort HDR
+  series, HDR on): 0.31 W over 28951 s (35.82 to 33.33 Wh), `ddr` 27167 s, one suspend, no wake (2026-11-12).
+  Revision 4 (HDR on): 0.28 W over 31978 s (27.36 to 24.88 Wh), `ddr` 29565 s, a wake 35 minutes in without
+  a key press (Wakes without a wake interrupt) and the next suspend 29 s later (2026-11-13).
+- Across those three sleeps the memory slept 93.9, 93.8 and 92.5 % of the time. In revision 4's sleep it
+  entered its sleep 18 times a second, in the two before 10 times a second (`Count` in `qcom_stats/ddr`).
+  Neither that nor the differences in draw are explained.
 - `cxsd` and `aosd` stayed 0 in every configuration: CX never collapses. Linux runs at EL1 under the firmware's
   hypervisor (Gunyah). Another Surface Pro 11 (X1E80100, OLED), booted at EL2 with slbounce, reaches `cxsd`,
   `aosd` and the DDR low-power modes for 99.9 % of a 73-minute s2idle suspend at about 0.26 W, against 1.06 W on
@@ -96,6 +104,9 @@ in `docs/sensors.md` (Known issues).
   `PMIC_RTR_ADSP_APPS` (owner 32778, type 2, opcode 7, notification 0x81, `NOTIF_BAT_INFO`), followed by the
   driver's battery-info request. One such wake came 5 to 6.5 hours into each low-drain night, none in the 0.85 W
   nights. With the cover closed GNOME suspends again about 26 s later, PowerDevil 10 s later.
+- On 7.3.3 the nights of revisions 2 and 3 had no such wake. Revision 4's sleep had one after 35 minutes
+  (2026-11-13): no key press in the journal, the cover closed and armed for its opening only
+  (`wakeup-event-action`), the sensor streams paused; the message was not traced.
 - Plugging the charger in while the tablet sleeps wakes it the same way, sometimes several times in the first
   minutes. Left as is; a fix needs a kernel change.
 
@@ -220,3 +231,4 @@ remove only the firmware's part, at 1.40 W a night (above).
   0.25 W, opening the cover no longer wakes.
 - 2026-11-12: 7.3.3 revision 3's 8 hours asleep at 0.31 W with HDR on; one suspend of ten refused by the
   Surface Aggregator's hub and slept in `s2idle`.
+- 2026-11-13: 7.3.3 revision 4's 8.9 hours asleep at 0.28 W with HDR on, one wake 35 minutes in.

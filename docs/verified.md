@@ -423,3 +423,7 @@ One entry per round; the facts each established live in the topic notes.
   probe failed, so that boot had no modem and five clock and interconnect providers kept waiting for
   `sync_state` (`docs/modem.md`, Open). After an HDR session the login screen runs at the backlight's maximum
   (`docs/display.md`, Known issues).
+- A third boot the same morning: the modem present, no provider waiting for `sync_state`; the GPU hang at
+  login, recovered (`docs/display.md`, Known issues). Then 8.9 hours asleep on battery with HDR on: 0.28 W
+  (27.36 to 24.88 Wh over 31978 s), `ddr` 29565 s, both suspends `deep`, one wake 35 minutes in without a
+  key press and with the cover closed, Wi-Fi connected after the wake (`docs/sleep.md`).

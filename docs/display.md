@@ -101,9 +101,10 @@ agree on both halves (`src/backends/native/meta-output-kms.c`, `src/backends/met
   an external display.
 - The login screen at full brightness after an HDR session: the session leaves the backlight at 4095, that
   level is restored at the next boot, and the login screen kept it (2026-11-13, revision 4).
-- A GPU hang at login that recovers by itself, in one of five boots on 2026-11-12 (7.3.3 revision 3, HDR off):
-  25 s after the boot the GMU's bandwidth vote times out (`HFI_H2F_MSG_GX_BW_PERF_VOTE`), `hangcheck recover`
-  follows 3 s later with gnome-shell as the offending task, and the session goes on.
+- A GPU hang at login that recovers by itself: the GMU's bandwidth vote times out
+  (`HFI_H2F_MSG_GX_BW_PERF_VOTE`), `hangcheck recover` follows 3 s later with gnome-shell as the offending
+  task, and the session goes on. Seen in one of five boots on 2026-11-12 (7.3.3 revision 3, HDR off, 25 s
+  after the boot) and in one boot on 2026-11-13 (revision 4, an HDR session, within the boot's first minute).
 
 ## The display probe
 
@@ -124,4 +125,4 @@ agree on both halves (`src/backends/native/meta-output-kms.c`, `src/backends/met
 - 2026-11-12: the login screen's second of black traced to the mode sets around mutter's gamma table; 7.3.3
   revision 4 built with the DSPPs reserved in every mode set.
 - 2026-11-13: the starts of revision 3 and 4 recorded: two mode sets before the login screen settles on
-  revision 3, none on revision 4; its round passed.
+  revision 3, none on revision 4; its round passed. The GPU hang at login seen once more.
