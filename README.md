@@ -17,7 +17,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Component | Version |
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
-| Kernel | Fedora's `kernel-7.3.3-300.fc45`, SP11 revision 3 (`7.3.3-300.sp11.3.fc45.aarch64`) |
+| Kernel | Fedora's `kernel-7.3.3-300.fc45`, SP11 revision 4 (`7.3.3-300.sp11.4.fc45.aarch64`) |
 | Support RPM (`sp11-surface-support`) | 3.10 |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -31,10 +31,12 @@ from the ISO built that day from the 45 release media 1.4 confirmed the rows fro
 the Windows entry and USB-C aside. Kernel 7.3.3 (revisions 1 and 2, 2026-11-08 and 09) confirmed every row in
 use again, with the standard checks, the microphone, GPS, mobile data and a night's sleep. Revision 3
 (2026-11-12) confirmed the rows in use once more, with the standard checks and an 8-hour sleep, and added HDR.
+Revision 4 (2026-11-13) passed the standard checks and its round's checks by hand; with it the login screen no
+longer shows, goes black for a second and comes back at boot.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
-| Feature | Fedora 45 Workstation, Fedora's 7.3.3-300 (sp11.3) |
+| Feature | Fedora 45 Workstation, Fedora's 7.3.3-300 (sp11.4) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Display with GPU acceleration | ✅ |
@@ -139,8 +141,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45-1.4-SP11-7.3.3-300.sp11.3.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.3-300.sp11.3.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+`Fedora-Workstation-Live-45-1.4-SP11-7.3.3-300.sp11.4.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.3-300.sp11.4.fc45.aarch64.iso`, with a `.sha256` beside it. Then
 write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
 ## Reporting results

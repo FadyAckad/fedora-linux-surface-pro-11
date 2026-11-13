@@ -33,7 +33,10 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   and install it ([`docs/guide/build-rpms.md`](build-rpms.md), [`docs/guide/update.md`](update.md)); from
   libdisplay-info 0.4.0 on the rebuild is not needed.
 - Switching HDR on or off, like every change of the display mode, blanks the screen for about a second: the
-  panel is powered off and on.
+  panel is powered off and on. Logging in to a session that has HDR on is such a switch.
+- The login screen is at full brightness after a session with HDR on: the session leaves the backlight at its
+  maximum, and the login screen starts from the level of the last shutdown
+  ([`docs/display.md`](../display.md), Known issues).
 - GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from
   windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
   ([`docs/gnss.md`](../gnss.md)).
@@ -94,6 +97,9 @@ Systems running an older build of the RPMs can show these; the release named fix
 - The GRUB menu and its editor showing no underscores and letters cut off at the bottom: fixed in support RPM
   3.10 (2026-11-10), whose smaller console font fits GRUB's character cell
   ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and modules).
+- At every boot the screen going black for a second, the login screen flashing up, and another second of black
+  before it stayed: fixed in kernel 7.3.3 revision 4 (2026-11-13), which no longer switches the display mode
+  when a gamma table is set or dropped ([`docs/display.md`](../display.md), Gamma tables and mode sets).
 
 ## The power button under KDE Plasma
 

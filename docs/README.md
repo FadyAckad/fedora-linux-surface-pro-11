@@ -44,9 +44,10 @@ Read the note named below before working on its area.
   touching `payload/sp11-gnss*`.
 - `docs/camera.md`: the three cameras: the kernel side, Fedora's libcamera, the raw-capture probe, what the device
   has shown. Read before touching `payload/camera/` or the kernel fork's camera commits.
-- `docs/display.md`: the built-in panel and HDR: what the panel's EDID announces, what GNOME needs for its HDR
-  switch, the kernel's DisplayPort HDR commits and the rebuilt libdisplay-info, known issues, the display probe.
-  Read before touching steps 47 and 48, `payload/display/` or the kernel fork's display commits.
+- `docs/display.md`: the built-in panel and HDR: what the panel's EDID announces, when a gamma table costs a
+  mode set, what GNOME needs for its HDR switch, the kernel's DisplayPort HDR commits and the rebuilt
+  libdisplay-info, known issues, the display probe. Read before touching steps 47 and 48, `payload/display/` or
+  the kernel fork's display commits.
 - `docs/verified.md`: what has been confirmed on the device, by date and package version. Read before stating
   that something works; add to it after a device round.
 

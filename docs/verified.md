@@ -402,3 +402,24 @@ One entry per round; the facts each established live in the topic notes.
   recovered by itself (the bandwidth vote's timeout, then `hangcheck recover`; `docs/display.md`, Known issues).
   The long sleep drew 0.31 W against revision 2's 0.25 W with the same share of memory sleep; one sleep each,
   the difference is not explained.
+
+## Kernel 7.3.3 revision 4: no mode set for a gamma table (2026-11-13)
+
+- Installed: the kernel RPMs `7.3.3-300.sp11.4.fc45` (revision 3 plus 0112–0114, the DSPPs reserved with every
+  mode set), `dnf install` next to revisions 2 and 3 (dnf removed revision 1, the oldest of four kernels), under
+  mutter and gnome-shell 51.1.
+- Recorded: the display over three boots, 50 samples a second from before gdm's start (the panel's power state,
+  the backlight, the CRTC's DSPPs). Revision 3 with HDR off: two mode sets before the login screen settled, the
+  backlight off for 1047 and 1065 ms and the login screen's first picture for 0.18 s between them. Revision 4
+  with HDR off: none, through the login. Revision 4 with HDR on: none at the login screen's start, one at the
+  login (`docs/display.md`).
+- Confirmed on revision 4: the DSPPs reserved from Plymouth's picture on; mutter's gamma table an identity ramp
+  of 1024 entries, no CTM; a blanked lock screen, three suspends (`deep`) and an HDR switch, the picture back
+  each time; the standard checks but for `sync_state` (below), with Wi-Fi and mobile data connected in the
+  first boot.
+- By hand (owner): every by-hand check of the round passed, Night Light among them; no flashing picture at boot
+  or at logout.
+- Found: in the second of revision 4's two boots the modem's PCIe link did not come up and its controller's
+  probe failed, so that boot had no modem and five clock and interconnect providers kept waiting for
+  `sync_state` (`docs/modem.md`, Open). After an HDR session the login screen runs at the backlight's maximum
+  (`docs/display.md`, Known issues).

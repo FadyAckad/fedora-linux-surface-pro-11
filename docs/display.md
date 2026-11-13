@@ -1,9 +1,9 @@
 # Display
 
-The built-in panel and HDR: what the panel announces, what GNOME needs before it offers HDR, the kernel and the
-library side, what the device has shown, known issues, the display probe. The kernel commits are in
-`docs/kernel-patches.md` (7.3.3 revision 3), the library's build step in `docs/pipeline.md`, the unit's identity
-in `docs/hardware.md`, the device results by date in `docs/verified.md`.
+The built-in panel and HDR: what the panel announces, when a gamma table costs a mode set, what GNOME needs
+before it offers HDR, the kernel and the library side, what the device has shown, known issues, the display
+probe. The kernel commits are in `docs/kernel-patches.md` (7.3.3 revisions 3 and 4), the library's build step in
+`docs/pipeline.md`, the unit's identity in `docs/hardware.md`, the device results by date in `docs/verified.md`.
 
 ## The panel
 
@@ -22,6 +22,34 @@ in `docs/hardware.md`, the device results by date in `docs/verified.md`.
 - Every full mode set powers the panel off and on (`panel-samsung-atna33xc20.c`: 150 ms after the enable line
   drops, 500 ms powered off, 400 ms after power-on before the enable line rises): at least 1.05 s of black. A
   switch between SDR and HDR is one.
+
+## Gamma tables and mode sets
+
+- A gamma table or a colour matrix (CTM) is programmed into the DSPPs of the CRTC's mixers (their GC and PCC
+  blocks). X1E80100 has six mixers, four of them with a DSPP; the panel takes two mixers, as every mode wider
+  than 1080 pixels does.
+- Up to 7.3.3 revision 3 a CRTC got its DSPPs only in a mode set that already carried a gamma table or a CTM,
+  and patch 0017 forced a full mode set whenever either came or went.
+- Two programs set the table in turn. Plymouth sets a linear one once, with its first picture. mutter's first
+  commit carries none, because its own waits for the colour device, and colord starts on demand half a second
+  after the login screen's gnome-shell; its table, an identity ramp of 1024 entries without a CTM, follows in a
+  commit that allows no mode set.
+- Revision 3, recorded on 2026-11-13 at 50 samples a second: the DSPPs reserved under Plymouth's picture; at
+  mutter's first commit the DSPPs released and the backlight off for 1047 ms; the login screen's first picture
+  for 0.18 s; the DSPPs reserved again and the backlight off for 1065 ms. From the first black to the steady
+  login screen 2.3 s; no mode set at the login.
+- From revision 4 every mode set reserves the DSPPs of the CRTC's mixers while mixers with a free DSPP are left
+  (0114), and only a CRTC without them needs a mode set for a gamma table or a CTM (0113). Recorded the same
+  day: the DSPPs reserved from Plymouth's picture on, no mode set at the login screen's start, at the login or
+  while Night Light came and went; no flashing picture at boot or logout (owner).
+- What stays a mode set, with the backlight off for about 1.06 s: a switch between SDR and HDR and a login into
+  an HDR session (the DisplayPort driver asks for one when `max bpc`, `Colorspace` or the HDR metadata changes,
+  revision 3), another resolution or refresh rate. A blanked screen and a suspend disable the CRTC and power the
+  panel off; its DSPPs are reserved again when it comes back.
+- The backlight device is `dp_aux_backlight` (raw, 0 to 4095, DPCD brightness control). systemd-backlight
+  restores the level saved at the last shutdown over a second before gdm starts, and the login screen then sets
+  its own: from a restored 1795 it went to 2470 with its first picture and on to 2641 and 2546, and the session
+  back to 1795 (2026-11-13).
 
 ## HDR under GNOME
 
@@ -71,6 +99,8 @@ agree on both halves (`src/backends/native/meta-output-kms.c`, `src/backends/met
 - Not exercised on this unit: 0036's link-rate quirk under the series (the 5G SKU's panel reports its rates
   itself), PSR with HDR (`msm.psr_enabled=1`; 0107 keeps the peripheral flush for a stream outside PSR), HDR on
   an external display.
+- The login screen at full brightness after an HDR session: the session leaves the backlight at 4095, that
+  level is restored at the next boot, and the login screen kept it (2026-11-13, revision 4).
 - A GPU hang at login that recovers by itself, in one of five boots on 2026-11-12 (7.3.3 revision 3, HDR off):
   25 s after the boot the GMU's bandwidth vote times out (`HFI_H2F_MSG_GX_BW_PERF_VOTE`), `hangcheck recover`
   follows 3 s later with gnome-shell as the offending task, and the session goes on.
@@ -91,3 +121,7 @@ agree on both halves (`src/backends/native/meta-output-kms.c`, `src/backends/met
 - 2026-11-12: the missing HDR switch traced to the driver's properties and the library's EDID reading; 7.3.3
   revision 3 and libdisplay-info `0.3.0-2.sp11.1` built; HDR on, off and across a suspend on the device; the
   round with repeated switches, suspends and an 8-hour sleep passed.
+- 2026-11-12: the login screen's second of black traced to the mode sets around mutter's gamma table; 7.3.3
+  revision 4 built with the DSPPs reserved in every mode set.
+- 2026-11-13: the starts of revision 3 and 4 recorded: two mode sets before the login screen settles on
+  revision 3, none on revision 4; its round passed.

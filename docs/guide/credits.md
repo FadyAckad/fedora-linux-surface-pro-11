@@ -40,7 +40,8 @@ version 3 or later (`LICENSE`). Everything third-party is downloaded and package
   sensor configuration and registry that `sp11-sensors` carries are proprietary Microsoft and Qualcomm files
   copied from your own Windows installation at build time, like the firmware below.
 - Display (HDR): the kernel's DisplayPort HDR commits are Xilin Wu's series from the kernel mailing lists (GPL-2.0
-  like the kernel; [`docs/kernel-patches.md`](../kernel-patches.md), 7.3.3 revision 3). Fedora's
+  like the kernel; [`docs/kernel-patches.md`](../kernel-patches.md), 7.3.3 revision 3), and two display-driver
+  commits of revision 4 are Dmitry Baryshkov's, from the same lists. Fedora's
   `libdisplay-info` source RPM (MIT) is rebuilt with eleven commits of its upstream,
   [emersion/libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info), by Simon Ser
   (`payload/display/libdisplay-info/`).

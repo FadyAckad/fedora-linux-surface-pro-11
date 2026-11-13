@@ -51,11 +51,13 @@ removal, SELinux.
 | 7.3.3 revision 1 | 2026-11-08 | `kernel-7.3.3-300.fc45` | Rebased onto `v7.3.3` (nine patches now upstream dropped); the crypto engine's node disabled |
 | 7.3.3 revision 2 | 2026-11-09 | `kernel-7.3.3-300.fc45` | GPIO wake interrupts kept off the PDC: a suspend with the lid open no longer wakes at once |
 | 7.3.3 revision 3 | 2026-11-12 | `kernel-7.3.3-300.fc45` | HDR on DisplayPort and eDP: the connector properties and the packets GNOME's HDR switch needs (`docs/display.md`) |
+| 7.3.3 revision 4 | 2026-11-12 | `kernel-7.3.3-300.fc45` | The mixers' DSPPs reserved with every mode set: a compositor's first gamma table costs no mode set (`docs/display.md`) |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
-Every revision but 2, 6 and 9 to 12 passed its device round the day it was built (`docs/verified.md`; revisions 9 to
-12 passed but for the country re-send, which the sleep's 11d result defeated until revision 13; 7.3.3 revision 1
-but for a suspend started with the cover open, which revision 2 holds); the fork branch
+Every revision but 2, 6 and 9 to 12 passed its device round the day it was built, 7.3.3 revision 4 the morning
+after (`docs/verified.md`; revisions 9 to 12 passed but for the country re-send, which the sleep's 11d result
+defeated until revision 13; 7.3.3 revision 1 but for a suspend started with the cover open, which revision 2
+holds); the fork branch
 head and tree of each is in `docs/kernel-patches.md`. Before 2026-09-23 the project built ooaklee's v23 kernel as
 `kernel-sp11` (`7.2.5-jg-0sp11v23.2-qcom-x1e`), with revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode
 switch).

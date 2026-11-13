@@ -124,6 +124,10 @@ mobile data on 2026-10-29 with a nano-SIM.
 - ModemManager's 10 s wait for the location indication at every start of the modem (a boot; a rebuilt
   ModemManager would be needed).
 - eSIM profiles from Linux (lpac, not packaged in Fedora).
+- A boot without the modem, once (2026-11-13, 7.3.3 revision 4, the second of two boots that morning): the PCIe
+  link did not come up (`qcom-pcie 1c00000.pcie: Link failed to come up. LTSSM: PRE_DETECT_QUIET`) and the
+  controller's probe failed with -110. That boot had no modem, and the clock controller and four interconnect
+  providers kept waiting for `sync_state`, so their boot votes stayed. The boot before it connected.
 
 ## History
 
@@ -138,3 +142,4 @@ mobile data on 2026-10-29 with a nano-SIM.
   brought mobile data back after 17 s instead of 52 s.
 - 2026-10-31: 7.2.11 revision 9 with the test tree's change (0091) and ModemManager's quick suspend/resume on the
   device: mobile data back 2.0 s after a wake, the night at 0.32 W.
+- 2026-11-13: one boot on 7.3.3 revision 4 without the modem, its PCIe link not coming up at the probe.

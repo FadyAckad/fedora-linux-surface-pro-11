@@ -281,6 +281,38 @@ after their trailers that names the source and the change.
   `docs/display.md`). Pushed the same day: `sp11/7.3.3` moved forward by the 22 commits (head `fe43e1a3`, tree
   `5aa74d68`, the tree the kernel was built from), signed in place in the submodule.
 
+### 7.3.3 revision 4: no mode set for a gamma table
+
+- 0112 and 0113: two commits by Dmitry Baryshkov, carried from the mailing list and not merged upstream: patches
+  7 and 9 of the series "drm/msm: fix SMMU fault dumps" in its fifth version of 2026-10-24
+  (`20261024-fd-kms-fix-smmu-v5-0-a5b0b284aead@oss.qualcomm.com`). 0112 clears a mixer's DSPP pointer when a
+  mode set leaves the mixer without one. 0113 asks for a mode set only for a CRTC that has a CTM or a gamma LUT
+  and lacks a DSPP, in `dpu_crtc_check_mode_changed()`, and drops the loop of `msm_atomic_check()` that forced
+  one whenever either came or went and allowed it in userspace's place.
+- 0113 is adapted: its `dpu_crtc_atomic_check()` hunk is left out, 0018 had made that change, and the loop it
+  drops also held 0017's gamma lines. Of 0017 nothing is left in the tree.
+- 0114 (this repository): `_dpu_rm_reserve_lms()` looks for mixers with a free DSPP first, whatever the topology
+  asks for, and reserves the DSPPs with the mixers; when none are left, a CRTC that asks for no DSPP gets mixers
+  without one, as before. A CRTC so has its DSPPs from its first mode set, and a CTM or gamma LUT set later is an
+  ordinary commit.
+- Why: a CRTC got its DSPPs only in a mode set that already carried a CTM or a gamma LUT, and 0017 forced a
+  full mode set whenever one came or went. At the login screen's start that happened twice, each powering the
+  panel off and on: mutter's first commit drops the table Plymouth set, and its own follows in a commit that
+  allows no mode set (`docs/display.md`). With 0113 and without 0114 a first table on a CRTC without DSPPs
+  fails instead (`-EINVAL` from `drm_atomic_check_only()`).
+- The cost: a CRTC holds DSPPs it may never use. X1E80100 has a DSPP on four of its six mixers; the panel takes
+  two mixers, a second display the other two with a DSPP, a third gets none and neither CTM nor gamma LUT.
+- Upstream on 2026-11-12: the series is under review. Open on patch 9: it forces a mode set on a disabled CRTC
+  that carries a CTM or gamma LUT, and whether dropping one should release the DSPPs. The next rebase takes
+  upstream's current version and checks 0114 against it.
+- No configuration change: the built configuration is revision 3's but for the build salt, and the four module
+  packages hold the same modules.
+- Passed its device round on 2026-11-13: three recorded boots (revision 3 with two mode sets before the login
+  screen settles, revision 4 with none, and with one at a login into HDR), Night Light, an HDR switch, three
+  suspends and the standard checks (`docs/verified.md`, `docs/display.md`). Pushed the same day: `sp11/7.3.3`
+  moved forward by the three commits (head `216231c9`, tree `ac3d82da`, the tree the kernel was built from),
+  signed in place in the submodule.
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -341,6 +373,8 @@ The patches by number, with their origin and what each is needed for.
 | 0090, 0091 | DP: hot-plug state updates serialized, the debugfs connector pointer initialized | Xilin Wu (posted 2026-09-30; 0090 in msm-next) | prerequisites of 0092–0111 |
 | 0092–0094 | DRM core: `max bpc` attached before a connector has a state, and by the bridge connector for non-HDMI chains | Xilin Wu (posted 2026-10-09) | 10 bits per colour on DP and eDP |
 | 0095–0111 | DP and eDP: the output bit depth, the BT.2020 VSC packet, the HDR static metadata packet, `Colorspace` and `HDR_OUTPUT_METADATA`; stream enable, PHY power and the eDP capability read reworked | Xilin Wu (posted 2026-10-09) | HDR (`docs/display.md`) |
+| 0112, 0113 | DPU: a mixer's DSPP pointer cleared when a mode set leaves it without one; a mode set asked for only by a CRTC that has a CTM or gamma LUT and no DSPP (in place of 0017's forced mode set) | Dmitry Baryshkov (posted 2026-10-24) | no mode set when a gamma table or CTM comes or goes |
+| 0114 | DPU: the mixers' DSPPs reserved with every mode set while mixers with a free one are left | this repository | a compositor's first gamma table without a mode set and the panel's power cycle (`docs/display.md`) |
 
 ## Left out of v23.2
 
