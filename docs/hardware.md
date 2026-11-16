@@ -23,6 +23,27 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   `DEVPKEY_Bluetooth_RadioAddress` of the Bluetooth-class device `QCA_SHB\UART_H4_HMT\...`, formatted `{0:X12}`;
   radios under `USB\` are skipped.
 
+## The X1P64100 LCD variant (reported, not supported)
+
+This build rejects the 13-inch LCD unit in step 05 (its SoC is X1P64100 and its panel LGD, not SDC), and
+`dtb_for_sku` would give its SKU `Surface_Pro_11th_Edition_2076` the OLED tree, because that is the same DMI
+string as the non-5G OLED. One unit was nevertheless brought up by hand on kernel `7.3.3-300.sp11.5.fc45` with
+support 3.11 and the LCD tree (`x1p64100-microsoft-denali.dtb`), 10 of its 12 cores online: display, backlight,
+speakers, sensors, Wi-Fi, Bluetooth and battery work.
+
+- Reported 2026-11-16: that image's LCD tree and support RPM ask for the purwa zap shader
+  (`Denali/qcdxkmsucpurwa.mbn`, the unit's own Windows copy). `qcom_scm_pas_init_image()` rejects it with
+  `-EINVAL`, so `adreno_load_gpu` fails and Mesa stays on llvmpipe (`Accelerated: no`; the desktop is sluggish).
+  The file is found and parsed and fits the 8 KiB `gpu-microcode` region, and the 8380 shader loads in the same
+  tree and region, so this is the secure world refusing the image, not a path or size problem.
+- The working shader is the one the OLED tree and `x1-microsoft-denali.dtsi` request,
+  `Denali/qcdxkmsuc8380.mbn` (Fedora's `qcom-firmware` carries a Qualcomm-signed copy under `dell/xps13-9345`).
+  With the LCD tree's `zap-shader` `firmware-name` pointing at it, and the file in the initramfs, the GPU comes
+  up as `Adreno X1-85`, `Accelerated: yes`, and the kernel log carries no zap or `hw init failed` line.
+- The public tree already does this: the pinned `linux-sp11` commit and upstream both name the 8380 shader for
+  `x1p64100-microsoft-denali.dts`, and `scripts/30-build-support-rpm.sh` ships and verifies
+  `qcdxkmsuc8380.mbn`.
+
 ## Firmware
 
 - The ADSP, CDSP and GPU blobs come from Windows' DriverStore (`surfacepro_ext_adsp8380*`,
