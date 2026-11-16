@@ -121,6 +121,10 @@ assert_payload() {
   # 3.4: only the media device nodes, not the /dev/media directory udev creates next to them.
   check as_root grep -qF 'for m in /dev/media[0-9]*;' "$M/usr/libexec/sp11/sp11-diag"
   check as_root sh -c "! grep -v '^#' '$M/usr/libexec/sp11/sp11-diag' | grep -qF '/dev/media*'"
+  # 3.11: the rule that holds the LPASS clock votes of the speakers' bus, and sp11-diag showing its effect.
+  check as_root grep -qx 'ACTION=="add", SUBSYSTEM=="platform", KERNEL=="6e80000.pinctrl", ATTR{power/control}="on"' \
+    "$M/usr/lib/udev/rules.d/78-sp11-speakers.rules"
+  check as_root grep -qF '6e80000.pinctrl power/control' "$M/usr/libexec/sp11/sp11-diag"
   # 3.7: sp11-diag searches the whole journal for SELinux denials (audit's lines are no kernel messages).
   check as_root grep -qF "journalctl -b --no-pager -g 'avc: +denied'" "$M/usr/libexec/sp11/sp11-diag"
   check as_root sh -c "! grep -q 'journalctl -k -b --no-pager -g .avc' '$M/usr/libexec/sp11/sp11-diag'"

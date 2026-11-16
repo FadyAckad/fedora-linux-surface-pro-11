@@ -97,6 +97,10 @@ Systems running an older build of the RPMs can show these; the release named fix
 - The GRUB menu and its editor showing no underscores and letters cut off at the bottom: fixed in support RPM
   3.10 (2026-11-10), whose smaller console font fits GRUB's character cell
   ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and modules).
+- The speakers silent after a pause in the sound, with kernel 7.3.3, while everything else shows the sound
+  playing: support RPM 3.11 (2026-11-15) keeps two clock votes of the audio block held, without which a restart
+  of the amplifiers' bus at times left them off it ([`docs/hardware.md`](../hardware.md), Audio). Until then,
+  stopping every sound for ten seconds and playing again brings them back, sometimes at the second or third try.
 - At every boot the screen going black for a second, the login screen flashing up, and another second of black
   before it stayed: fixed in kernel 7.3.3 revision 4 (2026-11-13), which no longer switches the display mode
   when a gamma table is set or dropped ([`docs/display.md`](../display.md), Gamma tables and mode sets).

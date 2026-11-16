@@ -62,3 +62,7 @@ in [`docs/verified.md`](../verified.md).
 - 3.10: GRUB's console font is smaller (size 32 instead of 40: 151x50 characters instead of 120x40) and built to
   fit GRUB's character cell. With the earlier font the menu and its editor showed no underscores and cut the
   letters' descenders.
+- 3.11: a udev rule keeps two clock votes of the audio block held (`78-sp11-speakers.rules`). With kernel 7.3.3
+  the speakers could stay silent after a pause in the sound until the sound was stopped and started again;
+  `sp11-diag` lists the amplifiers' bus state and the rule's setting
+  ([`docs/hardware.md`](../hardware.md), Audio).

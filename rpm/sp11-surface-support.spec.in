@@ -37,7 +37,8 @@ Requires:       policycoreutils
 %description
 Device-bound support for Microsoft Surface Pro 11 (X1E80100, OLED, SKU @SKU@):
 Qualcomm ADSP/CDSP/GPU/video firmware extracted from this device's Windows installation,
-ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, WCN7850 Wi-Fi board
+ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, a udev rule that
+holds the LPASS clock votes of the speakers' bus, WCN7850 Wi-Fi board
 data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, scmi-cpufreq loading,
 a GRUB menu entry that chainloads the Windows Boot Manager, a dnf repository override
@@ -99,6 +100,7 @@ fi
 /usr/lib/systemd/system/sp11-first-boot.service
 /usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service
 /usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules
+/usr/lib/udev/rules.d/78-sp11-speakers.rules
 /usr/lib/kernel/install.d/15-sp11-surface.install
 /etc/grub.d/29_sp11_windows
 /usr/lib/dracut/dracut.conf.d/90-sp11.conf

@@ -59,6 +59,9 @@ if [ -n "$card" ]; then
     run amixer -D "hw:$card" cget "name='$c'"
   done
 else echo "no X1E80100 sound card"; fi
+# The speaker amplifiers on their SoundWire bus (an amplifier that reads UNATTACHED while a sound plays gets
+# nothing), and the LPASS clock votes the support RPM's rule holds through the pin controller (on).
+run sh -c 'for d in /sys/bus/soundwire/devices/sdw:*; do [ -e "$d/status" ] && echo "${d##*/} $(cat "$d/status")"; done; echo "6e80000.pinctrl power/control $(cat /sys/bus/platform/devices/6e80000.pinctrl/power/control 2>&1)"'
 # PipeWire runs in the desktop session: ask it as that user (needs sudo from a terminal in the session).
 run sh -c 'u=${SUDO_USER:-}; uid=$(id -u "$u" 2>/dev/null); if [ -n "$u" ] && [ -S "/run/user/$uid/pipewire-0" ]; then runuser -u "$u" -- env XDG_RUNTIME_DIR="/run/user/$uid" sh -c "wpctl status; wpctl get-volume @DEFAULT_AUDIO_SOURCE@"; else echo "no PipeWire session for ${u:-the calling user} (run from a terminal in the desktop session, with sudo)"; fi'
 # Sensors (Snapdragon Sensor Core stack, sp11-sensors): the check script carries its own sections.

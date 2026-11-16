@@ -1,0 +1,6 @@
+# Surface Pro 11: the two speaker amplifiers (WSA8845) on their SoundWire bus.
+# The bus stops its clock a few seconds after the last sound. From kernel 7.3.3 on the LPASS codec block then gives
+# up its two core clock votes, and a restart of the bus at times leaves the amplifiers off it: a playback runs and
+# nothing is heard. The LPASS pin controller holds exactly these two votes while it is awake, as the WSA macro's
+# driver did up to kernel 7.2.
+ACTION=="add", SUBSYSTEM=="platform", KERNEL=="6e80000.pinctrl", ATTR{power/control}="on"

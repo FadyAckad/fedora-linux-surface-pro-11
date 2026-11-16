@@ -83,6 +83,9 @@ in `docs/sensors.md` (Known issues).
   series, HDR on): 0.31 W over 28951 s (35.82 to 33.33 Wh), `ddr` 27167 s, one suspend, no wake (2026-11-12).
   Revision 4 (HDR on): 0.28 W over 31978 s (27.36 to 24.88 Wh), `ddr` 29565 s, a wake 35 minutes in without
   a key press (Wakes without a wake interrupt) and the next suspend 29 s later (2026-11-13).
+- Revision 4 with support 3.11, whose rule holds two LPASS clock votes through the sleep as the 7.2 kernels did
+  (`docs/hardware.md`, Audio): 0.26 W over 42355 s (40.20 to 37.19 Wh), `ddr` 39777 of 42336 s, 10 entries a
+  second, one suspend, no wake (2026-11-16).
 - Across those three sleeps the memory slept 93.9, 93.8 and 92.5 % of the time. In revision 4's sleep it
   entered its sleep 18 times a second, in the two before 10 times a second (`Count` in `qcom_stats/ddr`).
   Neither that nor the differences in draw are explained.
@@ -232,3 +235,4 @@ remove only the firmware's part, at 1.40 W a night (above).
 - 2026-11-12: 7.3.3 revision 3's 8 hours asleep at 0.31 W with HDR on; one suspend of ten refused by the
   Surface Aggregator's hub and slept in `s2idle`.
 - 2026-11-13: 7.3.3 revision 4's 8.9 hours asleep at 0.28 W with HDR on, one wake 35 minutes in.
+- 2026-11-16: revision 4's 11.8 hours asleep at 0.26 W with support 3.11 holding the two LPASS clock votes.

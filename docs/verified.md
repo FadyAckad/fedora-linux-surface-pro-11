@@ -427,3 +427,15 @@ One entry per round; the facts each established live in the topic notes.
   login, recovered (`docs/display.md`, Known issues). Then 8.9 hours asleep on battery with HDR on: 0.28 W
   (27.36 to 24.88 Wh over 31978 s), `ddr` 29565 s, both suspends `deep`, one wake 35 minutes in without a
   key press and with the cover closed, Wi-Fi connected after the wake (`docs/sleep.md`).
+
+## Support RPM 3.11: the speakers' clock votes (2026-11-15)
+
+- Installed: `sp11-surface-support` 3.11 by `dnf upgrade` over 3.10, under kernel `7.3.3-300.sp11.4.fc45`. Against
+  3.10 the package changed two files: the udev rule `78-sp11-speakers.rules` and `sp11-diag`.
+- Confirmed: after a reboot the LPASS pin controller's `power/control` `on` and its run-time state `active`;
+  `sp11-diag` listing both amplifiers `Attached` and the control `on`; in the six boots after it (63 playbacks,
+  80 device opens, four sleeps) none of the bus clash, parity and PA fault lines; the night: 11.8 hours asleep
+  at 0.26 W (40.20 to 37.19 Wh, 80 to 74 %), the memory in its low-power state 39777 of 42336 s, one suspend
+  entry and exit, no wake (`docs/hardware.md`, Audio; `docs/sleep.md`).
+- By hand (owner): the test tone on the left, the right and both speakers; the speakers not silent again in two
+  days of use.

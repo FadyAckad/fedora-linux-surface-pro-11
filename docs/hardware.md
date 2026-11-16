@@ -44,6 +44,72 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   Since 7.2.11 `lpass-wsa-macro.c` writes the interpolator's digital volume again once its clock runs (upstream
   `b2047b8cadad`), so the value applies at playback start; on the device both read 81 and the speakers' level and
   balance passed.
+- After the last sound (the sources of 7.3.3 revision 4, not timed on the device): WirePlumber closes the
+  playback device after 5 s, its default, and 3 s later the two WSA8845 amplifiers and their SoundWire controller
+  `6b10000.soundwire` suspend at run time, which stops the bus clock. The next device open starts it again. The
+  SP11 profile of `wsa884x.c` programs an amplifier once per boot and expects it to report detached and attached
+  around a clock stop: it switches the register cache to cache-only at the detach and syncs it at the attach
+  (`wsa884x_update_status()`).
+- The amplifier's resume and a detach, reported from the controller's interrupt thread, are not ordered (the
+  7.2.15 and 7.3.3 trees compared on 2026-11-14). A detach reported before the resume leaves the register map
+  in direct mode while the amplifier is off the bus, the state caught on 2026-11-15 (below). One reported between
+  the resume's `regcache_cache_only(false)` and its `regcache_sync()` fails the resume since 7.3 (the sync
+  refuses a cache-only map with `-EINVAL`) and with it the device open; no boot has shown that. The controller's
+  driver gets no status back for a register write (`qcom_swrm_cmd_fifo_wr_cmd()`).
+- 7.3.3 against 7.2.15, the WSA macro's clocks: on upstream's PM-clock code since 7.3.3 revision 1
+  (`docs/kernel.md`, Rebase) the macro releases all four of its clocks 100 ms after the controller's suspend. The
+  7.2 kernels held its two LPASS core votes (`macro`, `dcodec`) from the probe on, sleeps included, and suspended
+  `mclk` and `fsgen` after 3 s.
+- Since 7.3.3 the kernel log holds lines of the bus's restarts that no log of 7.2 has. In the journal's 38 boots
+  of 2026-11-10 to 2026-11-14 (revisions 2 to 4, 39 playbacks): `SWR bus clsh detected` once in 7 boots,
+  `Parity error detected` for both amplifiers in 3, the controller's failed enumeration
+  (`SWR unknown interrupt value: 2048`) in 2.
+- A patch posted upstream on 2026-10-07 and unmerged on 2026-11-14, "soundwire: qcom: wait for the interrupt
+  thread before gating the clock", names these lines: the controller's suspend gates the bus clock while its
+  interrupt thread still runs, and the next restart ends in a clash, parity errors or a failed enumeration that
+  leaves an amplifier off the bus until a reboot. The controller's suspend, resume and interrupt handler are the
+  same in 7.2.15 and 7.3.3.
+- The LPASS pin controller (`6e80000.pinctrl`; its gpio12 is the amplifiers' shutdown line) takes the same two
+  votes, on both series only around its register accesses: its run-time callbacks are `pm_clk_suspend` and
+  `pm_clk_resume` over its clocks `core` and `audio` (`pinctrl-sm8550-lpass-lpi.c`). `on` in its `power/control`
+  holds the two votes without a kernel change.
+
+### Speakers silent after a quiet period (support 3.11)
+
+- Reported on 2026-11-14 for 7.3.3, on the device since 2026-11-08, and not seen on 7.2: after a time without
+  sound the speakers are silent, and a reboot brings them back.
+- Caught on 2026-11-15 (revision 4). A restart of the stopped bus logged `SWR bus clsh detected`, and both
+  amplifiers stayed off the bus (`status` UNATTACHED) while awake, for the two minutes the stream ran. The stream
+  itself ran: PipeWire sent it to the built-in sink and the DSP took its data. The next restart failed the same
+  way; the one after it logged the two parity lines and brought the amplifiers back, without a reboot.
+- An amplifier that is off the bus answers every read with `0x21`, and the controller reports no failed write.
+  The driver had the register map in direct mode, wrote into nothing and read the power stage's status as a
+  fault: `PA fault: sta0=0x21 sta1=0x21 err0=0x21 err1=0x21` and `PA recovery failed ... amplifier left disabled`
+  mark an amplifier that does not answer. One more of the 38 boots has them (2026-11-12, revision 3, no clash
+  line).
+- While it sleeps on the stopped bus an amplifier reads `Attached`. Reading its bus registers in debugfs restarts
+  the bus as a playback does: on 2026-11-14 both amplifiers were off the bus 1.6 s after such a read, with no
+  kernel line.
+- The restart test of 2026-11-15 (revision 4) restarted the stopped bus 112 times with the kernel's clock
+  handling and 112 times with the pin controller held awake, by turns, watching both amplifiers every 2 ms. With
+  the kernel's handling the amplifiers left the bus for 2 to 4 ms at 7 restarts, one of them with the clash line
+  and one with the parity lines; with the votes held at none, and without a line. No restart stayed failed.
+- Support 3.11 holds the two votes: `78-sp11-speakers.rules` sets the pin controller's `power/control` to `on`
+  when the device appears. On the device since 2026-11-15: `on` and `active` after a boot; the six boots after
+  it (63 playbacks, 80 device opens, four sleeps) without one of the lines; a night at 0.26 W, within the 7.3.3
+  nights (`docs/sleep.md`); no silence in two days of use (owner). Without the rule the fault came once more,
+  minutes after the restart test.
+- The check kits: `build/handoff/sp11-speakers-2026-11-14` (the journal of every boot, the state while the sound
+  is missing) and `build/handoff/sp11-speakers-2026-11-15` (the restart test).
+
+### A crackle at the first sound after a night's sleep (open)
+
+- 2026-11-16, revision 4 with support 3.11: the first stream after 11.8 hours asleep, 15 s after the wake,
+  restarted 44 times within 5 s while PipeWire recovered from underruns
+  (`snd_pcm_avail after recover: Broken pipe`), heard as a low crackle; then it played, and so did every later
+  stream. Not after the three short sleeps of the same days.
+- Not new with support 3.11: the owner recalls the same crackle after wakes before it. No earlier log holds a
+  sound within seconds of a night's wake. The history of the speaker check kit lists such a burst as `pw-xrun`.
 
 ## Wi-Fi
 

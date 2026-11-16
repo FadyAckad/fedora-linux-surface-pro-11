@@ -10,7 +10,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.10"
+VERSION="3.11"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, the font's cell
@@ -100,6 +100,8 @@ for d in 0 1; do
     || die "UCM mic gain insertion failed for TX_DEC$d"
 done
 log "UCM mic gain: TX_DEC0/1 Volume $UCM_MIC_GAIN ($((UCM_MIC_GAIN - 84)) dB)"
+# The LPASS core clock votes the speakers' SoundWire bus needs across its clock stops (docs/hardware.md, Audio).
+install -D -m 0644 "$PAYLOAD_DIR/78-sp11-speakers.rules" "$STAGE/usr/lib/udev/rules.d/78-sp11-speakers.rules"
 
 ## 3. Wi-Fi: WCN7850 board.bin fallback extracted from linux-firmware's board-2.bin
 WIFI_TMP="$SDIR/wifi"; rm -rf "$WIFI_TMP"; mkdir -p "$WIFI_TMP/x"
