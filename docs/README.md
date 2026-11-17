@@ -37,9 +37,9 @@ Read the note named below before working on its area.
   and 75, `payload/sensors/` or the hexagonrpc fork (the submodule `hexagonrpc`).
 - `docs/tablet-mode.md`: the tablet-mode switch, the orientation matrix, what GNOME and KDE need for
   auto-rotation, the posture probe. Read before touching patch 0057 or the udev rule's matrix.
-- `docs/modem.md`: the 5G SKU's modem: the wiring, the 5G device tree by SKU, the QMI port that blocked suspend,
-  mobile data, the modem across a sleep. Read before touching the 5G tree, `77-sp11-modem.rules` or
-  `mhi-pci-generic`.
+- `docs/modem.md`: the 5G SKU's modem: the wiring, the 5G device tree by SKU, the PCIe link at boot, the QMI port
+  that blocked suspend, mobile data, the modem across a sleep. Read before touching the 5G tree,
+  `77-sp11-modem.rules` or `mhi-pci-generic`.
 - `docs/gnss.md`: the modem's location service and the GNSS feed for GeoClue with its SELinux module. Read before
   touching `payload/sp11-gnss*`.
 - `docs/camera.md`: the three cameras: the kernel side, Fedora's libcamera, the raw-capture probe, what the device

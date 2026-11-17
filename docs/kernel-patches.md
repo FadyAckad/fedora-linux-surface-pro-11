@@ -313,6 +313,27 @@ after their trailers that names the source and the change.
   day: `sp11/7.3.3` moved forward by the three commits (head `216231c9`, tree `ac3d82da`, the tree the kernel
   was built from), signed in place in the submodule.
 
+### 7.3.3 revision 5: the modem's link at boot
+
+- 0115 (this repository): `qcom_pcie_probe()` schedules a work item when `dw_pcie_host_init()` fails with
+  `-ETIMEDOUT` and the controller's node has `wake-gpios`. The work waits up to 20 s for the line to be asserted
+  (polled every 100 ms, the GPIO held only for the wait), then calls `device_attach()`: up to three times, 5 s
+  apart. A list keeps a probe that fails meanwhile from scheduling a second work item.
+- 0116 (this repository): the 5G tree's `wake-gpios` on TLMM 151 in PCIe 5's controller node, and its pin
+  state.
+- Why: in 8 of revision 4's 58 boots the modem was not ready within the probe's single wait of 0.9 s for the
+  link, and that boot had no modem. A probe requested from user space once TLMM 151 read low brought the modem,
+  three times of three (`docs/modem.md`, The link at boot).
+- Not in the probe itself: `do_init_module()` waits for every asynchronous probe, so the module loads of that
+  time would wait for the modem. Not in the root port's node: the PCI core arms a port's `wake-gpios` as its
+  wake-up interrupt.
+- No configuration change: the built configuration is revision 4's but for the build salt, and the four module
+  packages hold the same modules.
+- The device round of 2026-11-16 passed the standard checks. The link was up at the first probe in each of the
+  revision's 12 boots to 11-17, so the second probe has not run on the device (`docs/verified.md`). Pushed on
+  2026-11-17: `sp11/7.3.3` moved forward by the two commits (head `e53fd0c5`, tree `c83e6e9d`, the tree the
+  kernel was built from), signed in place in the submodule.
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -375,6 +396,8 @@ The patches by number, with their origin and what each is needed for.
 | 0095–0111 | DP and eDP: the output bit depth, the BT.2020 VSC packet, the HDR static metadata packet, `Colorspace` and `HDR_OUTPUT_METADATA`; stream enable, PHY power and the eDP capability read reworked | Xilin Wu (posted 2026-10-09) | HDR (`docs/display.md`) |
 | 0112, 0113 | DPU: a mixer's DSPP pointer cleared when a mode set leaves it without one; a mode set asked for only by a CRTC that has a CTM or gamma LUT and no DSPP (in place of 0017's forced mode set) | Dmitry Baryshkov (posted 2026-10-24) | no mode set when a gamma table or CTM comes or goes |
 | 0114 | DPU: the mixers' DSPPs reserved with every mode set while mixers with a free one are left | this repository | a compositor's first gamma table without a mode set and the panel's power cycle (`docs/display.md`) |
+| 0115 | PCIe (qcom): the controller probed again, from a work item, once an endpoint whose link missed the probe asserts WAKE# | this repository | the 5G modem in a boot where it is not ready at the first probe (`docs/modem.md`, The link at boot) |
+| 0116 | 5G device tree: the modem's WAKE# (TLMM 151) in PCIe 5's controller node, with its pin state | this repository | 0115's wait for the modem |
 
 ## Left out of v23.2
 

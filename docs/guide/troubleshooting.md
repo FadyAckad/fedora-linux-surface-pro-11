@@ -46,6 +46,17 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   revision 9 the modem keeps its power through a sleep and the connection is back within about 17 s, within
   2 s with support 3.9 (ModemManager's quick resume). Either way only if the profile connects automatically
   ([`docs/modem.md`](../modem.md), Across a sleep).
+- No mobile network after a boot (5G SKU, kernel 7.3.3 revision 4, about one boot in seven): the modem's PCIe
+  link was not up when the kernel looked for it, and the modem is missing from the bus for that boot. This then
+  finds nothing:
+
+  ```bash
+  ls /sys/bus/pci/devices/0005:01:00.0
+  ```
+
+  A reboot does not bring it back; shutting the tablet down, waiting ten seconds and starting it again does.
+  Kernel 7.3.3 revision 5 probes the modem's controller again by itself in such a boot; no boot has called for
+  that yet ([`docs/modem.md`](../modem.md), The link at boot).
 - Mobile data does not come back by itself after a wake, and GNOME's Mobile Data switch shows off: the profile's
   `connection.autoconnect` is `no`. Set it once, with the profile's name from
   `nmcli -g NAME,TYPE connection show | grep gsm`:

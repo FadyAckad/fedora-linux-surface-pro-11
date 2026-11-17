@@ -171,6 +171,12 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - The sleep hook (`payload/iptsd/sp11-iptsd-sleep`, from 3.1.0-4) stops the running instances before a sleep;
   after the wake the hidraw add event starts the daemon again. ooaklee's hook, used up to 3.1.0-3, also restarted
   it after the wake and waited, which held every wake for 1.2 to 1.5 s (`docs/sleep.md`, Wake).
+- Known issue, recovering by itself: about 10 s into a boot the touch driver can log `invalid HID-SPI
+  header=09 00 00 05 ready=1` and `host HID-SPI fault #1 ret=-71; scheduling cold recovery`. Those four bytes are
+  the acknowledgement of the driver's own `SET_FEATURE` 0x05, which its initialization had read 0.4 ms earlier:
+  the first interrupt read met it again, with the interrupt line still asserted after the driver's settle of 100
+  to 200 µs. The driver resets the controller, and the HIDRAW bridge is ready 1.0 s later than in other boots.
+  Seen on 2026-11-03 (7.2.15 revision 1) and 2026-11-16 (7.3.3 revision 5); touch and pen worked after it.
 
 ## Power supplies and battery
 

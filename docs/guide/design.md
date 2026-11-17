@@ -3,9 +3,9 @@
 The choices built into the pipeline and the support RPM, with the reason for each. The mechanism behind every
 bullet is in the working note it names.
 
-- Kernel: Fedora's `kernel-7.3.3-300.fc45` source RPM with Fedora's configuration, rebuilt with the 114 patches of
+- Kernel: Fedora's `kernel-7.3.3-300.fc45` source RPM with Fedora's configuration, rebuilt with the 116 patches of
   the branch `sp11/7.3.3` of the project's kernel fork, the submodule `linux-sp11` (on the stable tag `v7.3.3`,
-  pinned by commit; SP11 revision 4 of 7.3.3) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md);
+  pinned by commit; SP11 revision 5 of 7.3.3) and with `payload/kernel-local`. [`docs/kernel.md`](../kernel.md);
   each patch, its authors and what it is needed for: [`docs/kernel-patches.md`](../kernel-patches.md).
   - `kernel-local` enables the patch set's touch driver and two camera sensor drivers, and one driver Fedora's
     configuration leaves out, the video clock controller: without it Linux never lowers the power-rail and bus

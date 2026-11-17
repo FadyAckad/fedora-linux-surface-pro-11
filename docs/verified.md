@@ -421,8 +421,8 @@ One entry per round; the facts each established live in the topic notes.
   or at logout.
 - Found: in the second of revision 4's two boots the modem's PCIe link did not come up and its controller's
   probe failed, so that boot had no modem and five clock and interconnect providers kept waiting for
-  `sync_state` (`docs/modem.md`, Open). After an HDR session the login screen runs at the backlight's maximum
-  (`docs/display.md`, Known issues).
+  `sync_state` (`docs/modem.md`, The link at boot). After an HDR session the login screen runs at the
+  backlight's maximum (`docs/display.md`, Known issues).
 - A third boot the same morning: the modem present, no provider waiting for `sync_state`; the GPU hang at
   login, recovered (`docs/display.md`, Known issues). Then 8.9 hours asleep on battery with HDR on: 0.28 W
   (27.36 to 24.88 Wh over 31978 s), `ddr` 29565 s, both suspends `deep`, one wake 35 minutes in without a
@@ -439,3 +439,32 @@ One entry per round; the facts each established live in the topic notes.
   entry and exit, no wake (`docs/hardware.md`, Audio; `docs/sleep.md`).
 - By hand (owner): the test tone on the left, the right and both speakers; the speakers not silent again in two
   days of use.
+
+## The modem's link at boot: the check kit (2026-11-14 to 11-16)
+
+- Installed: no package. A check kit under `/usr/local/sbin` with a service that starts only in a boot without
+  the modem and probes PCIe 5's controller again, under kernel `7.3.3-300.sp11.4.fc45` and support 3.11.
+- First kit (2026-11-14), the probe at the service's start: three boots without the link at the first probe.
+  The modem came up in one (the second probe 9.8 s after the kernel's start, TLMM 151 low before it); in two
+  the probe at 6.3 s, TLMM 151 high, bound the controller without the modem.
+- Second kit (installed 2026-11-15), the probe once TLMM 151 reads low: 25 boots to 11-16, the link at the first
+  probe in 23. In the other two (after a reboot; after 4.0 hours off) the service's first probe found the link:
+  the modem on the bus at 10.2 and 8.0 s, ModemManager's modem at 33.7 and 31.5 s, all four WWAN ports. No boot
+  without the modem; ten sleeps without a link failure (`docs/modem.md`, The link at boot).
+
+## Kernel 7.3.3 revision 5: the modem's controller probed again (2026-11-16)
+
+- Installed: the kernel RPMs `7.3.3-300.sp11.5.fc45` (revision 4 plus 0115 and 0116: the controller's driver
+  probes PCIe 5 again once a modem that missed the link asserts WAKE#), `dnf install` next to revisions 3 and 4
+  (dnf removed revision 2), under support 3.11. The check kit's service was removed first.
+- Confirmed: the standard checks. PCIe 5's link up at the first probe, 1.72 s after the kernel's start; TLMM 151
+  an input with a pull-up, reading high; Wi-Fi and mobile data connected before and after a 36 s deep sleep; no
+  provider waiting for `sync_state`; the bound drivers those of revision 4; the CDSP answering in a second boot.
+- To 2026-11-17: 12 boots of revision 5, ten after a reboot and two after a power-off of 1.1 and 7.3 hours,
+  each with the link 0.20 s after the reset's release; ten sleeps, none with a link failure.
+- Not seen: a boot whose first probe fails. The second probe acts only there, so it has not run on the device.
+- In the journal's errors, none new with the revision: the touch controller's invalid header at 10 s with the
+  driver's cold recovery 1 s later (once before, 7.2.15 revision 1; `docs/hardware.md`, Pen); the CDSP's
+  `sleep_stats` assert during the sensors check (`docs/sensors.md`, Known issues); a core dump of the mail
+  client 26 s after the wake (once before, 7.3.3 revision 2).
+- By hand (owner): the round's by-hand checks passed.
