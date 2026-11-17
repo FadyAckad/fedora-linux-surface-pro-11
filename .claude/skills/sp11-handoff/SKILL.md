@@ -60,10 +60,16 @@ order to run them (the device first, then any WSL steps such as the fork's).
   counts; `Unverified: ...`; `What can break: ...`; `The way back: ...`, naming the step or part that undoes it.
 - `## Part X: <name>` headings when the round has phases or moves between Fedora and Windows; the steps are
   numbered 1 to N across all parts, in the order to run them.
-- Each command in its own fenced block, `bash` on Fedora and `powershell` in Windows: no prompt, no comment after
-  the command, nothing to fill in unless the step gives an example value and says what to replace.
-- After each step's commands, `Expected: ...` with the concrete lines; checks without a command as `By hand: ...`.
-  When the expected line is missing, the step says what to do (send the output, stop, go on).
+- One action per step: a short sentence, then one fenced block with the one command (`bash` on Fedora,
+  `powershell` in Windows) or one `By hand: ...` line. No prompt, no comment after the command, nothing to fill
+  in unless the step gives an example value and says what to replace.
+- No command in running text: not in a step's description, not in `Expected`, not in what to do when the
+  expected line is missing, not in the intro. A command the maintainer may need is a step of its own
+  (2026-11-14: commands nested in the descriptions were missed).
+- After the step's command, `Expected: ...` with the concrete lines. When the expected line is missing, the step
+  says to stop and send the output, or to go on with a step named by its number. Keep the order linear: a
+  decision the tool can take belongs in the tool, not in the steps.
+- Keep the intro short; the evidence goes into the findings file.
 - A step that changes the system says so in its heading or first line, with its way back.
 - The last line: `Send back: ...`, naming the outputs and files.
 
