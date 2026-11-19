@@ -12,10 +12,10 @@ removal, SELinux.
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
 - The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9, 7.2.11, 7.2.14,
-  7.2.15 and 7.3.3 checked). Fedora's own `patch-<x.y>-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7, 62 in
-  7.2.8, 63 in 7.2.9, 91 in 7.2.11, 95 in 7.2.14, 94 in 7.2.15, 79 in 7.3.3) is applied before the series and
-  shares only `MAINTAINERS` with it since 7.3.3 (up to 7.2.15 also the media `Kconfig` and `Makefile`, for the
-  IMX471 driver that 7.3 has).
+  7.2.15, 7.3.3 and 7.3.5 checked). Fedora's own `patch-<x.y>-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7,
+  62 in 7.2.8, 63 in 7.2.9, 91 in 7.2.11, 95 in 7.2.14, 94 in 7.2.15, 79 in 7.3.3, 86 in 7.3.5) is applied
+  before the series and shares only `MAINTAINERS` with it since 7.3.3 (up to 7.2.15 also the media `Kconfig`
+  and `Makefile`, for the IMX471 driver that 7.3 has).
 
 ### The builds, by revision
 
@@ -53,16 +53,16 @@ removal, SELinux.
 | 7.3.3 revision 3 | 2026-11-12 | `kernel-7.3.3-300.fc45` | HDR on DisplayPort and eDP: the connector properties and the packets GNOME's HDR switch needs (`docs/display.md`) |
 | 7.3.3 revision 4 | 2026-11-12 | `kernel-7.3.3-300.fc45` | The mixers' DSPPs reserved with every mode set: a compositor's first gamma table costs no mode set (`docs/display.md`) |
 | 7.3.3 revision 5 | 2026-11-16 | `kernel-7.3.3-300.fc45` | PCIe 5's controller probed again once a modem that missed the link at boot asserts WAKE# (`docs/modem.md`) |
+| 7.3.5 revision 1 | 2026-11-19 | `kernel-7.3.5-300.fc45` | Rebased onto `v7.3.5` (two patches now upstream dropped); the audio patch on 7.3.4's unmap and position fixes |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built, 7.3.3 revision 4 the morning
 after (`docs/verified.md`; revisions 9 to 12 passed but for the country re-send, which the sleep's 11d result
 defeated until revision 13; 7.3.3 revision 1 but for a suspend started with the cover open, which revision 2
-holds; 7.3.3 revision 5 passed the standard checks, in boots that did not call for its second probe); the fork
-branch
-head and tree of each is in `docs/kernel-patches.md`. Before 2026-09-23 the project built ooaklee's v23 kernel as
-`kernel-sp11` (`7.2.5-jg-0sp11v23.2-qcom-x1e`), with revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode
-switch).
+holds; 7.3.3 revision 5 passed the standard checks in boots that did not call for its second probe, which
+first ran on 2026-11-19); the fork branch head and tree of each is in `docs/kernel-patches.md`. Before
+2026-09-23 the project built ooaklee's v23 kernel as `kernel-sp11` (`7.2.5-jg-0sp11v23.2-qcom-x1e`), with
+revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode switch).
 
 ## kernel.spec slots and the build
 
@@ -107,7 +107,7 @@ plus the `kernel-local` lines; the patch set's modules and parameters.
 
 - Fedora's configuration (`CONFIG_LSM="lockdown,yama,integrity,selinux,bpf,landlock,ipe"`, zboot `vmlinuz`) has
   what the SP11 needs beyond the patch set, except the video clock controller of "Sync state and the CDSP": the
-  Surface Aggregator stack (patch 0049 keeps `BATTERY_SURFACE` from binding), pmic_glink's battmgr and UCSI, PAS
+  Surface Aggregator stack (patch 0048 keeps `BATTERY_SURFACE` from binding), pmic_glink's battmgr and UCSI, PAS
   remoteproc,
   pd-mapper, FastRPC, QRTR, ath12k, `BT_QCA`, the X1E audio, GPI DMA, `SPI_QCOM_GENI`, `HIDRAW=y`, `KEYBOARD_GPIO`,
   `PINCTRL_QCOM_SPMI_PMIC` and the camera stack but its two new sensors (`docs/camera.md`).
@@ -120,7 +120,7 @@ plus the `kernel-local` lines; the patch set's modules and parameters.
   X1E tree, with the 7.2.5 update and the POS patch) by mapping the built DTB's enabled compatibles to modules and
   sources and compile-checking the result before the mock build; a file comparison misses prerequisite commits.
   The patches and what was left out: `docs/kernel-patches.md`.
-- SKU-specific code: patch 0036 (the OLED link-rate quirk) matches `DMI_PRODUCT_NAME` exactly against "Microsoft
+- SKU-specific code: patch 0035 (the OLED link-rate quirk) matches `DMI_PRODUCT_NAME` exactly against "Microsoft
   Surface Pro, 11th Edition" and never applies on the 5G SKU, whose panel works without it; everything else keys on
   the `microsoft,denali` compatible of both SKUs. ooaklee's ADSP attach series is left out: mainline's PAS driver
   (`lite_pas_id` 0x1f, `lite_dtb_pas_id` 0x29, `qcom_pas_load`) itself restarts the UEFI-started ADSP with the full
@@ -150,7 +150,7 @@ No listed feature uses the CDSP, but its fault showed that the boot votes were n
 - The fix: `kernel-local` enables the video clock controller's driver. Up to 7.2.15 it enabled the crypto engine's
   too, limited to its hashes (`CRYPTO_DEV_QCE_ENABLE_SHA`: its AES XTS and CTR fail the kernel's self-tests, and
   dm-crypt never used the engine). 7.3 marks that driver `BROKEN` (`df373d39c6f0`: the engine is shared with the
-  secure world and the driver races with it), so from 7.3.3 revision 1 patch 0088 disables the crypto node in the
+  secure world and the driver races with it), so from 7.3.3 revision 1 patch 0086 disables the crypto node in the
   Denali tree: a disabled node is no user of the interconnect, and the engine casts no vote at all (`docs/sleep.md`
   has its 394 MB/s vote of 7.2.11). The CDSP's `sleep_stats` assert around sensor stream changes is a known,
   separate issue (`docs/sensors.md`, Known issues).
@@ -196,6 +196,23 @@ onto the new stable tag, whatever lies between (a stable tag contains every earl
   commits (Wi-Fi), `qca_set_bdaddr()` waiting for the right event (the Bluetooth address), fastrpc's polling mode
   (the sensors), `q6apm`'s graph start count and the SoundWire port exhaustion check (audio). 7.3 renames the
   `pci@` nodes to `pcie@` (labels unchanged); step 20's PCIe 5 check reads either name since this update.
+- 7.3.3 to 7.3.5 (7.3.5 revision 1, straight past 7.3.4): 15 stable commits touch files of the series, 14 of
+  them from 7.3.4. Two patches are upstream and dropped, one adapted (`docs/kernel-patches.md`): 7.3.4 fixes the
+  buffer unmap and the queue mode's position in code the audio patch replaces with its own, and the patch takes
+  both fixes in its form. The other stable changes to the series' files meet none of its code: the WSA884x
+  accepts temperatures from -10 to 150 degrees (its hwmon reading only), the WSA macro writes Compander1's two
+  bits at their v2.5 addresses (the speaker mode it sets is those registers' default), UCSI asks for the
+  alternate mode only of a partner that has one, ath12k checks the firmware's PHY count, and the PCIe controller
+  collects PERST# lines from bridge nodes only (the Denali trees name theirs in the root ports).
+- The same update, Fedora's side: its 7.3.5 patch reverts `910b828b22b7` ("phy: qcom: qmp-pcie: Skip PHY reset
+  if already up", new in 7.3; upstream's revert `9a07dfa7f6fe` is queued), so a PCIe PHY the firmware left
+  running is reset at its first start again, as on 7.2 (`docs/modem.md`, The link at boot). The configuration
+  gains `HAVE_EXIT_THREAD` and loses `INTEL_SSEI` and `SATA_INIC162X`. On the device (2026-11-19,
+  `docs/verified.md`): FastRPC's assignment of the ADSP's remote heap at its channel's probe, new with
+  `9e47ad9c562e`, passes (a refusal would leave no `/dev/fastrpc-adsp`, the sensors' path); the three PCIe links
+  come up at the first probe under the restored PHY reset and the iATU's DMA bypass bit (`efadda401c5c`); the
+  QRTR lines at a wake are still logged with `743b5c86276b`, which announces the services again and leaves the
+  lines.
 
 ### Procedure
 
@@ -210,7 +227,7 @@ onto the new stable tag, whatever lies between (a stable tag contains every earl
 3. Review: a clean merge is not a correct one; read every stable change to a file the series touches and compare
    the branches with `git range-diff`. At 7.2.6 `spi_geni_init()` lost its `out_pm` label, and the QSPI path's
    `goto out_pm` merged but did not compile; 7.2.6's SoundWire check `pn >= maxport` merged cleanly but refused the
-   CPS feedback port 13 (patch 0052).
+   CPS feedback port 13 (patch 0051).
 4. Compile on the host before the mock build: the directories the series touches and the DTBs, with Fedora's
    configuration plus `kernel-local` (under two minutes).
 5. Pin the patch set: `KERNEL_PATCH_BASE_COMMIT` in `sp11.conf`, the rehearsal head as the gitlink of `linux-sp11`

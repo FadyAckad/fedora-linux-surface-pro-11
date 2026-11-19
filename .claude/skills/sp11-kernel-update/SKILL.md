@@ -51,7 +51,9 @@ expected output: [reference.md](reference.md). Hand-off templates: [handoff.md](
    `/tmp`, a 6 GB tmpfs), with the identity of the maintainer's own patches, signing off, detached at the pinned
    commit (the `linux-sp11` gitlink; `KERNEL_PATCH_COMMIT` once `lib.sh` is sourced); the new tag fetched from
    kernel.org with `--shallow-exclude=v<old>`. That fetch cuts every history chain behind a merge of excluded
-   history, so the surveys run in a second repository fetched by date (`--shallow-since`) into an empty one.
+   history, so the surveys run in a second repository fetched by date (`--shallow-since`) into an empty one. A
+   point release of the same series has no merge: the scratch clone serves the surveys once the stale shallow
+   entry of the range's first commit is removed.
 2. Survey first: the files the series touches, every stable commit of `v<old>..v<new>` that touches them and the
    release that brought it, and which SP11 patch each one meets.
 3. `git rebase --empty=drop --onto v<new> v<old>`; commits whose content is upstream drop out by themselves.
@@ -160,3 +162,10 @@ five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the fork steps,
   `error:` line that is not a failure.
 - `rpm2cpio` names every file `./...`: `cpio` extracts nothing, silently, for a pattern without the `./`.
 - A command piped into `tee` or `tail` reports their status, not its own: check `rc` before the pipe.
+- Inside this checkout, `build/` included, `git apply` skips every path of a patch for an unpacked tree and
+  reports success: set `GIT_CEILING_DIRECTORIES` to the tree's parent directory and prove the setup with a check
+  that must fail (reference.md, section 2).
+- Fedora's own patch can change a driver the series never touches: read the new entries of the source RPM's
+  `Patchlist.changelog` (7.3.5 reverts a 7.3 change of the PCIe PHY driver).
+- The Claude Code tool shell refuses `rm -rf` on a shell-variable path inside a `bash -c` script: start from a
+  directory that does not exist yet, or remove by a literal absolute path in a command of its own.

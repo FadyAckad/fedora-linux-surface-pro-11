@@ -40,10 +40,11 @@ Fedora's source RPM and stock `kernel-core`, and their sha256 for `sp11.conf`:
 (cd build/cache && curl -fsSLO "$KOJI/src/kernel-$NEW-$REL.fc$FR.src.rpm" && curl -fsSLO "$KOJI/aarch64/kernel-core-$NEW-$REL.fc$FR.aarch64.rpm" && sha256sum "kernel-$NEW-$REL.fc$FR.src.rpm" "kernel-core-$NEW-$REL.fc$FR.aarch64.rpm")
 ```
 
-The same packages as Fedora signed them (the key file comes with the host's `fedora-gpg-keys`):
+The same packages as Fedora signed them (the key file comes with the host's `fedora-gpg-keys`, under
+`/usr/share/pki/rpm-gpg` on Fedora 45, where `/etc/pki/rpm-gpg` is empty):
 
 ```bash
-KEYFILE=/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$FR-primary; KEY=$(gpg --show-keys --with-colons "$KEYFILE" | awk -F: '/^pub/ {print tolower(substr($5, 9))}'); S=$(mktemp -d); KR=$(mktemp -d)
+KEYFILE=/usr/share/pki/rpm-gpg/RPM-GPG-KEY-fedora-$FR-primary; KEY=$(gpg --show-keys --with-colons "$KEYFILE" | awk -F: '/^pub/ {print tolower(substr($5, 9))}'); S=$(mktemp -d); KR=$(mktemp -d)
 curl -fsSL -o "$S/src.rpm" "$KOJI/data/signed/$KEY/src/kernel-$NEW-$REL.fc$FR.src.rpm" && curl -fsSL -o "$S/core.rpm" "$KOJI/data/signed/$KEY/aarch64/kernel-core-$NEW-$REL.fc$FR.aarch64.rpm"
 rpmkeys --root "$KR" --import "$KEYFILE" && rpmkeys --root "$KR" --checksig -v "$S/src.rpm" "$S/core.rpm" | grep -i signature
 for p in "src.rpm kernel-$NEW-$REL.fc$FR.src.rpm" "core.rpm kernel-core-$NEW-$REL.fc$FR.aarch64.rpm"; do set -- $p; [ "$(rpm -qp --qf '%{PAYLOADSHA256}' "$S/$1" 2> /dev/null)" = "$(rpm -qp --qf '%{PAYLOADSHA256}' "build/cache/$2")" ] && echo "same payload: $2"; done; rm -rf "$S" "$KR"
@@ -67,10 +68,9 @@ git -C linux-sp11 diff --name-only "$(sed -n 's/^KERNEL_PATCH_BASE_COMMIT="\([0-
 
 Expected: `4`; the number of files the series touches (80 at 7.2.5, 100 since revision 6, 118 at 7.2.15), and no
 file both touch but `MAINTAINERS` (up to 7.2.15 also `drivers/media/i2c/Kconfig` and `Makefile`, for the IMX471
-driver 7.3 has). kernel.spec applies the series after Fedora's patch, so prove it on the copy of Fedora's tarball
-the tarball check below unpacks: `git apply` (outside a repository it is a patch tool) of
-`patch-<x.y>-redhat.patch`, then `git apply --check` of the rebased series (`git format-patch -o <dir>
-v<new>..HEAD`, section 7); the first build of revision 6 stopped in `%prep` on exactly this.
+driver 7.3 has). kernel.spec applies the series after Fedora's patch, so prove it after the rebase on the copy of
+Fedora's tarball the tarball check below unpacks (section 2 has the command); the first build of revision 6
+stopped in `%prep` on exactly this.
 
 Fedora's configuration change between the two stock `kernel-core` packages (the old one is in the cache of the
 checkout that built the pinned revision):
@@ -90,10 +90,11 @@ Fedora's tarball against the tag (under a minute on an idle host, several while 
 
 ```bash
 T=$R/tarcheck; rm -rf "$T"; mkdir -p "$T/tag"; tar -xf "$R/srpm-$NEW-$REL/linux-$NEW.tar.xz" -C "$T"; git -C "$R/linux" archive "v$NEW" | tar -x -C "$T/tag"
-diff -r --no-dereference "$T/linux-$NEW" "$T/tag" > /dev/null && echo "same content"; diff <(cd "$T/linux-$NEW" && find . | sort) <(cd "$T/tag" && find . | sort) > /dev/null && echo "same entries"; diff <(cd "$T/linux-$NEW" && find . -type f -perm -u+x | sort) <(cd "$T/tag" && find . -type f -perm -u+x | sort) > /dev/null && echo "same executables"; rm -rf "$T"
+diff -r --no-dereference "$T/linux-$NEW" "$T/tag" > /dev/null && echo "same content"; diff <(cd "$T/linux-$NEW" && find . | sort) <(cd "$T/tag" && find . | sort) > /dev/null && echo "same entries"; diff <(cd "$T/linux-$NEW" && find . -type f -perm -u+x | sort) <(cd "$T/tag" && find . -type f -perm -u+x | sort) > /dev/null && echo "same executables"
 ```
 
-Expected: `same content`, `same entries`, `same executables`.
+Expected: `same content`, `same entries`, `same executables`. Both copies stay for the proof of section 2 that the
+series applies after Fedora's patch.
 
 ## 2. Rebase rehearsal
 
@@ -125,6 +126,26 @@ git init -q "$R/linux2" && git -C "$R/linux2" fetch --no-tags --shallow-since=<d
 
 Expected: the series' commit count and the stable range's (7.2.15 to 7.3.3: 20994). `--min-parents=1` keeps the
 remaining date-cut roots out of every survey.
+
+In a worktree whose submodule is not initialized, make the scratch clone from the main checkout's submodule
+(`$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/linux-sp11`) and read the identity from
+it; section 4 initializes the worktree's submodule from the scratch clone.
+
+A point release of the same series has no merge (7.3.3 to 7.3.5: 1769 commits, fetched in 4 s), so the scratch
+clone serves the surveys and no second repository is needed. Its fetch still records the range's first commit as
+shallow although its parent, the old tag, is in the clone: until the entry is removed that commit is a root,
+`git merge-base` finds nothing and `git merge-tree` cannot be used. With `$R/linux` in place of `$R/linux2` in the
+surveys below:
+
+```bash
+for s in $(cat "$R/linux/.git/shallow"); do p=$(git -C "$R/linux" cat-file commit "$s" 2>/dev/null | awk '/^parent/ {print $2}' | head -1); [ -n "$p" ] && git -C "$R/linux" cat-file -e "$p" 2>/dev/null && sed -i "/^$s\$/d" "$R/linux/.git/shallow"; done; git -C "$R/linux" merge-base "v$NEW" "$PIN"; git -C "$R/linux" rev-list --count --merges "v$OLD..v$NEW"
+```
+
+Expected: the old tag's commit and `0`. One three-way merge then names every file a rebase will stop at:
+
+```bash
+git -C "$R/linux" merge-tree --write-tree --name-only --no-messages "v$NEW" "$PIN" | sed -n '2,$p' | sort -u
+```
 
 The stable commits that touch the series' files, each with the first release that has it:
 
@@ -176,6 +197,17 @@ git -C "$R/linux" range-diff "v$OLD..$PIN" "v$NEW..HEAD" > "$R/range-diff.txt"; 
 
 Expected: `<` lines only for the dropped patches and `>` only for new ones; in the range-diff, `!` for every
 adapted patch, and a partly upstream patch as a `<` and `>` pair.
+
+The series as kernel.spec applies it, after Fedora's own patch, on the copies the tarball check of section 1
+left:
+
+```bash
+T=$PWD/$R/tarcheck S=$PWD/$R/series-check P=$PWD/$R/srpm-$NEW-$REL/patch-${NEW%.*}-redhat.patch; git -C "$R/linux" format-patch -q --no-signature --no-renames -o "$S" "v$NEW..HEAD"; export GIT_CEILING_DIRECTORIES=$T; (cd "$T/tag" && cat "$S"/*.patch | git apply --check -R --whitespace=nowarn - 2> /dev/null) || echo "control: the tag tree refuses the reverse"; (cd "$T/linux-$NEW" && git apply "$P" && cat "$S"/*.patch | git apply --check --whitespace=nowarn - && echo "the series applies after the Fedora patch")
+```
+
+Expected: `control: the tag tree refuses the reverse` and `the series applies after the Fedora patch`. The first
+line is what makes the second one count: inside this checkout, `build/` included, `git apply` skips every path of a
+patch and reports success, and `GIT_CEILING_DIRECTORIES` is what makes it a patch tool there.
 
 A clean textual merge of a carried patch can hide a reversion: compare each touched file's tested change
 (`git diff v$OLD $PIN -- FILE`) with its effective change on the new base (`git diff v$NEW -- FILE` in `$R/linux`)
@@ -235,6 +267,18 @@ N=$(git -C "$R/linux" rev-list --count "v$NEW..HEAD"); git -C linux-sp11 fetch -
 
 Expected: ` <rehearsal head> linux-sp11 (...)`, the head the scratch clone is detached at.
 
+In a worktree whose submodule is not initialized, register and create it first, as step 10 would, but without
+its fetch from the fork, which does not have the rehearsal head; after the command above, move its `.git` into
+the superproject's:
+
+```bash
+[ -e linux-sp11/.git ] || { git submodule init -q -- linux-sp11 && git init -q linux-sp11 && git -C linux-sp11 remote add origin "$(git config --get submodule.linux-sp11.url)"; }
+```
+
+```bash
+git submodule absorbgitdirs -- linux-sp11
+```
+
 The revision hash for `KERNEL_SP11_REV_SHA256`, after the other `sp11.conf` edits:
 
 ```bash
@@ -287,8 +331,10 @@ Step 36 as an installed system with the current support RPM sees it: that RPM re
 SUPPORT_PREVIOUS_RPM=$(ls -t "$PWD"/build/rpms/sp11-surface-support-*.rpm | head -1) scripts/36-verify-kernel-install.sh > "build/logs/step36-$NEW-rev$REV.log" 2>&1; echo "step 36 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-$NEW-rev$REV.log" | grep -cE '^\[sp11\] +ok:'; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-$NEW-rev$REV.log" | grep -E 'FAIL|ERROR|/boot use|verified on an installed system'
 ```
 
-Expected: `step 36 rc=0`; 42 checks (revision 5); the `/boot` use of the new kernel (195M) and
-`kernel packages verified on an installed system next to <previous kernel-core>`; no `FAIL` or `ERROR` line.
+Expected: `step 36 rc=0`; 42 checks (7.3.5 revision 1); the `/boot` use of the new kernel (212M on 7.3, 195M on
+7.2) and `kernel packages verified on an installed system next to <previous kernel-core>`; no `FAIL` or `ERROR`
+line. The one `WARNING`, `kernel-install add returned non-zero for the previous kernel`, belongs to the chroot
+(`docs/pipeline.md`, Step 36).
 
 Beyond step 20 (`ABI` is the new uname):
 
@@ -315,7 +361,8 @@ PREVDIR=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/bu
 ```
 
 Expected: only modules that Fedora's configuration change or the stable update itself adds or removes (7.2.7:
-`ntfs`, and `i2c-hid-acpi-prp0001`, which 7.2.6 added); `diff` then ends with status 1.
+`ntfs`, and `i2c-hid-acpi-prp0001`, which 7.2.6 added); `diff` then ends with status 1. No line and status 0:
+the same modules (7.3.3 revision 5 to 7.3.5 revision 1: 5723).
 
 ## 8. After the device test and the push
 

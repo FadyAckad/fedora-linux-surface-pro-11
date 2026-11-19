@@ -22,7 +22,8 @@ Windows path in WSL.
 Cover, in this order, and keep the commands exactly as below:
 
 1. `sha256sum -c *.sha256` — every file `OK`.
-2. `df -h /boot` — at least 250M in `Avail` (each SP11 kernel takes about 195 MB there); otherwise stop.
+2. `df -h /boot` — at least 250M in `Avail` (each SP11 kernel takes about 212 MB there on 7.3, 195 MB on 7.2);
+   otherwise stop.
 3. `sudo dnf install ./kernel{,-core,-modules-core,-modules,-modules-extra}-<abi>.rpm` — five packages next to
    `<prev-abi>`, dracut runs, no error line.
 4. `sudo sh -c 'grep -hE "^(title|devicetree|options)" /boot/loader/entries/*-<abi>.conf'` and

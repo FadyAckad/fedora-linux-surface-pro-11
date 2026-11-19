@@ -23,8 +23,8 @@ after their trailers that names the source and the change.
 - Source: ooaklee's linux_ms_dev_kit-sp11 release `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (`ce78e6ebc3d7`) with the 7.2.5
   stable update (the v23.2 kernel of `docs/kernel.md`).
 - Result: 61 patches reproducing 70 of the 80 files they touch byte for byte from v23.2; the other 10 differ only
-  by the parts left out (below). In the numbering of the branch `sp11/7.2.15` (the map to `sp11/7.3.3` is under
-  7.3.3 revision 1):
+  by the parts left out (below). In the numbering of the branch `sp11/7.2.15` (the maps to `sp11/7.3.3` and
+  `sp11/7.3.5` are under those kernels' revision 1):
   - 0001–0041: jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses; 0014 lacks a
     jglathe-only X1P file, 0030 keeps only its Denali hunk.
   - 0042–0047: ooaklee's branch commits as they are (OLED link-rate quirk, dwc3 PHY re-init, platform profile).
@@ -329,10 +329,38 @@ after their trailers that names the source and the change.
   wake-up interrupt.
 - No configuration change: the built configuration is revision 4's but for the build salt, and the four module
   packages hold the same modules.
-- The device round of 2026-11-16 passed the standard checks. The link was up at the first probe in each of the
-  revision's 12 boots to 11-17, so the second probe has not run on the device (`docs/verified.md`). Pushed on
-  2026-11-17: `sp11/7.3.3` moved forward by the two commits (head `e53fd0c5`, tree `c83e6e9d`, the tree the
-  kernel was built from), signed in place in the submodule.
+- The device round of 2026-11-16 passed the standard checks. The link was up at the first probe in 23 of the
+  revision's 24 boots; in the 24th (2026-11-19) the first probe failed and the second brought the modem up 8.1 s
+  after the kernel's start (`docs/verified.md`). Pushed on 2026-11-17: `sp11/7.3.3` moved forward by the two
+  commits (head `e53fd0c5`, tree `c83e6e9d`, the tree the kernel was built from), signed in place in the
+  submodule.
+
+### 7.3.5 revision 1: the rebase onto 7.3.5
+
+- The 116 commits of `sp11/7.3.3` rebased onto `v7.3.5`, straight past 7.3.4 (`docs/kernel.md`, Rebase to a new
+  Fedora kernel): 114 remain, none is new.
+- Dropped, upstream since 7.3.4: 0003 (`7d0767c5cd87`, the pmic_glink altmode worker) and 0071 (`87fd20da8ca8`,
+  the charger supplies' change notice).
+- Adapted (its `[sp11: ...]` note names the changes): 0046, the AudioReach patch, where 7.3.4 fixes code the
+  patch replaces with its own. `q6apm_dai_pointer()` takes the wrap of a full ring to 0 for its queue mode
+  (`0ea3e0b196f9`); one frame short of the ring's end, a drained stream never reached `appl_ptr` and ALSA saw no
+  underrun. The fixed region's unmap becomes a helper on the `q6apm` instance that `q6apm_audio_remove()` calls
+  for every graph (`a51c5dd7f7fc`), and its reply carries the DSP's status and clears a handle only on success
+  (`4b832a2af523`), the patch's own OOB and position handles included; the patch already matched the reply by
+  its real opcode. `topology.c` keeps the patch's bounded parser, which has the checks of `e21fb64a8c4a`.
+- Merged without a change: the hw pointer's reset with the fragment queue (`0337b8129cf6`) and 7.3.5's guard of
+  the callbacks until the driver data is published (`ef7062864c05`). The pull mode, the speakers' path, has
+  neither a fragment queue nor that position code.
+- Old numbers to new: 0001 and 0002 unchanged, 0004–0070 to 0003–0069, 0072–0116 to 0070–0114. The entries of
+  7.3.3 revisions 1 to 5 above keep the numbers of `sp11/7.3.3`.
+- No change to `kernel-local`. The built configuration differs from 7.3.3 revision 5's by Fedora's changes
+  (`docs/kernel.md`, Rebase) and the buildroot's Rust version; the four module packages hold the same 5723
+  modules, and both Denali device trees are byte for byte revision 5's.
+- Passed its device round on 2026-11-19, the day it was built: the standard checks, both speakers and a
+  recording from the microphone with no refused unmap from the DSP, the three PCIe links at the first probe in
+  both boots, and a deep sleep ended by opening the cover (`docs/verified.md`). Pushed the same day as
+  `sp11/7.3.5` (head `1b01078e`, tree `b341ab21`, the tree the kernel was built from), signed in place in the
+  submodule without a clone of the fork.
 
 ## Contents
 
@@ -341,63 +369,62 @@ The patches by number, with their origin and what each is needed for.
 | Patches | What | Origin | Needed for |
 |---|---|---|---|
 | 0001 | EFI stub: signal the before-ExitBootServices event group | Johan Hovold (T14s workaround, applies to every arm64 machine) | boot (kept until a boot without it is tested) |
-| 0002, 0003 | UCSI connector worker and pmic_glink altmode worker on freezable workqueues | Abel Vesa | USB-C across suspend |
-| 0004–0006 | rpmsg announce order, an rpmsg helper to open an endpoint during probe (needed by 0006), QRTR SMD open/close races | Stephan Gerhold | ADSP services (audio, battery, sensors). 0006's probe holds its send lock from the endpoint registration through a failed channel open into the unregistration; a QRTR broadcast in that window deadlocks with it (the CDSP's IPCRTR open times out after 5 s in the initramfs): three boots of 2026-11-05/06 waited 212 s in dracut-initqueue, udevd unkillable, and ran without battery, Wi-Fi and sensors, every QRTR user blocked, until a long power press; fixed by 0087 |
-| 0007 | x1e80100 machine driver match data (Dell XPS 13 channel map) | Abel Vesa | prerequisite of 0054 |
-| 0008 | qcom_battmgr request input checks | Jens Glathe | battery |
-| 0009 | WCN7850 Bluetooth: drop the unused baud-rate event | Cheng Jiang | Bluetooth |
-| 0010, 0011 | QMP combo PHY: initial mode for static bridges | Jens Glathe | USB-C, DisplayPort alt mode |
-| 0012, 0017–0020, 0026–0031 | msm display and GPU: X1E catalog, clock factor, gamma, resume clock, PSR SDP flush, standalone GPU/GMU device model | William Larson, Jens Glathe, Stephan Gerhold, Xilin Wu, Lars Karlslund, Akhil P Oommen | display, GPU acceleration, backlight, suspend |
-| 0013 | Denali firmware paths in the OLED device tree | Jens Glathe | ADSP, CDSP, GPU firmware |
-| 0014, 0015 | ath12k `disable-rfkill` device-tree property, set on the Denali Wi-Fi node | Dale Whinham | Wi-Fi (hard-blocked otherwise) |
-| 0016 | Surface Aggregator: the DT default no longer assumes the EC closes its serial handle in D3 (SP11 suspend fix) | Dale Whinham | keyboard, touchpad, tablet switch after resume |
-| 0021–0025 | PS8830 retimer: USB4 off, DP alt-mode states, config delay | Jens Glathe | USB-C, DisplayPort alt mode |
-| 0032–0035 | apply clock defaults only once the PHY is powered (driver core, DP, eUSB2, dwc3-qcom) | Stephan Gerhold, Jens Glathe | USB, DisplayPort |
-| 0036 | OLED panel: maximum link rate from ACPI when the DPCD reports 0 | Jérôme de Bretagne | display on the non-5G SKUs (the DMI match excludes the 5G SKU) |
-| 0037, 0038 | dwc3 `snps,reinit-phy-on-resume` | Oliver White | USB after resume |
-| 0039–0041 | Surface platform profile and fan without ACPI | Leon Silcott (ooaklee) | power profiles, fan readout |
-| 0042, 0043 | GPI DMA and GENI SPI in QSPI mode | x1e-nixos, ooaklee | touchscreen, pen |
-| 0044 | MSHW0485 touchscreen driver with the iptsd HIDRAW bridge | ooaklee, Leon Silcott, Justin White | touchscreen, multi-touch, pen |
-| 0045–0048 | SoundWire feedback ports, AudioReach speaker protection graph, WSA8845 and LPASS macros, x1e80100 VI/CPS backends | geocausa (SP11X1e-audio), ported by Leon Silcott | speakers, microphone (the LPASS macros on upstream's PM-clock drivers since 7.3.3 revision 1) |
-| 0049 | surface_battery: no second battery on the SP11 | Justin White | battery |
-| 0050 | Denali device tree: touch controller, audio feedback links, volume keys, USB PHY re-init, no cluster idle states | x1e-nixos, ooaklee, Leon Silcott | touch, audio, volume keys, suspend |
-| 0051 | POS tablet-mode switch for the Surface Pro 11 | this repository | tablet mode, auto-rotation |
-| 0052 | SoundWire: accept the controller's highest master port again (7.2.6's port check refuses it) | this repository | speakers (the CPS feedback of the speaker protection) |
-| 0053–0055 | CAMSS binding resources, OV13858 and VD55G0 bindings, the X1E80100 camera nodes (camera clock controller, CAMSS, CCI) | turbineBMW | cameras |
-| 0056 | camera sensors: IMX681 driver, OV13858 device-tree support and Surface Pro 11 mode, VD55G0 (STMicroelectronics' GPL driver) | turbineBMW | cameras |
-| 0057, 0058, 0061 | CAMSS: unwind failed stream starts, X1E80100 C-PHY links, the Denali C-PHY sequence observed on the device | turbineBMW | front camera |
-| 0059, 0062 | Denali device tree: camera rails, clocks, CCI buses and CAMSS endpoints of the three cameras; the IR illuminator on the PM8550 flash controller | turbineBMW | cameras |
-| 0060 | provenance record of the camera sources | turbineBMW | — |
-| 0063 | OV13858: retry the first register write after power-up | turbineBMW | rear camera |
-| 0064 | IMX681: exposure through the 24-bit coarse integration register | Leon Silcott (ooaklee) | front camera exposure |
-| 0065 | Denali device tree: the front camera's privacy LED on GPIO 225 | this repository | the light next to the front camera while it streams |
-| 0066 | IMX681: the frame length at `0x033d`, the sensor's line time, an exposure margin of 8 lines | this repository | a third more exposure at 30 fps; the vertical blanking sets the frame rate |
-| 0067 | OV13858: the lowest pixel rate from the lowest link frequency | this repository | the rear camera's line and exposure times in libcamera |
-| 0068 | IMX681: the controls applied at stream start under the control handler's lock | this repository | no race with control changes at stream start |
-| 0069 | qcom_battmgr: the `capacity` property on X1E80100, lost when the variant got its own property table | Liviu Nicoara | the battery percentage from the kernel |
-| 0070 | qcom_battmgr: `Full` instead of `Not charging` for a full battery on external power | Bjorn Andersson | the battery state on the charger |
-| 0071 | qcom_battmgr: a change notice from the AC, USB and wireless supplies when the charging source changes | Brandon Williams (turbineBMW) | UPower's on-battery state after the charger is plugged in or out |
-| 0072 | Device tree of the 5G SKU: the OLED tree plus the Snapdragon X65 modem on PCIe 5 (supply switch on TLMM 221, reset 149, CLKREQ# 150), as on the CRD | this repository | the 5G modem and its GNSS receiver (`docs/modem.md`) |
-| 0073 | MHI PCI: power a busy modem down for system suspend instead of aborting it | this repository | deep sleep shortly after a wake (no `s2idle` fallback) |
-| 0074 | Type-C mux: initialize the orientation switch array | Haobo Cheng (posted 2026-08-04) | the orientation switch chain (not the reversed plug) |
-| 0075–0079 | Adreno GMU shutdown idle check, boot-up bandwidth vote, devfreq idle time, scheduler priority, preemption records across suspend | Jie Zhang, Akhil P Oommen (posted 2026-10-24) | GPU stability around its idle power-downs, a little power while awake |
-| 0080 | Denali device tree: the video codec with the Surface's firmware | this repository | hardware video decoding and encoding |
-| 0081 | MHI PCI: the Surface Pro 11 5G modem's data channels for the MBIM driver | this repository | mobile data (`docs/modem.md`) |
-| 0082 | 5G device tree: the modem's supply stays on through a system sleep | this repository | mobile data back within seconds of a wake (`docs/modem.md`, Across a sleep) |
-| 0083 | ath12k: a known country kept when the 11d scan reports none, restored when a radio starts | this repository | the first Wi-Fi scan after a wake with the country known (`docs/hardware.md`, Wi-Fi) |
-| 0084 | MSHW0485 touch: no power-on in the resume callback; the recovery work powers the controller, once | this repository | 0.8 s less in a wake's resume phase (`docs/sleep.md`, Wake) |
-| 0085 | PCIe (qcom): the controllers suspend and resume asynchronously | this repository | the three links resumed side by side, about 0.65 s less in a wake |
-| 0086 | PS8830 retimer: the connection announced 30 ms before its mode | this repository | USB 3 with the plug reversed (`docs/hardware.md`, USB-C data) |
-| 0087 | QRTR SMD: the probe's send lock released before a failed open's unregistration | this repository | boots that sat 212 s in dracut-initqueue and ran without battery, Wi-Fi and sensors (0006's deadlock) |
-| 0088 | Denali device tree: the crypto engine's node disabled | this repository | no user of the interconnect without a driver, since 7.3 marks the engine's driver `BROKEN` (`docs/kernel.md`, Sync state and the CDSP) |
-| 0089 | X1E80100 pin controller: GPIO wake interrupts stay on the TLMM summary interrupt, not the PDC (7.2's state) | this repository | a suspend with the lid open that holds; 7.3's PDC wake path woke it at once (`docs/sleep.md`) |
-| 0090, 0091 | DP: hot-plug state updates serialized, the debugfs connector pointer initialized | Xilin Wu (posted 2026-09-30; 0090 in msm-next) | prerequisites of 0092–0111 |
-| 0092–0094 | DRM core: `max bpc` attached before a connector has a state, and by the bridge connector for non-HDMI chains | Xilin Wu (posted 2026-10-09) | 10 bits per colour on DP and eDP |
-| 0095–0111 | DP and eDP: the output bit depth, the BT.2020 VSC packet, the HDR static metadata packet, `Colorspace` and `HDR_OUTPUT_METADATA`; stream enable, PHY power and the eDP capability read reworked | Xilin Wu (posted 2026-10-09) | HDR (`docs/display.md`) |
-| 0112, 0113 | DPU: a mixer's DSPP pointer cleared when a mode set leaves it without one; a mode set asked for only by a CRTC that has a CTM or gamma LUT and no DSPP (in place of 0017's forced mode set) | Dmitry Baryshkov (posted 2026-10-24) | no mode set when a gamma table or CTM comes or goes |
-| 0114 | DPU: the mixers' DSPPs reserved with every mode set while mixers with a free one are left | this repository | a compositor's first gamma table without a mode set and the panel's power cycle (`docs/display.md`) |
-| 0115 | PCIe (qcom): the controller probed again, from a work item, once an endpoint whose link missed the probe asserts WAKE# | this repository | the 5G modem in a boot where it is not ready at the first probe (`docs/modem.md`, The link at boot) |
-| 0116 | 5G device tree: the modem's WAKE# (TLMM 151) in PCIe 5's controller node, with its pin state | this repository | 0115's wait for the modem |
+| 0002 | UCSI connector worker on a freezable workqueue | Abel Vesa | USB-C across suspend (the pmic_glink altmode worker's fix is upstream since 7.3.4) |
+| 0003–0005 | rpmsg announce order, an rpmsg helper to open an endpoint during probe (needed by 0005), QRTR SMD open/close races | Stephan Gerhold | ADSP services (audio, battery, sensors). 0005's probe holds its send lock from the endpoint registration through a failed channel open into the unregistration; a QRTR broadcast in that window deadlocks with it (the CDSP's IPCRTR open times out after 5 s in the initramfs): three boots of 2026-11-05/06 waited 212 s in dracut-initqueue, udevd unkillable, and ran without battery, Wi-Fi and sensors, every QRTR user blocked, until a long power press; fixed by 0085 |
+| 0006 | x1e80100 machine driver match data (Dell XPS 13 channel map) | Abel Vesa | prerequisite of 0047 |
+| 0007 | qcom_battmgr request input checks | Jens Glathe | battery |
+| 0008 | WCN7850 Bluetooth: drop the unused baud-rate event | Cheng Jiang | Bluetooth |
+| 0009, 0010 | QMP combo PHY: initial mode for static bridges | Jens Glathe | USB-C, DisplayPort alt mode |
+| 0011, 0016–0019, 0025–0030 | msm display and GPU: X1E catalog, clock factor, gamma, resume clock, PSR SDP flush, standalone GPU/GMU device model | William Larson, Jens Glathe, Stephan Gerhold, Xilin Wu, Lars Karlslund, Akhil P Oommen | display, GPU acceleration, backlight, suspend |
+| 0012 | Denali firmware paths in the OLED device tree | Jens Glathe | ADSP, CDSP, GPU firmware |
+| 0013, 0014 | ath12k `disable-rfkill` device-tree property, set on the Denali Wi-Fi node | Dale Whinham | Wi-Fi (hard-blocked otherwise) |
+| 0015 | Surface Aggregator: the DT default no longer assumes the EC closes its serial handle in D3 (SP11 suspend fix) | Dale Whinham | keyboard, touchpad, tablet switch after resume |
+| 0020–0024 | PS8830 retimer: USB4 off, DP alt-mode states, config delay | Jens Glathe | USB-C, DisplayPort alt mode |
+| 0031–0034 | apply clock defaults only once the PHY is powered (driver core, DP, eUSB2, dwc3-qcom) | Stephan Gerhold, Jens Glathe | USB, DisplayPort |
+| 0035 | OLED panel: maximum link rate from ACPI when the DPCD reports 0 | Jérôme de Bretagne | display on the non-5G SKUs (the DMI match excludes the 5G SKU) |
+| 0036, 0037 | dwc3 `snps,reinit-phy-on-resume` | Oliver White | USB after resume |
+| 0038–0040 | Surface platform profile and fan without ACPI | Leon Silcott (ooaklee) | power profiles, fan readout |
+| 0041, 0042 | GPI DMA and GENI SPI in QSPI mode | x1e-nixos, ooaklee | touchscreen, pen |
+| 0043 | MSHW0485 touchscreen driver with the iptsd HIDRAW bridge | ooaklee, Leon Silcott, Justin White | touchscreen, multi-touch, pen |
+| 0044–0047 | SoundWire feedback ports, AudioReach speaker protection graph, WSA8845 and LPASS macros, x1e80100 VI/CPS backends | geocausa (SP11X1e-audio), ported by Leon Silcott | speakers, microphone (the LPASS macros on upstream's PM-clock drivers since 7.3.3 revision 1) |
+| 0048 | surface_battery: no second battery on the SP11 | Justin White | battery |
+| 0049 | Denali device tree: touch controller, audio feedback links, volume keys, USB PHY re-init, no cluster idle states | x1e-nixos, ooaklee, Leon Silcott | touch, audio, volume keys, suspend |
+| 0050 | POS tablet-mode switch for the Surface Pro 11 | this repository | tablet mode, auto-rotation |
+| 0051 | SoundWire: accept the controller's highest master port again (7.2.6's port check refuses it) | this repository | speakers (the CPS feedback of the speaker protection) |
+| 0052–0054 | CAMSS binding resources, OV13858 and VD55G0 bindings, the X1E80100 camera nodes (camera clock controller, CAMSS, CCI) | turbineBMW | cameras |
+| 0055 | camera sensors: IMX681 driver, OV13858 device-tree support and Surface Pro 11 mode, VD55G0 (STMicroelectronics' GPL driver) | turbineBMW | cameras |
+| 0056, 0057, 0060 | CAMSS: unwind failed stream starts, X1E80100 C-PHY links, the Denali C-PHY sequence observed on the device | turbineBMW | front camera |
+| 0058, 0061 | Denali device tree: camera rails, clocks, CCI buses and CAMSS endpoints of the three cameras; the IR illuminator on the PM8550 flash controller | turbineBMW | cameras |
+| 0059 | provenance record of the camera sources | turbineBMW | — |
+| 0062 | OV13858: retry the first register write after power-up | turbineBMW | rear camera |
+| 0063 | IMX681: exposure through the 24-bit coarse integration register | Leon Silcott (ooaklee) | front camera exposure |
+| 0064 | Denali device tree: the front camera's privacy LED on GPIO 225 | this repository | the light next to the front camera while it streams |
+| 0065 | IMX681: the frame length at `0x033d`, the sensor's line time, an exposure margin of 8 lines | this repository | a third more exposure at 30 fps; the vertical blanking sets the frame rate |
+| 0066 | OV13858: the lowest pixel rate from the lowest link frequency | this repository | the rear camera's line and exposure times in libcamera |
+| 0067 | IMX681: the controls applied at stream start under the control handler's lock | this repository | no race with control changes at stream start |
+| 0068 | qcom_battmgr: the `capacity` property on X1E80100, lost when the variant got its own property table | Liviu Nicoara | the battery percentage from the kernel |
+| 0069 | qcom_battmgr: `Full` instead of `Not charging` for a full battery on external power | Bjorn Andersson | the battery state on the charger |
+| 0070 | Device tree of the 5G SKU: the OLED tree plus the Snapdragon X65 modem on PCIe 5 (supply switch on TLMM 221, reset 149, CLKREQ# 150), as on the CRD | this repository | the 5G modem and its GNSS receiver (`docs/modem.md`) |
+| 0071 | MHI PCI: power a busy modem down for system suspend instead of aborting it | this repository | deep sleep shortly after a wake (no `s2idle` fallback) |
+| 0072 | Type-C mux: initialize the orientation switch array | Haobo Cheng (posted 2026-08-04) | the orientation switch chain (not the reversed plug) |
+| 0073–0077 | Adreno GMU shutdown idle check, boot-up bandwidth vote, devfreq idle time, scheduler priority, preemption records across suspend | Jie Zhang, Akhil P Oommen (posted 2026-10-24) | GPU stability around its idle power-downs, a little power while awake |
+| 0078 | Denali device tree: the video codec with the Surface's firmware | this repository | hardware video decoding and encoding |
+| 0079 | MHI PCI: the Surface Pro 11 5G modem's data channels for the MBIM driver | this repository | mobile data (`docs/modem.md`) |
+| 0080 | 5G device tree: the modem's supply stays on through a system sleep | this repository | mobile data back within seconds of a wake (`docs/modem.md`, Across a sleep) |
+| 0081 | ath12k: a known country kept when the 11d scan reports none, restored when a radio starts | this repository | the first Wi-Fi scan after a wake with the country known (`docs/hardware.md`, Wi-Fi) |
+| 0082 | MSHW0485 touch: no power-on in the resume callback; the recovery work powers the controller, once | this repository | 0.8 s less in a wake's resume phase (`docs/sleep.md`, Wake) |
+| 0083 | PCIe (qcom): the controllers suspend and resume asynchronously | this repository | the three links resumed side by side, about 0.65 s less in a wake |
+| 0084 | PS8830 retimer: the connection announced 30 ms before its mode | this repository | USB 3 with the plug reversed (`docs/hardware.md`, USB-C data) |
+| 0085 | QRTR SMD: the probe's send lock released before a failed open's unregistration | this repository | boots that sat 212 s in dracut-initqueue and ran without battery, Wi-Fi and sensors (0005's deadlock) |
+| 0086 | Denali device tree: the crypto engine's node disabled | this repository | no user of the interconnect without a driver, since 7.3 marks the engine's driver `BROKEN` (`docs/kernel.md`, Sync state and the CDSP) |
+| 0087 | X1E80100 pin controller: GPIO wake interrupts stay on the TLMM summary interrupt, not the PDC (7.2's state) | this repository | a suspend with the lid open that holds; 7.3's PDC wake path woke it at once (`docs/sleep.md`) |
+| 0088, 0089 | DP: hot-plug state updates serialized, the debugfs connector pointer initialized | Xilin Wu (posted 2026-09-30; 0088 in msm-next) | prerequisites of 0090–0109 |
+| 0090–0092 | DRM core: `max bpc` attached before a connector has a state, and by the bridge connector for non-HDMI chains | Xilin Wu (posted 2026-10-09) | 10 bits per colour on DP and eDP |
+| 0093–0109 | DP and eDP: the output bit depth, the BT.2020 VSC packet, the HDR static metadata packet, `Colorspace` and `HDR_OUTPUT_METADATA`; stream enable, PHY power and the eDP capability read reworked | Xilin Wu (posted 2026-10-09) | HDR (`docs/display.md`) |
+| 0110, 0111 | DPU: a mixer's DSPP pointer cleared when a mode set leaves it without one; a mode set asked for only by a CRTC that has a CTM or gamma LUT and no DSPP (in place of 0016's forced mode set) | Dmitry Baryshkov (posted 2026-10-24) | no mode set when a gamma table or CTM comes or goes |
+| 0112 | DPU: the mixers' DSPPs reserved with every mode set while mixers with a free one are left | this repository | a compositor's first gamma table without a mode set and the panel's power cycle (`docs/display.md`) |
+| 0113 | PCIe (qcom): the controller probed again, from a work item, once an endpoint whose link missed the probe asserts WAKE# | this repository | the 5G modem in a boot where it is not ready at the first probe (`docs/modem.md`, The link at boot) |
+| 0114 | 5G device tree: the modem's WAKE# (TLMM 151) in PCIe 5's controller node, with its pin state | this repository | 0113's wait for the modem |
 
 ## Left out of v23.2
 
@@ -414,8 +441,8 @@ Nothing here drives hardware the feature table depends on; in parentheses, what 
   clocks off and worked, but `cxsd` stayed at 0 in a 10-minute sleep, and the eDP pixel clock logged "rcg didn't
   update its configuration" twice (`disp_cc_mdss_dptx3_pixel0_clk_src`) at the display's enable.
 - The PCIe ASPM API series and ath12k's MAC-from-device-tree hack (Wi-Fi and NVMe, also after resume).
-- v23.2's camera stack (far too dark): revision 6 carries turbineBMW's instead (0053–0064 in the current
-  numbering), revision 7 the privacy LED (0065).
+- v23.2's camera stack (far too dark): revision 6 carries turbineBMW's instead (0052–0063 in the current
+  numbering), revision 7 the privacy LED (0064).
 - The spi-hid series (the MSHW0485 driver frames HID-over-SPI itself) and the uncalled
   `qcom_geni_spi_biosref_xfer()` helper.
 - Debug output (DP, QMP combo, drm_dp_helper, UCSI), the DPU underflow colour, DP audio (Denali's sound card has no

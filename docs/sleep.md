@@ -7,7 +7,7 @@ in `docs/sensors.md` (Known issues).
 ## Sleep state and wake sources
 
 - The kernel sleeps in `deep` (`/sys/power/mem_sleep`: `s2idle [deep]`): the non-boot CPUs go offline, then PSCI
-  SYSTEM_SUSPEND. CPU idle has only `WFI` and `cpu-sleep-0`: patch 0050 empties the Denali cluster domains'
+  SYSTEM_SUSPEND. CPU idle has only `WFI` and `cpu-sleep-0`: patch 0049 empties the Denali cluster domains'
   `domain-idle-states` for s2idle resume reliability.
 - Wake-armed (`power/wakeup` enabled): the power key (`pmic@0:pon@1300:pwrkey`); `gpio-keys`, with the lid on
   TLMM GPIO 2 (`wakeup-event-action = EV_ACT_DEASSERTED`: opening wakes, closing does not) and the volume keys on
@@ -16,14 +16,21 @@ in `docs/sensors.md` (Known issues).
 - The TLMM's GPIO wake interrupts stay on its summary interrupt, not on the PDC: 7.3 routes them through the PDC
   again (it reverted the X1E80100 bypass of 7.2 with its PDC rework), and on 7.3.3 revision 1 a suspend started
   with the lid open ended after 2 s, woken by the lid's interrupt (2026-11-08, twice); with the lid closed it
-  held 82 s and opening the lid woke it. Patch 0089 of 7.3.3 revision 2 restores the bypass
-  (`docs/kernel-patches.md`): the suspend with the cover open held 68 s (2026-11-09). Open since then: opening the
-  cover no longer wakes revision 2 (the power key does), where 7.2 with the same bypass woke on it. 7.3's PDC
-  driver writes the PDC into pass-through mode at probe when the firmware accepts the SCM write (`qcom-pdc.c`),
-  and in that mode a GPIO edge during the sleep reaches nothing unless its PDC port is armed, which the bypass
-  prevents; whether this firmware accepts the write is not logged. Since 7.3.3 every suspend logs
-  `qcom-pcie 1c08000.pcie: Timeout waiting for L2 entry! LTSSM: 0x11` for the Wi-Fi link; the suspend goes on and
-  Wi-Fi is back after the wake.
+  held 82 s and opening the lid woke it. Patch 0087 of 7.3.3 revision 2 restores the bypass
+  (`docs/kernel-patches.md`): the suspend with the cover open held 68 s (2026-11-09). Since 7.3.3 every suspend
+  logs `qcom-pcie 1c08000.pcie: Timeout waiting for L2 entry! LTSSM: 0x11` for the Wi-Fi link; the suspend goes
+  on and Wi-Fi is back after the wake.
+- The cover's wake under the bypass: on revision 2 opening the cover did not wake the tablet and the power key
+  did (2026-11-09), where 7.2 with the same bypass woke on it; revision 3's two deep sleeps with the cover
+  closed were ended with the power key, while a sleep of that day that had fallen back to `s2idle` ended when
+  the cover was opened (2026-11-12). With support 3.11 the cover wakes a deep sleep again: seen by the owner on
+  7.3.3 revision 5 (2026-11-17) and recorded on 7.3.5 revision 1 (2026-11-19), where a sleep entered by closing
+  the cover ended 24 s later on opening it, `pm_wakeup_irq` naming `gpio_keys` and the journal no key press.
+- What brought the wake back is not shown. The kernel's PDC and pin-controller code is the same from revision 2
+  to 7.3.5 revision 1, and `msm_gpio_irq_set_wake()` arms the summary interrupt for the cover's line, a wake
+  its comment limits to a powered TLMM. Support 3.11 holds the LPASS pin controller awake and with it two LPASS
+  clock votes through a sleep, as the 7.2 kernels did (`docs/hardware.md`, Audio); a sleep with that rule
+  switched off has not been tried.
 - Any ADSP message ends a deep sleep: IPCC's summary interrupt is `IRQF_NO_SUSPEND` and its child chip lacks
   `IRQCHIP_MASK_ON_SUSPEND`, `glink-smem` is `IRQF_NO_SUSPEND`, and PSCI's suspend has no `suspend_again`. Open
   sensor streams and the battery manager's notices wake the tablet this way.
@@ -65,7 +72,7 @@ in `docs/sensors.md` (Known issues).
   stays up (ad9b9b6e36c9); tagging that vote active-only (`icc_set_tag()`) compiled but was not tested.
 - Revision 4's night: a wake by an ADSP notice, then a suspend 26 s later that `mhi-pci-generic` refused
   (`failed to suspend device: -16`; the MHI core refuses while ModemManager probes the restarted modem), so systemd
-  fell back to `s2idle` for 3 h 23 min: 1.40 W. Revision 5 (patch 0073) powers a busy modem down for the suspend
+  fell back to `s2idle` for 3 h 23 min: 1.40 W. Revision 5 (patch 0071) powers a busy modem down for the suspend
   instead (`device busy, powering it down for system suspend`); every sleep stays deep and GPS answers afterwards.
 - The Surface Aggregator's hub can refuse a suspend as well: on 2026-11-12 (7.3.3 revision 3) a suspend started
   20 s after a wake waited 9 s for the EC's answer to its display-off notice (`ssam_serial_hub_pm_prepare`
@@ -157,7 +164,7 @@ The kernel's 2.58 s, as offsets from `Enabling non-boot CPUs`:
 - 0.52 s: the early phase, the Wi-Fi: `ath12k_pci_pm_resume_early()` waits in `mhi_sync_power_up()` for the
   firmware that every sleep powers down (upstream's design: QRTR's resume right after it needs MHI's mission
   mode).
-- 0.84 s: the resume phase, the touch controller: `g6ts_resume()` (patch 0044) ran the 500 and 300 ms delays of
+- 0.84 s: the resume phase, the touch controller: `g6ts_resume()` (patch 0043) ran the 500 and 300 ms delays of
   `g6ts_power_on()` inside the PM callback and scheduled the recovery work, which 100 ms later powered the
   controller off and on again on its hardware path, so the callback's power-on was thrown away (`touch
   controller initialized` 1.02 s after the resume phase). In parallel the Wi-Fi's `ath12k_core_resume()` waits
@@ -176,9 +183,9 @@ GNSS hook, `sp11-sensors-resume.service` and ModemManager's state sync are off t
 Changes built on 2026-11-02 (7.2.14 revision 2 and `sp11-iptsd` 3.1.0-4; the device round of the same evening
 passed, `docs/verified.md`):
 
-- Patch 0084: `g6ts_resume()` no longer powers the controller on; the recovery work does, once. 0.80 s less in
+- Patch 0082: `g6ts_resume()` no longer powers the controller on; the recovery work does, once. 0.80 s less in
   the resume phase, the hidraw node back about 0.8 s earlier.
-- Patch 0085: `device_enable_async_suspend()` in `qcom_pcie_probe()`: the three controllers suspend and resume
+- Patch 0083: `device_enable_async_suspend()` in `qcom_pcie_probe()`: the three controllers suspend and resume
   side by side; the PM core still orders each after its parent and suppliers and its root port and endpoints
   after it. About 0.65 s less in the noirq phase. The suspend side runs the same code to the same end state (the
   links down, the votes released), which the round checks through `ddr`'s count.
@@ -236,3 +243,5 @@ remove only the firmware's part, at 1.40 W a night (above).
   Surface Aggregator's hub and slept in `s2idle`.
 - 2026-11-13: 7.3.3 revision 4's 8.9 hours asleep at 0.28 W with HDR on, one wake 35 minutes in.
 - 2026-11-16: revision 4's 11.8 hours asleep at 0.26 W with support 3.11 holding the two LPASS clock votes.
+- 2026-11-19: 7.3.5 revision 1 with support 3.11: a deep sleep entered by closing the cover ended on opening
+  it, woken by `gpio_keys`.

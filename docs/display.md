@@ -29,7 +29,7 @@ probe. The kernel commits are in `docs/kernel-patches.md` (7.3.3 revisions 3 and
   blocks). X1E80100 has six mixers, four of them with a DSPP; the panel takes two mixers, as every mode wider
   than 1080 pixels does.
 - Up to 7.3.3 revision 3 a CRTC got its DSPPs only in a mode set that already carried a gamma table or a CTM,
-  and patch 0017 forced a full mode set whenever either came or went.
+  and patch 0016 forced a full mode set whenever either came or went.
 - Two programs set the table in turn. Plymouth sets a linear one once, with its first picture. mutter's first
   commit carries none, because its own waits for the colour device, and colord starts on demand half a second
   after the login screen's gnome-shell; its table, an identity ramp of 1024 entries without a CTM, follows in a
@@ -39,7 +39,7 @@ probe. The kernel commits are in `docs/kernel-patches.md` (7.3.3 revisions 3 and
   for 0.18 s; the DSPPs reserved again and the backlight off for 1065 ms. From the first black to the steady
   login screen 2.3 s; no mode set at the login.
 - From revision 4 every mode set reserves the DSPPs of the CRTC's mixers while mixers with a free DSPP are left
-  (0114), and only a CRTC without them needs a mode set for a gamma table or a CTM (0113). Recorded the same
+  (0112), and only a CRTC without them needs a mode set for a gamma table or a CTM (0111). Recorded the same
   day: the DSPPs reserved from Plymouth's picture on, no mode set at the login screen's start, at the login or
   while Night Light came and went; no flashing picture at boot or logout (owner).
 - What stays a mode set, with the backlight off for about 1.06 s: a switch between SDR and HDR and a login into
@@ -63,7 +63,7 @@ agree on both halves (`src/backends/native/meta-output-kms.c`, `src/backends/met
 | EOTF PQ | connector property `HDR_OUTPUT_METADATA` | HDR static metadata with type 1 and `pq` |
 
 - The kernel: up to 7.3.3 revision 2 the msm driver attaches neither property and sends a VSC packet only for
-  YUV 4:2:0. Revision 3 carries the DisplayPort HDR series (0090–0111): `max bpc`, `Colorspace` and
+  YUV 4:2:0. Revision 3 carries the DisplayPort HDR series (0088–0109): `max bpc`, `Colorspace` and
   `HDR_OUTPUT_METADATA` on eDP-1, DP-1 and DP-2, the BT.2020 VSC packet and the HDR static metadata packet, HDR
   only at 10 bits per colour, HDR streams kept out of PSR.
 - The library: Fedora's libdisplay-info 0.3.0 searches CTA-861 extension blocks only and reads just the header
@@ -96,8 +96,8 @@ agree on both halves (`src/backends/native/meta-output-kms.c`, `src/backends/met
   refreshed); 0.4.0 reads the panel's data itself and ends the rebuild.
 - The HDR series is not merged (second version of 2026-10-09, changes asked for): the next rebase takes
   upstream's current version instead of these commits.
-- Not exercised on this unit: 0036's link-rate quirk under the series (the 5G SKU's panel reports its rates
-  itself), PSR with HDR (`msm.psr_enabled=1`; 0107 keeps the peripheral flush for a stream outside PSR), HDR on
+- Not exercised on this unit: 0035's link-rate quirk under the series (the 5G SKU's panel reports its rates
+  itself), PSR with HDR (`msm.psr_enabled=1`; 0105 keeps the peripheral flush for a stream outside PSR), HDR on
   an external display.
 - The login screen at full brightness after an HDR session: the session leaves the backlight at 4095, that
   level is restored at the next boot, and the login screen kept it (2026-11-13, revision 4).

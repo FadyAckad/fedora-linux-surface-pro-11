@@ -24,7 +24,7 @@ and the posture probe. The sensor stack itself: `docs/sensors.md`.
   payload (source 0, the type cover; previous and new posture as le32). The postures: 03 laptop (attached), 01
   disconnected, 05 folded back, 04 folded canvas, and 00, outside the driver's enum, for about 3 s while the
   keyboard is being attached (logged once as `unknown device posture for type-cover: 0`, reported as tablet).
-- The fix, patch 0051 of the SP11 patch set, puts `&ssam_node_pos_tablet_switch` (`ssam:01:26:01:00:01`) in place
+- The fix, patch 0050 of the SP11 patch set, puts `&ssam_node_pos_tablet_switch` (`ssam:01:26:01:00:01`) in place
   of the KIP node, not beside it: libinput 1.31 pairs every tablet-mode switch with the internal keyboard and
   touchpad, and a static KIP switch left in tablet state would keep the attached touchpad suspended. Result:
   "Microsoft Surface POS Tablet Mode Switch" reports SW_TABLET_MODE 1 detached or folded back and 0 attached, GNOME

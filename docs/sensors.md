@@ -16,9 +16,13 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
 ## Kernel
 
 - Nothing to change for the sensors themselves; the stack uses `CONFIG_QCOM_FASTRPC=m` with the ADSP `fastrpc`
-  node (`hamoa.dtsi:4372`, `qcom,non-secure-domain`, hence `/dev/fastrpc-adsp`), `FASTRPC_IOCTL_INIT_ATTACH_SNS`,
+  node of `hamoa.dtsi` (`qcom,non-secure-domain`, hence `/dev/fastrpc-adsp`), `FASTRPC_IOCTL_INIT_ATTACH_SNS`,
   `QRTR`/`QRTR_SMD=m` and `qcom_pd_mapper` advertising `msm/adsp/sensor_pd` for x1e80100. Auto-rotation needs the
   tablet-mode switch patch (`docs/tablet-mode.md`).
+- From 7.3.4 the FastRPC driver assigns that node's reserved region, the ADSP's 8 MB remote heap, to the DSP
+  when the channel probes (`qcom_scm_assign_mem()` for the node's two `qcom,vmids`; `9e47ad9c562e`), and a
+  refusal fails the probe, leaving no `/dev/fastrpc-adsp`. It passes on this firmware: 7.3.5 revision 1 has the
+  device and the five sensors' readings (2026-11-19).
 - Installed system only: the live session blacklists the ADSP (`docs/hardware.md`).
 
 ## Stack
@@ -305,3 +309,5 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
 - 2026-10-24: the proxy's five denials at every start traced to gvfs's GIO module; 1.15 loads no GIO module.
 - 2026-11-04: the hexagonrpc fork became the submodule `hexagonrpc`; its gitlink is the pin, step 10 fetches only
   that commit and step 45 archives it (the release string is unchanged).
+- 2026-11-19: 7.3.5 revision 1: FastRPC's assignment of the ADSP's remote heap at its channel's probe, new with
+  7.3.4, passes on the device; the five sensors read as before.

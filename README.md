@@ -17,7 +17,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Component | Version |
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
-| Kernel | Fedora's `kernel-7.3.3-300.fc45`, SP11 revision 5 (`7.3.3-300.sp11.5.fc45.aarch64`) |
+| Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 1 (`7.3.5-300.sp11.1.fc45.aarch64`) |
 | Support RPM (`sp11-surface-support`) | 3.11 |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -32,11 +32,13 @@ the Windows entry and USB-C aside. Kernel 7.3.3 (revisions 1 and 2, 2026-11-08 a
 use again, with the standard checks, the microphone, GPS, mobile data and a night's sleep. Revision 3
 (2026-11-12) confirmed the rows in use once more, with the standard checks and an 8-hour sleep, and added HDR.
 Revision 5 (2026-11-16) passed the standard checks and its round's checks by hand; its second probe of the 5G
-modem's PCIe controller, for a boot where the modem's link is not up at first, has not been called for yet.
+modem's PCIe controller brought the modem up in the one boot whose link was not up at first (2026-11-19). Kernel
+7.3.5 revision 1 (2026-11-19) passed the standard checks and its round's checks by hand, and opening the cover
+wakes the tablet again.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
-| Feature | Fedora 45 Workstation, Fedora's 7.3.3-300 (sp11.5) |
+| Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.1) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Display with GPU acceleration | ✅ |
@@ -72,8 +74,6 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
 
 - GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
   minutes ([`docs/gnss.md`](docs/gnss.md)).
-- Since kernel 7.3.3 revision 2 opening the cover does not wake the tablet; the power key does
-  ([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 - HDR takes two parts: the kernel's DisplayPort HDR commits and a rebuild of Fedora's `libdisplay-info` that
   reads the panel's HDR data. Switching it blanks the screen for about a second. Under GNOME 51.1 a rotation of
   the tablet switches HDR off again, and a Fedora update of `libdisplay-info` takes the switch away until the
@@ -141,8 +141,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45-1.4-SP11-7.3.3-300.sp11.5.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.3-300.sp11.5.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+`Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.1.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.5-300.sp11.1.fc45.aarch64.iso`, with a `.sha256` beside it. Then
 write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
 ## Reporting results

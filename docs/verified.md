@@ -460,11 +460,35 @@ One entry per round; the facts each established live in the topic notes.
 - Confirmed: the standard checks. PCIe 5's link up at the first probe, 1.72 s after the kernel's start; TLMM 151
   an input with a pull-up, reading high; Wi-Fi and mobile data connected before and after a 36 s deep sleep; no
   provider waiting for `sync_state`; the bound drivers those of revision 4; the CDSP answering in a second boot.
-- To 2026-11-17: 12 boots of revision 5, ten after a reboot and two after a power-off of 1.1 and 7.3 hours,
-  each with the link 0.20 s after the reset's release; ten sleeps, none with a link failure.
-- Not seen: a boot whose first probe fails. The second probe acts only there, so it has not run on the device.
+- To 2026-11-19: 24 boots of revision 5 (`sp11-modem-check history`), 23 with the link 0.20 s after the reset's
+  release at the first probe. In the 24th (2026-11-19 15:52, after 2.1 hours off) the first probe failed with
+  `Link failed to come up. LTSSM: PRE_DETECT_QUIET`; the driver logged `WAKE# asserted after 5198 ms` and
+  `Probing again (1 of 3)`, the second probe found the link, the modem was on the bus 8.1 s after the kernel's
+  start and ModemManager's modem there at 31.8 s. No boot without the modem, no link failure after a sleep.
 - In the journal's errors, none new with the revision: the touch controller's invalid header at 10 s with the
   driver's cold recovery 1 s later (once before, 7.2.15 revision 1; `docs/hardware.md`, Pen); the CDSP's
   `sleep_stats` assert during the sensors check (`docs/sensors.md`, Known issues); a core dump of the mail
   client 26 s after the wake (once before, 7.3.3 revision 2).
 - By hand (owner): the round's by-hand checks passed.
+
+## Kernel 7.3.5 revision 1: the rebase onto 7.3.5 (2026-11-19)
+
+- Installed: the kernel RPMs `7.3.5-300.sp11.1.fc45` (Fedora's `kernel-7.3.5-300.fc45`; 7.3.3 revision 5's 116
+  patches less the two that 7.3.4 carries, the audio patch adapted to 7.3.4's fixes) with `dnf install` next to
+  7.3.3 revisions 4 and 5 (dnf removed revision 3), under support 3.11.
+- Confirmed: the standard checks, but for the front camera's light and the crypto node, which the round did not
+  read (both device trees are byte for byte revision 5's). The three PCIe links up at the first probe in both
+  boots: the modem's 1.77 and 1.78 s after the kernel's start, the SSD's 1.78 and 1.77 s, Wi-Fi's 5.0 and 4.8 s.
+  `/dev/fastrpc-adsp` and `/dev/fastrpc-cdsp` present: the assignment of the ADSP's remote heap that 7.3.4's
+  FastRPC makes at the channel's probe passes on this firmware. The audio DSP refused no buffer unmap; a
+  recording from the microphone made and played. Wi-Fi and mobile data connected before and after the sleeps.
+- The cover: a deep sleep entered by closing it ended 24 s later when it was opened; `pm_wakeup_irq` named
+  interrupt 125, `gpio_keys`, and the journal has no power key press. The deep sleep before it, from the Power
+  menu, was ended with the power key (`docs/sleep.md`).
+- In the kernel's warnings and the journal's errors, none new against 7.3.3 revision 5; the bound devices and
+  the loaded modules are revision 5's. Still logged: the QRTR pair `failed to announce new service` and `failed
+  while handling packet from 7:-2` (once in the two wakes, with upstream's `743b5c86276b` in the kernel),
+  `Timeout waiting for L2 entry` at both suspends, the audio probe's `CMD timeout for [1001021]`, the CDSP's
+  `sleep_stats` assert during the sensors check.
+- By hand (owner): the round's by-hand checks passed (both speakers, the microphone's recording, the cameras,
+  touch and pen, the Bluetooth keyboard, the brightness keys, rotation, charging on USB-C).

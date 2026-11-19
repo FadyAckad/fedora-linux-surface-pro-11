@@ -36,7 +36,7 @@ Read the note named below before working on its area.
   inputs from Windows, packaging, runtime design, the compass, known issues. Read before touching steps 45, 46
   and 75, `payload/sensors/` or the hexagonrpc fork (the submodule `hexagonrpc`).
 - `docs/tablet-mode.md`: the tablet-mode switch, the orientation matrix, what GNOME and KDE need for
-  auto-rotation, the posture probe. Read before touching patch 0057 or the udev rule's matrix.
+  auto-rotation, the posture probe. Read before touching patch 0050 or the udev rule's matrix.
 - `docs/modem.md`: the 5G SKU's modem: the wiring, the 5G device tree by SKU, the PCIe link at boot, the QMI port
   that blocked suspend, mobile data, the modem across a sleep. Read before touching the 5G tree,
   `77-sp11-modem.rules` or `mhi-pci-generic`.

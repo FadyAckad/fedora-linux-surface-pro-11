@@ -29,13 +29,13 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
 
 ## Device tree
 
-- `x1e80100-microsoft-denali-oled-5g.dts` (patch 0072, 7.2.11 revision 3): the OLED tree plus the CRD's PCIe 5
+- `x1e80100-microsoft-denali-oled-5g.dts` (patch 0070, 7.2.11 revision 3): the OLED tree plus the CRD's PCIe 5
   block: `vreg_wwan` on TLMM 221 (on at boot), `pcie5` and `pcie5_phy` with `vreg_l3i_0p8` and `vreg_l3e_1p2`,
   reset on TLMM 149, CLKREQ# on 150; no wake pin up to 7.3.3 revision 4 (The link at boot); the OLED tree's
   compatibles, model "(OLED, 5G)".
 - Up to revision 8 `vreg_wwan` (`SDX_VPH_PWR`) is also PCIe 5's `vddpe-3v3` supply, and the qcom driver switches
   its supplies off when a sleep takes the link down (host deinit): from 7.2.11 revision 4 to 8 the modem is off in
-  a deep sleep. From revision 9 (patch 0082) the supply is `regulator-always-on` and no longer PCIe 5's, so the
+  a deep sleep. From revision 9 (patch 0080) the supply is `regulator-always-on` and no longer PCIe 5's, so the
   modem keeps its power through the sleep (Across a sleep).
 - The build gives the tree to the 5G SKU only (`docs/hardware.md`): `SP11_DTB` follows the SKU in `load_hardware`,
   and step 20 checks that PCIe 5 is enabled in the 5G tree and disabled in the OLED tree. A `build/hardware.env`
@@ -62,10 +62,17 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
   before the link trains (`docs/hardware.md`, Wi-Fi).
 - In a boot with the modem the link is up 0.19 to 0.21 s after the reset's release, at the first 90 ms step: six
   boots of 7.2.15 on 2026-11-06, the 26 boots of 7.3.3 revisions 1 to 3 in the journal from 2026-11-08, 50 of
-  revision 4's 58 up to 11-16 and revision 5's first 12, to 11-17.
+  revision 4's 58 up to 11-16, 23 of revision 5's 24 to 11-19 and the first two of 7.3.5 revision 1.
 - In the other eight boots of revision 4 (2026-11-13 to 11-16; five after a reboot, three after a power-off of
   1.8 to 5.7 hours) the probe ended `Link failed to come up. LTSSM: PRE_DETECT_QUIET` and failed with -110.
   Revision 4 adds three patches of the display driver; the split against the earlier revisions is not explained.
+- The PHY's driver differs between the series (`phy-qcom-qmp-pcie.c`): 7.2 resets a PCIe PHY at every start,
+  7.3 leaves out the reset at the first probe when the firmware left the PHY started and ready
+  (`910b828b22b7`). The controller's probe still resets the controller and the endpoint, so the link is down
+  while the PHY keeps the firmware's state; on a Dell XPS 13 9345 (X1E80100) the NVMe link then never trained
+  (`Device found, but not active`). Upstream's revert (`9a07dfa7f6fe`) is queued and in Fedora's patch from
+  7.3.5, so 7.3.5 revision 1 resets the PHY as 7.2 did. Whether this unit's failed probes come from the left-out
+  reset is not shown: the six recorded boots of 7.2.15 had the link, and the boots of 7.3.5 will tell.
 - Such a boot has no WWAN port, and the clock controller and four interconnect providers keep waiting for
   `sync_state`, so their boot votes stay. PCIe 4's link came up in the boot of 2026-11-13 08:15.
 - The pins, from debugfs: with the modem up the reset (TLMM 149) is high, CLKREQ# (150) high and TLMM 151, the
@@ -85,13 +92,16 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
 - A check kit's boot service ran that sequence from user space: it waited up to 20 s for TLMM 151 to read low,
   then wrote to `drivers_probe`. In the 25 boots after its installation (2026-11-15 to 11-16) the first probe
   failed twice, and the modem came up at the service's first probe both times (`docs/verified.md`).
-- From 7.3.3 revision 5 the controller's driver does it itself (0115). When the host initialization times out
+- From 7.3.3 revision 5 the controller's driver does it itself (0113). When the host initialization times out
   and the controller's node names the WAKE# line, a work item waits up to 20 s for the line and has the bus
   probe the controller again, up to three times, 5 s apart. Its lines in the kernel's log: `The endpoint was
   not ready, probing again once it asserts WAKE#`, `WAKE# asserted after <n> ms`, `Probing again (1 of 3)`.
+- It ran on the device on 2026-11-19, in revision 5's 24th boot (after 2.1 hours off): the first probe failed
+  in `PRE_DETECT_QUIET`, the line was asserted 5.2 s into the work's wait, the second probe found the link, and
+  the modem was on the bus 8.1 s after the kernel's start, ModemManager's modem at 31.8 s against about 15 s.
 - The wait is not in the probe: the driver probes asynchronously, and `do_init_module()` waits for every
   asynchronous probe, so each module load of that time would wait with it.
-- The 5G tree names the line in PCIe 5's controller node (0116: `wake-gpios` on TLMM 151, with its pin state)
+- The 5G tree names the line in PCIe 5's controller node (0114: `wake-gpios` on TLMM 151, with its pin state)
   and not, as the CRD's, in the root port's: there the PCI core arms it as the port's wake-up interrupt
   (`pci_configure_of_wake_gpio()`), and whether the modem should wake the tablet is open.
 - In `/sys/kernel/debug/gpio` nine PMIC chips come before the pin controller, and one read returns only the
@@ -139,7 +149,7 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
   `mhi_swip0` on `IP_SW0`): the connection came up with the carrier's addresses but carried nothing. The modem
   forwarded none of the packets it took (ModemManager's counters: 48 bytes per connection), and the NTBs it sent
   ended as IPv4 header errors (`IpInHdrErrors`; an NTB starts with `NCMH`).
-- From revision 8 (patch 0081) the modem's IDs get the generic channel set with the data channels named
+- From revision 8 (patch 0079) the modem's IDs get the generic channel set with the data channels named
   `IP_HW0_MBIM`, for `mhi_wwan_mbim`, without `IP_SW0`: one network device, `wwan0`. ModemManager 1.24.2 lists
   `wwan0 (net), wwan0mbim0 (mbim)` and connects session 0 on `wwan0`. Its driver check for MBIM data ports knows
   only `cdc_mbim` and `mhi_net`, but no connect path calls it; upstream (c3ef78cc, 1.25.95-dev) accepts
@@ -166,13 +176,13 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
   panel reads the switch from the default APN profile's `autoconnect` and writes it back on every change
   (gnome-control-center, `panels/wwan/cc-wwan-data.c`). A SIM with a PIN asks for it again.
 - Revision 5 powers a busy modem down for a suspend started within 15 s of a wake instead of aborting the suspend
-  (patch 0073, `docs/sleep.md`).
+  (patch 0071, `docs/sleep.md`).
 - Kept powered through the sleep (a test tree, 2026-10-29: `vreg_wwan` with `regulator-always-on` and no longer
   PCIe 5's `vddpe-3v3-supply`; the link still goes down) the modem resumed without a reset or new ports:
   ModemManager's probe answered after 3.4 s, registration after 15.7 s (the 10 s wait included), mobile data
   after 16.7 s. In a 10-minute sleep `ddr` counted 569 of 608 s (579 of 619 s with the modem off), `cxsd` 0 in
   both; the battery's reading moved by the same 0.511 Wh in both runs, too coarse for the modem's own draw.
-  7.2.11 revision 9 (patch 0082) makes this the 5G tree's wiring.
+  7.2.11 revision 9 (patch 0080) makes this the 5G tree's wiring.
 - ModemManager's quick suspend/resume (`--test-quick-suspend-resume`, a systemd drop-in on its unit) keeps the
   modem object across a sleep: terse mode at the suspend, a state sync at the resume instead of the re-probe and
   its 10 s wait. With revision 9 (2026-10-31): the sync done 1.4 s after the wake, NetworkManager's profile
@@ -190,9 +200,10 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
 - ModemManager's 10 s wait for the location indication at every start of the modem (a boot; a rebuilt
   ModemManager would be needed).
 - eSIM profiles from Linux (lpac, not packaged in Fedora).
-- The link at boot: why the modem is not ready at the first probe, and why only in revision 4's boots. A boot
-  with the controller bound and no modem has not occurred since the second probe waits for TLMM 151; a power
-  cycle of the modem's supply has not been tried for one.
+- The link at boot: why the modem is not ready at the first probe in some boots, none of them before
+  revision 4; the PHY reset that 7.3 left out and Fedora's 7.3.5 restores is the one difference from 7.2 found
+  so far (The link at boot). A boot with the controller bound and no modem has not occurred since the second
+  probe waits for TLMM 151; a power cycle of the modem's supply has not been tried for one.
 
 ## History
 
@@ -216,3 +227,7 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
 - 2026-11-16: the check kit's service, waiting for TLMM 151 before its probe, in 25 boots: the first probe
   failed in two and the modem came up in both. 7.3.3 revision 5 built: the controller's driver probes again
   itself once the modem asserts the line.
+- 2026-11-19: revision 5's second probe ran for the first time, in a boot whose first probe had failed, and
+  brought the modem up 8.1 s after the kernel's start. 7.3.5 revision 1 installed, on Fedora's 7.3.5, whose patch
+  restores the PCIe PHY's reset at the first probe that 7.3 had left out; its first two boots had the link at
+  the first probe.
