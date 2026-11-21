@@ -110,9 +110,11 @@ Display (`LGD`) panel takes `qcom/x1p64100-microsoft-denali.dtb`. On the unit of
 [issue #2](https://github.com/FadyAckad/fedora-linux-surface-pro-11/issues/2) (2026-11-20), Fedora boots with
 display and backlight, speakers, sensors, Wi-Fi/Bluetooth and battery; with the 8380 GPU zap shader Mesa uses the
 Adreno (`glxinfo -B`: `freedreno`, `Accelerated: yes`) and gnome-shell idles at a few percent CPU instead of driving
-2880x1920 with llvmpipe. The other rows of the table above have not been checked on the LCD yet; report results with
-`sp11-diag`. The public tree's pinned kernel already requests the 8380 shader; the branch adds the LCD detection
-and the firmware fallback the build needs.
+2880x1920 with llvmpipe. The LCD was checked on 2026-11-20: HDR, tablet mode, auto-rotation, auto-brightness,
+microphone, front/rear cameras, suspend/resume and USB-C data work. The one LCD-specific gap is hardware video
+decode, which the LCD device tree does not enable ([`docs/verified.md`](docs/verified.md)). The public tree's
+pinned kernel already requests the 8380 shader; the branch adds the LCD detection and the firmware fallback the
+build needs.
 
 ## Status and scope
 
