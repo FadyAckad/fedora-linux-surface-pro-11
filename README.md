@@ -124,11 +124,24 @@ Display (`LGD`) panel takes `qcom/x1p64100-microsoft-denali.dtb`. On the unit of
 [issue #2](https://github.com/FadyAckad/fedora-linux-surface-pro-11/issues/2) (2026-11-20), Fedora boots with
 display and backlight, speakers, sensors, Wi-Fi/Bluetooth and battery; with the 8380 GPU zap shader Mesa uses the
 Adreno (`glxinfo -B`: `freedreno`, `Accelerated: yes`) and gnome-shell idles at a few percent CPU instead of driving
-2880x1920 with llvmpipe. The LCD was checked on 2026-11-20: HDR, tablet mode, auto-rotation, auto-brightness,
-microphone, front/rear cameras, suspend/resume and USB-C data work. The one LCD-specific gap is hardware video
-decode, which the LCD device tree does not enable ([`docs/verified.md`](docs/verified.md)). The public tree's
-pinned kernel already requests the 8380 shader; the branch adds the LCD detection and the firmware fallback the
-build needs.
+2880x1920 with llvmpipe. Checked on 2026-11-20 with the shader repair:
+
+| Feature | X1P64100 LCD | X1E80100 OLED |
+|---|:-:|:-:|
+| Boot, display + GPU, backlight, HDR | ✅ | ✅ |
+| Touch/pen, keyboard/touchpad, tablet mode, rotation | ✅ | ✅ |
+| Speakers, microphone, cameras (front/rear/IR stream) | ✅ | ✅ |
+| Sensors, auto-brightness | ✅ | ✅ |
+| Wi-Fi, Bluetooth, battery, suspend, power profiles | ✅ | ✅ |
+| USB-C charging and data | ✅ | ✅ |
+| Hardware video decode | ❌ | ✅ |
+| IR face login (Windows Hello), NPU | ❌ | ❌ |
+| 5G / GPS | N/A (no modem) | ✅ on the 5G SKU |
+
+The one LCD-specific gap is hardware video decode, which the LCD device tree does not enable
+([`docs/verified.md`](docs/verified.md)). IR face login and NPU are Linux-wide gaps, the same as on the X1E. The
+public tree's pinned kernel already requests the 8380 shader; the branch adds the LCD detection and the firmware
+fallback the build needs.
 
 ## Status and scope
 
