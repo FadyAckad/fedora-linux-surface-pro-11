@@ -1,9 +1,10 @@
-# Fedora Live ISO for Surface Pro 11 (Snapdragon X Elite, OLED, incl. the 5G SKU)
+# Fedora Live ISO for Surface Pro 11 (all known SKUs, OLED and LCD)
 
 ![Screenshot showing the About section](images/Screenshot-kde.png)
 
-This repository builds a Fedora 45 installer for the Microsoft Surface Pro, 11th Edition with the OLED panel, the
-Snapdragon X Elite tablet, including its 5G model. It is for owners of that tablet who want Fedora next to Windows.
+This repository builds a Fedora 45 installer for the Microsoft Surface Pro, 11th Edition. It covers every known SKU:
+the X1E80100 OLED (including the 5G model) and the X1P64100 LCD. It is for owners of that tablet who want Fedora
+next to Windows.
 There is no ISO to download: the image contains firmware and sensor files copied from your own Windows
 installation, so you build it yourself, on the Surface, in WSL; the kernel alone takes about an hour.
 
@@ -18,9 +19,9 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
 | Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 1 (`7.3.5-300.sp11.1.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.11 |
+| Support RPM (`sp11-surface-support`) | 3.12 |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
-| Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
+| Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.16 |
 | HDR library (`libdisplay-info`, Fedora's with upstream's DisplayID 2.0 support) | 0.3.0-2.sp11.1 |
 
 ## What works
@@ -101,17 +102,36 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
   the tablet did not stay asleep; the sensors RPMs fix both since libssc 0.4.4-3 (2026-10-07) and iio-sensor-proxy
   3.9-3.sp11.2 (2026-10-08) ([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
 
+### LCD variant (X1P64100)
+
+The 13-inch LCD model uses the smaller X1P64100 and shares the non-5G OLED SKU string
+(`Surface_Pro_11th_Edition_2076`), so the build tells them apart by the SoC and the panel: X1P64100 with an LG
+Display (`LGD`) panel takes `qcom/x1p64100-microsoft-denali.dtb`. On the unit of
+[issue #2](https://github.com/FadyAckad/fedora-linux-surface-pro-11/issues/2) (2026-11-20), Fedora boots with
+display and backlight, speakers, sensors, Wi-Fi/Bluetooth and battery; with the 8380 GPU zap shader Mesa uses the
+Adreno (`glxinfo -B`: `freedreno`, `Accelerated: yes`) and gnome-shell idles at a few percent CPU instead of driving
+2880x1920 with llvmpipe. The other rows of the table above have not been checked on the LCD yet; report results with
+`sp11-diag`. The public tree's pinned kernel already requests the 8380 shader; the branch adds the LCD detection
+and the firmware fallback the build needs.
+
 ## Status and scope
 
 - Unofficial community project, not affiliated with Microsoft, Qualcomm, or Fedora. No warranty.
-- Tested only on the 5G OLED SKU. The hardware checks also accept the non-5G OLED SKUs
-  (`Surface_Pro_11th_Edition_2076`, `Surface_Pro_11th_Edition_For_Business_2085`), which share the firmware; the
-  build gives them the OLED device tree without the modem and leaves the modem's files out of their support RPM.
-  No build from one has been reported. The X1P64100 LCD variant uses a different device tree and is rejected.
+- Tested on the 5G OLED SKU and, from 2026-11-20, on an X1P64100 LCD unit (issue #2). The hardware checks accept
+  every known Surface Pro 11 SKU: `Surface_Pro_11th_Edition_2076` (non-5G OLED and LCD),
+  `Surface_Pro_11th_Edition_For_Business_2085` (non-5G OLED) and
+  `Surface_Pro_with_5G_11th_Edition_2077` (5G OLED). The non-5G OLED and the LCD share the `2076` string, so step
+  05 picks the tree by SoC and panel vendor (`X1E80100`+`SDC` for OLED, `X1P64100`+`LGD` for LCD); only the 5G
+  SKU takes the modem tree. No build from a non-5G OLED SKU has been reported.
 - Secure Boot must be disabled: the kernel is a local build of Fedora's kernel package and is not signed.
 - Windows must stay on the device: the build reads the hardware identity, the built-in radio's Bluetooth address,
-  the ADSP/CDSP/GPU/video firmware and the sensor configuration and registry from it. Without the firmware an
-  installed system has no audio, battery reporting, GPU acceleration or hardware video decoding.
+  the ADSP/CDSP firmware (and, on the OLED, the video firmware) and the sensor configuration and registry from it.
+  Without them an installed system has no audio, battery reporting or hardware video decoding. The GPU shader is
+  the exception: the OLED takes it from Windows, the LCD from Fedora's `qcom-firmware`.
+- The LCD device tree requests the 8380 GPU zap shader, but an LCD unit's Windows DriverStore ships
+  `qcdxkmsucpurwa.mbn` instead, which the secure world rejects with `-EINVAL`. An LCD build therefore takes
+  `qcdxkmsuc8380.mbn` from Fedora's `qcom-firmware` (Dell XPS 13 9345 build) when Windows has no 8380 copy; the
+  hash is pinned in `sp11.conf`.
 - The support RPM and the ISO contain proprietary Qualcomm firmware copied from your own Windows installation. Do
   not redistribute them; point other people to this repository instead.
 
@@ -147,10 +167,11 @@ write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/instal
 
 ## Reporting results
 
-The hardware checks accept the non-5G OLED SKUs, but no build from one has been reported. If you build or install
-on another unit, open an issue with the SKU, the ISO's name, which rows of the table worked, and for anything that
-did not, the output of `sudo /usr/libexec/sp11/sp11-diag`. That file names your Bluetooth controller and devices by
-address; remove them before posting if you prefer.
+The hardware checks accept every known Surface Pro 11 SKU, but no build from a non-5G OLED SKU has been reported
+and the LCD's feature table is not complete yet. If you build or install on another unit, open an issue with the
+SKU, the SoC, the panel vendor, the ISO's name, which rows of the table worked, and for anything that did not, the
+output of `sudo /usr/libexec/sp11/sp11-diag`. That file names your Bluetooth controller and devices by address;
+remove them before posting if you prefer.
 
 ## Documentation
 
