@@ -218,7 +218,8 @@ fi
 ## 5. RPM
 log "building sp11-sensors RPM"
 RPM=$(build_rpm "$SPEC_DIR/sp11-sensors.spec.in" sp11-sensors "$SDIR" \
-  STAGE="$STAGE" VERSION="$SENSORS_VERSION" SKU="$SP11_SKU" SNSCFG="$(basename "$SNSCFG")" PAYLOAD_DIR="$SENSORS_PAYLOAD_DIR" \
+  STAGE="$STAGE" VERSION="$SENSORS_VERSION" SKU="$SP11_SKU" VARIANT="$(variant_label)" \
+  SNSCFG="$(basename "$SNSCFG")" PAYLOAD_DIR="$SENSORS_PAYLOAD_DIR" \
   INPUTS="$INPUTS")
 rpm -qpl "$RPM" | grep -x "$SENSORS_PAYLOAD_DIR/sensors/registry/sns_reg_config" >/dev/null || die "sp11-sensors RPM lacks the registry"
 rpm -qpl "$RPM" | grep -x "$SENSORS_PAYLOAD_DIR/sensors/registry-parent/sns_reg_version" >/dev/null || die "sp11-sensors RPM lacks sns_reg_version beside the registry"

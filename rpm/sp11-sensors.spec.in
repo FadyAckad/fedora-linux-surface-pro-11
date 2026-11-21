@@ -33,7 +33,7 @@ Requires:       dracut
 Requires:       sp11-surface-support >= 2.0
 
 %description
-Device-bound sensor support for Microsoft Surface Pro 11 (X1E80100, SKU @SKU@).
+Device-bound sensor support for Microsoft Surface Pro 11 (@VARIANT@, SKU @SKU@).
 The accelerometer, gyroscope, magnetometer and light sensor hang off the ADSP's
 Snapdragon Sensor Core, so this package carries what that framework reads through
 hexagonrpcd: the sensor configuration from the Windows driver package (@SNSCFG@),
@@ -111,7 +111,11 @@ fi
 /etc/dnf/libdnf5.conf.d/91-sp11-sensors.conf
 
 %changelog
-* Sat Oct 24 2026 SP11 build <sp11@localhost> - @VERSION@-1
+* Fri Nov 20 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- the payload path follows the variant's device-tree model: /usr/share/qcom/x1e80100/Microsoft/denali-lcd on the
+  X1P64100 LCD, denali-oled on the X1E80100 OLED
+
+* Sat Oct 24 2026 SP11 build <sp11@localhost> - 1.15-1
 - iio-sensor-proxy loads no GIO module (GIO_MODULE_DIR in a drop-in): gvfs's client module, loaded when libqmi
   builds a GFile, read /etc/passwd and tried /root/.cache at every start, five SELinux denials
 

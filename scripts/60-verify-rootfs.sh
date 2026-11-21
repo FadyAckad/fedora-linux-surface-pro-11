@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # Optional step: verify the remastered live root left behind by scripts/50-build-iso.sh, and simulate the
 # installed-system kernel-install hand-off in a chroot, with the inputs Anaconda leaves at that point, to prove the
-# BLS entry receives the Denali DTB and the SP11 kernel arguments.
+# BLS entry receives the unit's Denali DTB and the SP11 kernel arguments.
 . "$(dirname "$0")/lib.sh"
 require_cmd dtc lsinitrd
 load_hardware
