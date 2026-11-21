@@ -37,9 +37,10 @@ holds no profile); mobile data on 2026-10-29 with a nano-SIM.
   its supplies off when a sleep takes the link down (host deinit): from 7.2.11 revision 4 to 8 the modem is off in
   a deep sleep. From revision 9 (patch 0080) the supply is `regulator-always-on` and no longer PCIe 5's, so the
   modem keeps its power through the sleep (Across a sleep).
-- The build gives the tree to the 5G SKU only (`docs/hardware.md`): `SP11_DTB` follows the SKU in `load_hardware`,
-  and step 20 checks that PCIe 5 is enabled in the 5G tree and disabled in the OLED tree. A `build/hardware.env`
-  from before revision 3 records the OLED tree; `load_hardware` replaces it and says so.
+- The build gives the tree to the 5G SKU only (`docs/hardware.md`): `SP11_DTB` follows the SoC and panel in
+  `load_hardware`, and the 5G SKU check adds the modem; step 20 checks that PCIe 5 is enabled in the 5G tree and
+  disabled in the OLED and LCD trees. A `build/hardware.env` from before revision 3 records the OLED tree;
+  `load_hardware` replaces it and says so.
 - With the modem up, no RPMh power-domain or interconnect provider waits for `sync_state`.
 
 ## The link at boot

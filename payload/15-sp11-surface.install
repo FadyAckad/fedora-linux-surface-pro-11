@@ -2,7 +2,7 @@
 # kernel-install plugin (runs before Fedora's 20-grub.install).
 # Enforces the Surface Pro 11 boot policy every time a kernel is added, including during Anaconda's
 # installation to internal storage, which rewrites /etc/default/grub:
-#   - GRUB_DEVICETREE: the BLS entry gets "devicetree /dtb-<version>/<Denali OLED dtb>"
+#   - GRUB_DEVICETREE: the BLS entry gets "devicetree /dtb-<version>/<Denali dtb>"
 #   - low GRUB resolution via gfxterm
 #   - installed-system kernel arguments; live-only ADSP blacklist removed
 set -eu

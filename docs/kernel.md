@@ -84,12 +84,14 @@ revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode switch).
 
 ## Checks on the result
 
-Step 20 checks the built packages: every `KERNEL_PKGS` package at the configured uname; `vmlinuz` and the Denali
-OLED DTB in `kernel-core`, with the camera sensors (`sony,imx681`, `ovti,ov13858`, `st,vd55g0`) and the `privacy`
-LED; PCIe 5 enabled in the 5G tree and disabled in the OLED tree; a driver for every enabled user of the RPMh power
-domains and the interconnect (`scripts/sync-state-drivers.py`); the configuration equal to the pinned stock
-`kernel-core` (`KERNEL_STOCK_CORE_RPM`; the source RPM's `kernel-aarch64-fedora.config` is only Kconfig's input)
-plus the `kernel-local` lines; the patch set's modules and parameters.
+Step 20 checks the built packages: every `KERNEL_PKGS` package at the configured uname; `vmlinuz` and the three
+Denali DTBs (OLED, 5G and LCD) in `kernel-core`, each with the camera sensors (`sony,imx681`, `ovti,ov13858`,
+`st,vd55g0`) and the `privacy` LED; PCIe 5 enabled in the 5G tree and disabled in the OLED and LCD trees; the
+8380 GPU zap shader requested by all three (the LCD's purwa shader is rejected with `-EINVAL`); a driver for every
+enabled user of the RPMh power domains and the interconnect (`scripts/sync-state-drivers.py`); the configuration
+equal to the pinned stock `kernel-core` (`KERNEL_STOCK_CORE_RPM`; the source RPM's
+`kernel-aarch64-fedora.config` is only Kconfig's input) plus the `kernel-local` lines; the patch set's modules and
+parameters.
 
 ## Revisions
 

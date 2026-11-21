@@ -492,3 +492,25 @@ One entry per round; the facts each established live in the topic notes.
   `sleep_stats` assert during the sensors check.
 - By hand (owner): the round's by-hand checks passed (both speakers, the microphone's recording, the cameras,
   touch and pen, the Bluetooth keyboard, the brightness keys, rotation, charging on USB-C).
+
+## X1P64100 LCD: the GPU zap shader (2026-11-16 to 11-20)
+
+- Unit: `Microsoft Surface Pro, 11th Edition`, SKU `Surface_Pro_11th_Edition_2076` (the non-5G OLED's string),
+  X1P64100, LG Display `LGD LP129WT342166`, BIOS `175.449.235`; a local development image (kernel
+  `7.3.3-300.sp11.5.fc45`, support 3.11), not a published image.
+- Found (2026-11-16, issue #2): the installed LCD DTB requested `qcdxkmsucpurwa.mbn`; `qcom_scm_pas_init_image()`
+  returned `-EINVAL`, the GPU did not initialize, and Mesa used `llvmpipe` (`glxinfo -B`: `Accelerated: no`).
+  The 8380 shader from Fedora's `qcom-firmware` (Dell XPS 13 9345, sha256 `585f6749…`, 12088 bytes), installed
+  next to the Denali firmware and selected by the boot DTB's `zap-shader/firmware-name`, initialized the Adreno:
+  `freedreno`, `Adreno X1-85`, `Accelerated: yes`; no `zap_shader` or `hw init failed` line in the kernel log;
+  gnome-shell about 2 % CPU on an idle desktop. Other confirmed rows: display and backlight, speakers, sensors,
+  Wi-Fi/Bluetooth, battery.
+- Checked on 2026-11-20 with the shader repair: HDR (Mutter color mode 2, restored), tablet mode
+  (`PanelOrientationManaged` true while the keyboard was folded/detached and false after), auto-rotation
+  (orientation followed the tablet), auto-brightness (light 2–10 lux, backlight 0–5; `ambient-enabled` restored),
+  microphone (peak about -21 dBFS), front, rear and IR camera streams, four deep-sleep cycles, USB-C charging,
+  and USB-C data (a USB 3 NVMe adapter enumerated over UAS as `sda`). The one LCD-specific gap is hardware video
+  decode: the LCD device tree does not enable `&iris` and the support RPM ships no `qcvss8380.mbn`.
+- The build from this branch selects `qcom/x1p64100-microsoft-denali.dtb` by SoC and panel, takes the 8380
+  shader from Fedora's `qcom-firmware` when Windows ships only purwa, and ships no video codec firmware for the
+  LCD.

@@ -134,10 +134,11 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
 
 ### sp11-sensors
 
-- The payload lives under `/usr/share/qcom/x1e80100/Microsoft/denali-oled`, the path the daemon derives from the
-  DT without `-R` (`/usr/share/qcom/<qcom,SOC>/<first word of model>/<device>`): the DriverStore package with its
-  control files converted to LF, the unit's registry of 343 entries, the two parent-directory files and the 6
-  calibration overrides (Inputs from Windows).
+- The payload lives under `/usr/share/qcom/x1e80100/Microsoft/denali-oled` on the OLED and
+  `/usr/share/qcom/x1e80100/Microsoft/denali-lcd` on the LCD, the path the daemon derives from the DT without
+  `-R` (`/usr/share/qcom/<qcom,SOC>/<first word of model>/<device>`): the DriverStore package with its control
+  files converted to LF, the unit's registry of 343 entries, the two parent-directory files and the 6 calibration
+  overrides (Inputs from Windows).
 - The files keep Windows' modification times (`install -p`, `source_date_epoch_from_changelog 0` and
   `clamp_mtime_to_source_date_epoch 0` in the spec; the JSONs 1747743181 to 1747743185, the Surface overrides
   1789827151); step 46 compares two of them.

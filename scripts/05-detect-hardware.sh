@@ -20,25 +20,42 @@ self_test() {
   for s in Surface_Pro_with_5G_11th_Edition_2077 Surface_Pro_11th_Edition_2076 Surface_Pro_11th_Edition_For_Business_2085; do
     [[ $s =~ $SP11_SKU_REGEX ]] || { warn "SP11_SKU_REGEX does not match '$s'"; ok=0; }
   done
-  # Only the 5G SKU gets the device tree with the modem.
-  [ "$(dtb_for_sku Surface_Pro_with_5G_11th_Edition_2077)" = "$SP11_DTB_5G" ] \
-    || { warn "SP11_SKU_5G_REGEX does not match the 5G SKU"; ok=0; }
+  # Only the 5G SKU gets the device tree with the modem. The non-5G OLED and the LCD share the SKU
+  # Surface_Pro_11th_Edition_2076: the SoC and the panel vendor decide between them.
+  [ "$(dtb_for_hardware 'Snapdragon X Elite - X1E80100' SDC Surface_Pro_with_5G_11th_Edition_2077)" = "$SP11_DTB_5G" ] \
+    || { warn "the 5G SKU does not take the 5G tree"; ok=0; }
   for s in Surface_Pro_11th_Edition_2076 Surface_Pro_11th_Edition_For_Business_2085; do
-    [ "$(dtb_for_sku "$s")" = "$SP11_DTB_OLED" ] || { warn "SP11_SKU_5G_REGEX matches '$s'"; ok=0; }
+    [ "$(dtb_for_hardware 'Snapdragon X Elite - X1E80100' SDC "$s")" = "$SP11_DTB_OLED" ] \
+      || { warn "the OLED SKU '$s' does not take the OLED tree"; ok=0; }
   done
+  [ "$(dtb_for_hardware 'Snapdragon X Plus - X1P64100' LGD Surface_Pro_11th_Edition_2076)" = "$SP11_DTB_LCD" ] \
+    || { warn "the X1P64100 LCD does not take the LCD tree"; ok=0; }
+  dtb_for_hardware 'Snapdragon X Plus - X1P64100' SDC Surface_Pro_11th_Edition_2076 >/dev/null 2>&1 \
+    && { warn "X1P64100 with an SDC panel is accepted"; ok=0; }
+  dtb_for_hardware 'Snapdragon X Elite - X1E80100' LGD Surface_Pro_11th_Edition_2076 >/dev/null 2>&1 \
+    && { warn "X1E80100 with an LGD panel is accepted"; ok=0; }
   for s in "Microsoft Corporation-Surface-Microsoft Surface Pro with 5G, 11th Edition" \
            "Microsoft Corporation-Surface-Microsoft Surface Pro, 11th Edition"; do
     printf '%s\n' "$s" | grep -Eq "$UCM_SP11_REGEX" || { warn "UCM_SP11_REGEX does not match '$s'"; ok=0; }
   done
   [ "$ok" = 1 ] || die "regex self-test failed; fix sp11.conf"
-  log "regex self-test passed (5G and non-5G SKUs)"
+  log "regex self-test passed (OLED, LCD and 5G SKUs)"
 }
 
 validate() {
   [[ $SP11_PRODUCT =~ $SP11_PRODUCT_REGEX ]] || die "unsupported product name '$SP11_PRODUCT'"
   [[ $SP11_SKU =~ $SP11_SKU_REGEX ]] || die "unsupported SKU '$SP11_SKU'"
-  [[ $SP11_CPU == *X1E80100* ]] || die "unsupported SoC '$SP11_CPU' (only Snapdragon X Elite X1E80100 is supported)"
-  [ "$SP11_PANEL_VENDOR" = SDC ] || die "panel vendor '$SP11_PANEL_VENDOR' is not Samsung (SDC); only the OLED variant is supported"
+  if [[ $SP11_CPU =~ $SP11_SOC_LCD_REGEX ]]; then
+    [ "$SP11_PANEL_VENDOR" = "$SP11_PANEL_LCD" ] \
+      || die "SoC X1P64100 pairs with the LGD LCD panel, not '$SP11_PANEL_VENDOR'"
+  elif [[ $SP11_CPU =~ $SP11_SOC_OLED_REGEX ]]; then
+    [ "$SP11_PANEL_VENDOR" = "$SP11_PANEL_OLED" ] \
+      || die "SoC X1E80100 pairs with the SDC OLED panel, not '$SP11_PANEL_VENDOR'"
+  else
+    die "unsupported SoC '$SP11_CPU' (supported: Snapdragon X Elite X1E80100, Snapdragon X Plus X1P64100)"
+  fi
+  dtb_for_hardware "$SP11_CPU" "$SP11_PANEL_VENDOR" "$SP11_SKU" >/dev/null \
+    || die "unsupported hardware combination: SoC '$SP11_CPU', panel '$SP11_PANEL_VENDOR', SKU '$SP11_SKU'"
   [[ $SP11_BT_MAC =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]] || die "invalid Bluetooth address '$SP11_BT_MAC' (set SP11_BT_MAC=XX:XX:XX:XX:XX:XX)"
   [[ $SP11_BT_MAC != 00:00:00:00:* ]] || die "placeholder Bluetooth address '$SP11_BT_MAC'"
   printf '%s\n' "$SP11_UCM_DMI_INFO" | grep -Eq "$UCM_SP11_REGEX" \
@@ -49,7 +66,7 @@ self_test
 
 if [ -f "$HARDWARE_ENV" ] && [ "${FORCE:-0}" != 1 ]; then
   load_hardware; validate
-  log "using existing $HARDWARE_ENV: $SP11_PRODUCT / $SP11_SKU / DTB $SP11_DTB_SELECTED"
+  log "using existing $HARDWARE_ENV: $SP11_PRODUCT / $SP11_SKU / $SP11_VARIANT / DTB $SP11_DTB_SELECTED"
   exit 0
 fi
 
@@ -81,7 +98,12 @@ if [ -z "$SP11_BT_MAC" ]; then
 fi
 SP11_BT_MAC=$(printf '%s' "$SP11_BT_MAC" | tr 'a-f-' 'A-F:')
 SP11_UCM_DMI_INFO="${SP11_BOARD_VENDOR}-${SP11_FAMILY}-${SP11_BOARD_NAME}"
-SP11_DTB_SELECTED=$(dtb_for_sku "$SP11_SKU")
+SP11_DTB_SELECTED=$(dtb_for_hardware "$SP11_CPU" "$SP11_PANEL_VENDOR" "$SP11_SKU") \
+  || die "unsupported hardware combination: SoC '$SP11_CPU', panel '$SP11_PANEL_VENDOR', SKU '$SP11_SKU'"
+case "$SP11_DTB_SELECTED" in
+  "$SP11_DTB_LCD") SP11_VARIANT=lcd ;;
+  *)               SP11_VARIANT=oled ;;
+esac
 
 validate
 
@@ -98,12 +120,14 @@ SP11_PANEL_VENDOR="$SP11_PANEL_VENDOR"
 SP11_BT_MAC="$SP11_BT_MAC"
 SP11_UCM_DMI_INFO="$SP11_UCM_DMI_INFO"
 SP11_DTB_SELECTED="$SP11_DTB_SELECTED"
+SP11_VARIANT="$SP11_VARIANT"
 ENV
 chmod 0600 "$HARDWARE_ENV"
 log "product: $SP11_PRODUCT"
 log "SKU:     $SP11_SKU"
 log "SoC:     $SP11_CPU"
 log "panels:  $(printf '%s' "$PANELS" | tr '\n' ';')"
-log "panel:   $SP11_PANEL_VENDOR (OLED) -> DTB $SP11_DTB_SELECTED"
+log "panel:   $SP11_PANEL_VENDOR"
+log "variant: $SP11_VARIANT -> DTB $SP11_DTB_SELECTED"
 log "BT MAC:  $SP11_BT_MAC"
 log "wrote $HARDWARE_ENV"

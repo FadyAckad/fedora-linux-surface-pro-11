@@ -38,14 +38,22 @@ check_kernel_rpms() {
   for p in $KERNEL_PKGS; do ( cd "$CHK" && rpm2cpio "$(rpm_of "$p")" | cpio -idm --quiet ) || die "cannot unpack $p"; done
   MOD="$CHK/lib/modules/$KERNEL_ABI"; [ -d "$MOD" ] || MOD="$CHK/usr/lib/modules/$KERNEL_ABI"
   [ -s "$MOD/vmlinuz" ] || die "kernel-core lacks lib/modules/$KERNEL_ABI/vmlinuz"
-  # Both SP11 trees (sp11.conf): the OLED one every SKU without a modem boots, and the 5G SKU's, the OLED tree plus
-  # the modem on PCIe 5 (revision 3).
+  # The three SP11 trees (sp11.conf): the OLED one every SKU without a modem boots, the 5G SKU's (the OLED tree
+  # plus the modem on PCIe 5, revision 3), and the X1P64100 LCD's.
   local moddir=${MOD#"$CHK"}; moddir=${moddir%/"$KERNEL_ABI"}
   depmod -b "$CHK" -m "$moddir" -o "$CHK/depmod" "$KERNEL_ABI" || die "depmod failed on the kernel packages"
-  for dtb in "$SP11_DTB_OLED" "$SP11_DTB_5G"; do
+  for dtb in "$SP11_DTB_OLED" "$SP11_DTB_5G" "$SP11_DTB_LCD"; do
     [ -s "$MOD/dtb/$dtb" ] || die "kernel-core lacks the device tree $dtb"
     dtb_compat=$(fdtget -t s "$MOD/dtb/$dtb" / compatible 2>/dev/null || true)
-    [[ $dtb_compat == *microsoft,denali-oled* ]] || die "DTB compatible check failed for $dtb: '$dtb_compat'"
+    case "$dtb" in
+      "$SP11_DTB_LCD") [[ $dtb_compat == *microsoft,denali-lcd* ]] || die "DTB compatible check failed for $dtb: '$dtb_compat'" ;;
+      *)               [[ $dtb_compat == *microsoft,denali-oled* ]] || die "DTB compatible check failed for $dtb: '$dtb_compat'" ;;
+    esac
+    # The secure world accepts only the 8380 zap shader on this hardware: the X1P's purwa shader is rejected
+    # with -EINVAL, so neither the LCD tree nor a regression may request it.
+    zap=$(fdtget -t s "$MOD/dtb/$dtb" /soc@0/gpu@3d00000/zap-shader firmware-name 2>/dev/null || true)
+    [ "$zap" = "qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn" ] \
+      || die "$dtb requests '$zap'; the GPU needs qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn (the purwa shader is rejected with -EINVAL)"
     dts=$(dtc -q -I dtb -O dts "$MOD/dtb/$dtb")
     # By compatible: the node's path depends on the SoC dtsi (spi10 sits under the QUP wrapper, /soc@0/geniqup@ac0000).
     grep -F 'compatible = "microsoft,mshw0485";' <<<"$dts" >/dev/null \
@@ -91,7 +99,7 @@ check_kernel_rpms() {
     || die "mshw0485_touch has no ipts_hid_bridge parameter"
   modinfo -F parm "$(find "$MOD" -name 'soundwire-qcom.ko*' | head -1)" | grep '^sp11_feedback_active_offset2_zero:' >/dev/null \
     || die "soundwire-qcom has no sp11_feedback_active_offset2_zero parameter"
-  log "kernel $KERNEL_ABI: configuration = Fedora's ${KERNEL_STOCK_CORE_RPM%.rpm} + kernel-local; DTBs ${SP11_DTB_OLED##*/} and ${SP11_DTB_5G##*/}, compatible: $dtb_compat"
+  log "kernel $KERNEL_ABI: configuration = Fedora's ${KERNEL_STOCK_CORE_RPM%.rpm} + kernel-local; DTBs ${SP11_DTB_OLED##*/}, ${SP11_DTB_5G##*/} and ${SP11_DTB_LCD##*/}, compatible: $dtb_compat"
   rm -rf "$CHK"
 }
 

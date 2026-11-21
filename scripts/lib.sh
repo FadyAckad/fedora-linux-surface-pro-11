@@ -127,24 +127,52 @@ submodule_pin() {
   log "$name @ ${commit:0:12}$([ -f "$(git -C "$dir" rev-parse --git-path shallow)" ] && echo ' (shallow)')"
 }
 
-# The device tree for a SKU: the 5G SKU's carries its modem, the others keep the OLED tree (sp11.conf).
-dtb_for_sku() {
-  if [[ $1 =~ $SP11_SKU_5G_REGEX ]]; then echo "$SP11_DTB_5G"; else echo "$SP11_DTB_OLED"; fi
+# The device tree for a unit: the X1P64100 LCD takes its own tree; the X1E80100 OLED takes the 5G SKU's tree when
+# its SKU has the modem, the OLED tree otherwise. The SKU alone cannot tell the non-5G OLED and the LCD apart (both
+# are Surface_Pro_11th_Edition_2076), so the SoC and the panel vendor decide the variant; an unknown combination
+# returns 1 and the caller refuses it.
+dtb_for_hardware() {
+  local cpu=$1 panel=$2 sku=$3
+  if [[ $cpu =~ $SP11_SOC_LCD_REGEX && $panel = "$SP11_PANEL_LCD" ]]; then
+    printf '%s\n' "$SP11_DTB_LCD"
+  elif [[ $cpu =~ $SP11_SOC_OLED_REGEX && $panel = "$SP11_PANEL_OLED" ]]; then
+    if [[ $sku =~ $SP11_SKU_5G_REGEX ]]; then printf '%s\n' "$SP11_DTB_5G"; else printf '%s\n' "$SP11_DTB_OLED"; fi
+  else
+    return 1
+  fi
+}
+
+# The variant's label for logs and RPM descriptions.
+variant_label() {
+  case "${1:-${SP11_VARIANT:-}}" in
+    lcd)  printf '%s\n' "X1P64100 LCD" ;;
+    oled) printf '%s\n' "X1E80100 OLED" ;;
+    *)    printf '%s\n' "unknown" ;;
+  esac
 }
 
 load_hardware() {
   [ -f "$HARDWARE_ENV" ] || die "missing $HARDWARE_ENV (run scripts/05-detect-hardware.sh)"
   # shellcheck source=/dev/null
   . "$HARDWARE_ENV"
-  # The device tree follows the SKU (dtb_for_sku). A hardware.env written before that choice recorded the OLED
-  # tree for every SKU.
+  # The device tree follows the unit's SoC and panel (dtb_for_hardware). A hardware.env written before that choice
+  # recorded the OLED tree for every SKU.
   local dtb
-  dtb=$(dtb_for_sku "$SP11_SKU")
+  dtb=$(dtb_for_hardware "$SP11_CPU" "$SP11_PANEL_VENDOR" "$SP11_SKU") \
+    || die "unsupported hardware in $HARDWARE_ENV: SoC '$SP11_CPU', panel '$SP11_PANEL_VENDOR' (supported: X1E80100 with an SDC OLED, X1P64100 with an LGD LCD)"
   if [ "${SP11_DTB_SELECTED:-}" != "$dtb" ]; then
-    log "$HARDWARE_ENV selects ${SP11_DTB_SELECTED:-no device tree}; SKU $SP11_SKU takes $dtb"
+    log "$HARDWARE_ENV selects ${SP11_DTB_SELECTED:-no device tree}; $SP11_CPU/$SP11_PANEL_VENDOR takes $dtb"
     SP11_DTB_SELECTED="$dtb"
   fi
   SP11_DTB="$dtb"
+  case "$dtb" in
+    "$SP11_DTB_LCD")
+      SP11_VARIANT=lcd
+      SENSORS_PAYLOAD_DIR="$SENSORS_PAYLOAD_DIR_LCD" ;;
+    *)
+      SP11_VARIANT=oled
+      SENSORS_PAYLOAD_DIR="$SENSORS_PAYLOAD_DIR_OLED" ;;
+  esac
 }
 
 # render TEMPLATE DEST KEY=VALUE... — substitutes @KEY@ tokens, fails on leftovers.

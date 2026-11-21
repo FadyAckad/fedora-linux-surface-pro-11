@@ -8,31 +8,44 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - Product `Microsoft Surface Pro with 5G, 11th Edition`, SKU `Surface_Pro_with_5G_11th_Edition_2077`, X1E80100,
   Samsung (SDC) OLED 2880x1920. The Bluetooth and Wi-Fi addresses are per unit: step 05 writes the Bluetooth
   address to `build/hardware.env`, the support RPM to `/etc/sp11/bluetooth-address`.
+- X1P64100 LCD (issue #2, 2026-11-20): product `Microsoft Surface Pro, 11th Edition`, SKU
+  `Surface_Pro_11th_Edition_2076` (the same string as the non-5G OLED), LG Display (`LGD`) LCD 2880x1920
+  (`LGD LP129WT342166`). Only the SoC and the panel vendor tell it from the non-5G OLED.
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb`; from 7.2.11 revision 3 the 5G SKU boots
-  `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree plus its modem. `dtb_for_sku` in `scripts/lib.sh`
-  picks the tree by SKU (`SP11_SKU_5G_REGEX`); the SKUs without a modem keep the OLED tree. The X1P LCD variant
-  (`x1p64100-microsoft-denali.dtb`) is a different machine.
+  `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree plus its modem; the X1P64100 LCD boots
+  `qcom/x1p64100-microsoft-denali.dtb`. `dtb_for_hardware` in `scripts/lib.sh` picks the tree by the SoC and the
+  panel vendor (`SP11_SOC_*`, `SP11_PANEL_*`), because the non-5G OLED and the LCD share the SKU
+  `Surface_Pro_11th_Edition_2076`; the 5G SKU is the only one with the modem (`SP11_SKU_5G_REGEX`).
 - Upstream regexes match only the non-5G SKU (`Microsoft Surface Pro, 11th Edition`, `_2076`) and need
-  `( with 5G)?` / `(_with_5G)?`; step 05 self-tests every regex, and which SKU takes which tree, against both SKUs.
+  `( with 5G)?` / `(_with_5G)?`; step 05 self-tests every regex, and which SoC/panel takes which tree, against
+  both OLED SKUs and the LCD.
 - DTB loader: stubble's `x1e80100-microsoft-denali.json` (Fedora's `kernel-uki-dtbloader` hardware-ID table) matches
-  this SKU only by its EDID-based `ext1` ID, `ca2ff828-b404-5253-9e0e-579c93bfb059` in `systemd-analyze chid`, which
-  the SP11 build's `.hwids` section maps to `microsoft,denali-oled`. Whether the stub gets the panel's EDID at boot
-  is not verified, so the DTB is loaded explicitly (`GRUB_DEVICETREE`).
+  the OLED SKU only by its EDID-based `ext1` ID, `ca2ff828-b404-5253-9e0e-579c93bfb059` in `systemd-analyze chid`,
+  which the SP11 build's `.hwids` section maps to `microsoft,denali-oled`; it has no LCD entry. Whether the stub
+  gets the panel's EDID at boot is not verified either way, so the DTB is loaded explicitly (`GRUB_DEVICETREE`).
 - Windows identity queries (step 05): the built-in panel is the `WmiMonitorID` instance whose
-  `WmiMonitorConnectionParams.VideoOutputTechnology` is 2147483648; the controller address is
-  `DEVPKEY_Bluetooth_RadioAddress` of the Bluetooth-class device `QCA_SHB\UART_H4_HMT\...`, formatted `{0:X12}`;
-  radios under `USB\` are skipped.
+  `WmiMonitorConnectionParams.VideoOutputTechnology` is 2147483648; its `ManufacturerName` is `SDC` on the OLED
+  and `LGD` on the LCD. The controller address is `DEVPKEY_Bluetooth_RadioAddress` of the Bluetooth-class device
+  `QCA_SHB\UART_H4_HMT\...`, formatted `{0:X12}`; radios under `USB\` are skipped.
 
 ## Firmware
 
 - The ADSP, CDSP and GPU blobs come from Windows' DriverStore (`surfacepro_ext_adsp8380*`,
   `qcnspmcdm_ext_cdsp8380*`, `qcdx8380*`); Fedora's `qcom-firmware` has no Denali directory. The Denali tree
-  requests `qcadsp8380.mbn`, `adsp_dtb.mbn`, `qccdsp8380.mbn`, `cdsp_dtb.mbn`, the zap shader `qcdxkmsuc8380.mbn`
-  and, from 7.2.11 revision 6, the video codec's `qcvss8380.mbn` (in `qcdx8380*`, shipped since support 3.8);
-  Windows' `adsp_dtbs.elf` and `cdsp_dtbs.elf` get the DT names.
+  requests `qcadsp8380.mbn`, `adsp_dtb.mbn`, `qccdsp8380.mbn`, `cdsp_dtb.mbn` and the zap shader
+  `qcdxkmsuc8380.mbn`; the OLED tree also requests, from 7.2.11 revision 6, the video codec's `qcvss8380.mbn` (in
+  `qcdx8380*`, shipped since support 3.8). The LCD tree does not enable the codec, so its support RPM ships no
+  `qcvss8380.mbn`. Windows' `adsp_dtbs.elf` and `cdsp_dtbs.elf` get the DT names.
+- LCD GPU zap shader: the LCD tree requests `qcdxkmsuc8380.mbn`, but the LCD unit's DriverStore ships
+  `qcdxkmsucpurwa.mbn` instead, and `qcom_scm_pas_init_image()` rejects it with `-EINVAL` (the file is found and
+  parsed; the secure world refuses the signed image). An LCD build takes the Qualcomm-signed 8380 shader from
+  Fedora's `qcom-firmware` instead, member
+  `usr/lib/firmware/qcom/x1e80100/dell/xps13-9345/qcdxkmsuc8380.mbn.xz` (12088 bytes, sha256 `585f6749…`), and
+  `sp11.conf` pins that hash. Step 10 downloads the 177 MB package for an LCD build only. dracut's
+  `Denali/*` glob puts the shader into every initramfs, where the GPU probes.
 - Not shipped since support 2.3: the `*_dtbs.elf` copies; `*.jsn` (the in-kernel pd-mapper,
-  `CONFIG_QCOM_PD_MAPPER=m`, needs none); `qcdxkmsucpurwa.mbn` (the X1P zap shader); `qcvss8380_pa.mbn` (the X1P
-  video firmware).
+  `CONFIG_QCOM_PD_MAPPER=m`, needs none); `qcdxkmsucpurwa.mbn` (the X1P zap shader, which this hardware rejects);
+  `qcvss8380_pa.mbn` (the X1P video firmware).
 
 ## Audio
 

@@ -55,21 +55,24 @@ release.
 ## Steps
 
 1. `scripts/00-setup-host.sh` installs the build dependencies and checks the host.
-2. `scripts/05-detect-hardware.sh` reads SKU, panel and Bluetooth address from Windows, checks them against the
-   supported models and writes `build/hardware.env`. The SKU decides the device tree (the 5G SKU's carries its
-   modem) and whether the support RPM carries the modem's files.
+2. `scripts/05-detect-hardware.sh` reads SKU, SoC, panel and Bluetooth address from Windows, checks them against
+   the supported models and writes `build/hardware.env`. The SoC and the panel vendor decide the device tree (the
+   non-5G OLED and the LCD share the SKU string; the 5G SKU's tree carries its modem) and whether the support RPM
+   carries the modem's files.
 3. `scripts/10-fetch-sources.sh` downloads and verifies the sources: the Fedora ISO, Fedora's kernel,
    iio-sensor-proxy and libdisplay-info source RPMs (checksums pinned in `sp11.conf`), the audio files, the SP11
    patch set (the kernel fork's pinned commit, fetched into the submodule `linux-sp11` without the fork's
    history: about 290 MB, once; a plain `git clone` of this repository is enough), the hexagonrpc fork's pinned
    commit into the submodule `hexagonrpc` the same way, the pinned checkouts (iptsd, OE, libssc) and the
-   Bluetooth helper source, plus the runtime packages the live root and the sensors stack need, with dnf.
+   Bluetooth helper source, plus the runtime packages the live root and the sensors stack need, with dnf. An LCD
+   build also downloads Fedora's `qcom-firmware` for the 8380 GPU zap shader.
 4. `scripts/20-build-kernel.sh` rebuilds Fedora's kernel source RPM into Fedora's kernel packages, in a mock
    buildroot of the target release, with the patch set, `payload/kernel-local` and the buildid `.sp11.<revision>`.
    `sp11.conf` pins the content of the declared revision (`KERNEL_SP11_REV_SHA256`): a changed patch set or
    `kernel-local` without a new revision stops the step.
-5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: the firmware from the Windows DriverStore, the
-   audio topology and UCM, the Wi-Fi board data, the Bluetooth address service, the boot policy (kernel-install
+5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: the firmware from the Windows DriverStore (on
+   the LCD, its 8380 zap shader comes from Fedora's `qcom-firmware`), the audio topology and UCM, the Wi-Fi board
+   data, the Bluetooth address service, the boot policy (kernel-install
    plugin, dracut and module settings, the dnf override that keeps stock kernels off the system), the Windows GRUB
    entry, the first-boot service, `sp11-bt-import-pairings` and `sp11-diag`; on the 5G SKU also the modem's udev
    rule and the GNSS feed. The step rebuilds when its `VERSION=` or the target Fedora release changes, refuses to

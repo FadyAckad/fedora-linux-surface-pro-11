@@ -64,8 +64,8 @@ never touches the host.
 - After an ISO build, pass the support RPM the live root carries as `SUPPORT_PREVIOUS_RPM`: its reinstall's
   `%posttrans` writes the menu an installed system has; `20-grub.install` regenerates it only when
   `/etc/kernel/cmdline` is older than `/etc/default/grub`, and the SP11 plugin rewrites that file first.
-- The entry's device tree is the one the unit's SKU takes (`load_hardware`), so the support RPM must be one built
-  for the unit (from 7.2.11 revision 3 the 5G SKU's tree differs).
+- The entry's device tree is the one the unit's SoC and panel take (`load_hardware`), so the support RPM must be
+  one built for the unit (from 7.2.11 revision 3 the 5G SKU's tree differs, and the LCD has its own).
 - `kernel-install` exits non-zero in the chroot (`95-set-boot-entry.install` wants an initramfs the previous
   kernel's entry lacks), so the script judges by the entry, as the RPM's `%posttrans` does with `|| :`; that
   plugin turns `tmp_saved_entry` into `saved_entry`, so a kernel without an initramfs never becomes the default.

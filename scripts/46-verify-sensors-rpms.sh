@@ -7,6 +7,7 @@
 # registry, sensor data, orientation) is not covered: see sp11-sensors-check on the installed system.
 . "$(dirname "$0")/lib.sh"
 require_cmd rpm findmnt bzcat
+load_hardware
 
 BASE="$WORK_DIR/iso/rootfs"
 as_root test -d "$BASE/usr/lib/modules" || die "no extracted live root at $BASE (run scripts/50-build-iso.sh first)"
