@@ -45,13 +45,13 @@ The build runs in WSL on the Surface itself and is a chain of numbered scripts u
 ## Glossary
 
 - SP11: Surface Pro 11; the prefix of the project's packages and files (`sp11-surface-support`, `sp11.conf`).
-- SKU: the model string Windows reports (`Surface_Pro_with_5G_11th_Edition_2077` on the tested unit); it decides
-  the device tree.
+- SKU: the model string Windows reports (`Surface_Pro_with_5G_11th_Edition_2077` on the tested unit); together
+  with the SoC and the panel vendor it decides the device tree.
 - Denali: Microsoft's code name for the Surface Pro 11 board; the device tree files are named after it.
 - Device tree, DTB: the file that tells the kernel what hardware the board has. On this chip Linux uses it instead
   of the ACPI tables Windows uses, and GRUB loads it with the kernel.
-- X1E80100: Qualcomm's Snapdragon X Elite chip. X1P64100 is the smaller chip of the LCD model, which is not
-  supported.
+- X1E80100: Qualcomm's Snapdragon X Elite chip. X1P64100 is the smaller chip of the LCD model; the build accepts
+  it with the LGD panel and selects `qcom/x1p64100-microsoft-denali.dtb`.
 - ADSP, CDSP: the audio and compute digital signal processors inside the chip. The ADSP runs the audio, the
   battery manager and the sensor framework (SSC, the Snapdragon Sensor Core); nothing here uses the CDSP.
 - Support RPM: `sp11-surface-support`, the package with the firmware, settings and helper scripts, versioned 3.x.

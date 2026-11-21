@@ -1,9 +1,9 @@
 # Support RPM history
 
 What each version of `sp11-surface-support` changed (`VERSION=` in `scripts/30-build-support-rpm.sh`). Versions 1.1
-to 2.1, 2.5, 2.6 and 3.0 onwards were confirmed on the tested unit; 2.2 to 2.4 and 2.7 were verified in the chroot
-only, and their changes reached the device with the next version installed there. The device results by date are
-in [`docs/verified.md`](../verified.md).
+to 2.1, 2.5, 2.6 and 3.0 to 3.11 were confirmed on the tested unit; 2.2 to 2.4 and 2.7 were verified in the chroot
+only, and their changes reached the device with the next version installed there. 3.23 adds the X1P64100 LCD
+support. The device results by date are in [`docs/verified.md`](../verified.md).
 
 - 1.1: Flatpak works (`kernel.apparmor_restrict_unprivileged_userns=0`).
 - 1.3: Windows Boot Manager entry in GRUB, before UEFI Firmware Settings.
@@ -98,3 +98,9 @@ in [`docs/verified.md`](../verified.md).
   measurement (a drop-in for `systemd-pcrphase.service`).
 - 3.22: the same for the `final` measurement (`systemd-pcrphase-sysinit.service`), which with 3.21 alone still
   turned a poweroff into a restart after the TPM had failed ([`docs/hardware.md`](../hardware.md), TPM).
+- 3.23: the X1P64100 LCD. Step 05 accepts the LCD's SoC and LGD panel and selects
+  `qcom/x1p64100-microsoft-denali.dtb`; the support RPM takes the 8380 GPU zap shader from Fedora's
+  `qcom-firmware` when the unit's Windows DriverStore ships only `qcdxkmsucpurwa.mbn` (rejected with `-EINVAL`),
+  and ships no video codec firmware because the LCD tree does not enable the codec. `sp11-sensors` 1.16 puts
+  its payload under `/usr/share/qcom/x1e80100/Microsoft/denali-lcd`
+  ([`docs/hardware.md`](../hardware.md), Firmware).
