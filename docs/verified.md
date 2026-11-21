@@ -640,6 +640,12 @@ One entry per round; the facts each established live in the topic notes.
   `freedreno`, `Adreno X1-85`, `Accelerated: yes`; no `zap_shader` or `hw init failed` line in the kernel log;
   gnome-shell about 2 % CPU on an idle desktop. Other confirmed rows: display and backlight, speakers, sensors,
   Wi-Fi/Bluetooth, battery.
+- Checked on 2026-11-20 with the shader repair: HDR (Mutter color mode 2, restored), tablet mode
+  (`PanelOrientationManaged` true while the keyboard was folded/detached and false after), auto-rotation
+  (orientation followed the tablet), auto-brightness (light 2–10 lux, backlight 0–5; `ambient-enabled` restored),
+  microphone (peak about -21 dBFS), front, rear and IR camera streams, four deep-sleep cycles, USB-C charging,
+  and USB-C data (a USB 3 NVMe adapter enumerated over UAS as `sda`). The one LCD-specific gap is hardware video
+  decode: the LCD device tree does not enable `&iris` and the support RPM ships no `qcvss8380.mbn`.
 - The build from this branch selects `qcom/x1p64100-microsoft-denali.dtb` by SoC and panel, takes the 8380
   shader from Fedora's `qcom-firmware` when Windows ships only purwa, and ships no video codec firmware for the
   LCD.
