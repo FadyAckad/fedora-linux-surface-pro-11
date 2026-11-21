@@ -2,6 +2,7 @@
 # Step 2: download and verify every external input (idempotent; cached under build/cache).
 . "$(dirname "$0")/lib.sh"
 require_cmd curl sha256sum git python3 tar xz cpio rpm2cpio dnf
+load_hardware
 
 ## Fedora live ISO (FEDORA_EDITION) + upstream CHECKSUM (one per product; all spins of a compose share one)
 fetch "$FEDORA_ISO_BASEURL/$FEDORA_CHECKSUM_NAME" "$CACHE_DIR/$FEDORA_CHECKSUM_NAME"
@@ -80,6 +81,19 @@ if [ "${FORCE:-0}" = 1 ] || ! ls "$WIFI_DIR"/atheros-firmware-*.rpm >/dev/null 2
   log "downloading atheros-firmware (Fedora $FEDORA_RELEASE)"
   rm -f "$WIFI_DIR"/atheros-firmware-*.rpm
   ( cd "$WIFI_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" atheros-firmware ) || die "dnf download atheros-firmware failed"
+fi
+## Fedora's qcom-firmware: an LCD build takes the 8380 GPU zap shader from it (step 30), because the LCD's
+## Windows DriverStore ships qcdxkmsucpurwa.mbn instead, which the secure world rejects. The package is 177 MB,
+## so an OLED build does not download it. Like atheros-firmware, it floats with the repos; step 30 pins the
+## extracted shader's hash.
+QFW_DIR="$CACHE_DIR/qcom-firmware/f$FEDORA_RELEASE"
+if [ "$SP11_VARIANT" = lcd ]; then
+  mkdir -p "$QFW_DIR"
+  if [ "${FORCE:-0}" = 1 ] || ! ls "$QFW_DIR"/qcom-firmware-*.rpm >/dev/null 2>&1; then
+    log "downloading qcom-firmware (Fedora $FEDORA_RELEASE, for the LCD's 8380 zap shader)"
+    rm -f "$QFW_DIR"/qcom-firmware-*.rpm
+    ( cd "$QFW_DIR" && dnf -q download --releasever="$FEDORA_RELEASE" qcom-firmware ) || die "dnf download qcom-firmware failed"
+  fi
 fi
 ## Runtime dependency RPMs for the live root, from the target release's repositories (their sonames have to match
 ## the live root's libraries, not the host's)

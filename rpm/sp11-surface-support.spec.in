@@ -36,7 +36,7 @@ Requires:       policycoreutils
 %endif
 
 %description
-Device-bound support for Microsoft Surface Pro 11 (X1E80100, OLED, SKU @SKU@):
+Device-bound support for Microsoft Surface Pro 11 (@VARIANT@, SKU @SKU@):
 Qualcomm ADSP/CDSP/GPU/video firmware extracted from this device's Windows installation,
 ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, a udev rule that
 holds the LPASS clock votes of the speakers' bus, WCN7850 Wi-Fi board
@@ -144,5 +144,10 @@ fi
 %endif
 
 %changelog
-* Sun Sep 13 2026 SP11 build <sp11@localhost> - @VERSION@-1
+* Fri Nov 20 2026 SP11 build <sp11@localhost> - @VERSION@-1
+- X1P64100 LCD: the GPU zap shader comes from Fedora's qcom-firmware when the unit's Windows DriverStore ships
+  only qcdxkmsucpurwa.mbn, which the secure world rejects (-EINVAL); no video codec firmware, because the LCD
+  device tree does not enable the codec
+
+* Sun Sep 13 2026 SP11 build <sp11@localhost> - 3.0-1
 - Surface Pro 11 support payload
