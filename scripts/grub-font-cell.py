@@ -12,7 +12,8 @@ Usage: grub-font-cell.py metrics|check FONT.pf2
            of the glyphs GRUB draws, the ascent the rest of the cell
   check    print the cell as WIDTHxHEIGHT; exit 1 naming the glyphs with rows above or below it
 The glyphs GRUB draws: printable ASCII and the arrows, lines, corners and triangles of its menu and editor
-(include/grub/unicode.h).
+(include/grub/unicode.h). The menu shown while Secure Boot is on is drawn with them as well
+(payload/sp11-secureboot-theme): a font that lacks one is refused.
 """
 import struct
 import sys
@@ -41,10 +42,10 @@ glyphs = {}
 for i in range(0, len(index), 9):
     code, _, offset = struct.unpack_from('>IBI', index, i)
     glyphs[code] = struct.unpack_from('>HHhhh', font, offset)
-missing = [c for c in range(0x20, 0x7f) if c not in glyphs]
+missing = [c for c in DRAWN if c not in glyphs]
 if missing:
     sys.exit(f'{path}: no glyph for ' + ' '.join(f'U+{c:04X}' for c in missing))
-drawn = {c: glyphs[c] for c in DRAWN if c in glyphs}
+drawn = {c: glyphs[c] for c in DRAWN}
 
 cell_w = max(glyphs[c][4] for c in range(0x20, 0x7f))
 cell_h = head['MAXH']

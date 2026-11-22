@@ -7,3 +7,5 @@ sp11-bt-pairings.tar.gz
 *.iso
 *.rpm
 .claude/worktrees/
+/sp11-secureboot/
+sp11-mok.key

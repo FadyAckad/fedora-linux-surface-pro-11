@@ -38,14 +38,16 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 
 ## GRUB image, font and modules
 
-- Fedora's aarch64 GRUB image lacks `efi_uga`, `video_bochs`, `video_cirrus` and `chain`. `insmod NAME` resolves
-  `$prefix/arm64-efi/NAME.mod` and works with Secure Boot disabled; `grub2-efi-aa64-modules` provides
+- Fedora's aarch64 GRUB image lacks `efi_uga`, `video_bochs` and `video_cirrus`; the `chainloader` command is
+  built in (2.12-81, 2.12-83: `docs/secure-boot.md`). `insmod NAME` resolves `$prefix/arm64-efi/NAME.mod` and
+  loads a module file with Secure Boot disabled only; `grub2-efi-aa64-modules` provides
   `/usr/lib/grub/arm64-efi/*.mod`.
 - GRUB has no text-scale setting (`gfxterm` sizes its cell from the loaded PF2 font), so only a large font keeps
   the menu legible at the panel's native mode. Step 30 builds `sp11-console.pf2` with
   `grub2-mkfont -s "$GRUB_FONT_SIZE"` from DejaVu Sans Mono; at size 32 (pixels per em, support 3.10) the cell is
-  19x38 px, 151x50 characters at 2880x1920. DejaVu's Bitstream-Vera licence needs the extra `License:` term and a
-  font name without "Bitstream" or "Vera".
+  19x38 px, 150x50 characters at 2880x1920: `gfxterm` keeps 10 pixels free at every side and lays the cells from
+  the top left (the menu's frame measured in QEMU at that size, 2026-11-22). DejaVu's Bitstream-Vera licence
+  needs the extra `License:` term and a font name without "Bitstream" or "Vera".
 - `gfxterm`'s cell is as high as the font's tallest glyph (PF2 `MAXH`) with the baseline `ASCE` rows below its
   top, and rows a glyph draws outside its cell are lost. grub2-mkfont takes `ASCE` and `DESC` from the highest and
   lowest glyph of the whole face: at size 40 (support up to 3.9) 42 and 15 against a cell of 48, so the menu

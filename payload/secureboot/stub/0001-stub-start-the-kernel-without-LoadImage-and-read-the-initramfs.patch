@@ -1,0 +1,284 @@
+From: Surface Pro 11 Fedora build
+Subject: [PATCH] stub: start the kernel without LoadImage() and read the initramfs from the ESP
+
+Two changes for the Surface Pro 11 (firmware of 2026, shim 16.1), where an image started with Secure Boot on
+must not go through shim's LoadImage(): shim verifies the image and then does not return.
+
+linux.c: the stub copies the kernel's sections itself and jumps to it, also with Secure Boot on and shim's
+loader present. The kernel is part of the stub's own image, which shim has verified as a whole when the boot
+loader started it. sp11_stub=shim-loader on the command line restores the unpatched path, for a test of a
+later shim.
+
+stub.c: GRUB's chainloader passes no initrd, and the kernel's own reading of initrd= files does not work with
+this firmware. With sp11_initrd=<path> on the command line the stub reads that file from the volume the image
+was started from, in the chunks chunked_read() uses for firmware that cannot read a large file in one call,
+and hands it over in the place of an initrd of the boot loader. Without the file the kernel is not started.
+
+sp11_stub=debug raises the log level: the stub then reports each of these steps and pauses before the kernel.
+
+Applies to systemd 262.1 (src/boot). LGPL-2.1-or-later, as the files it changes.
+---
+--- a/src/boot/linux.c
++++ b/src/boot/linux.c
+@@ -31,6 +31,9 @@
+         const EFI_DEVICE_PATH *device_path;
+ } ValidationContext;
+ 
++/* SP11: the stub copies and starts the kernel itself, also under Secure Boot (see linux.h). */
++bool sp11_own_loader = true;
++
+ static bool validate_payload(
+                 const void *ctx, const EFI_DEVICE_PATH *device_path, const void *file_buffer, size_t file_size) {
+ 
+@@ -72,6 +75,8 @@
+                                 });
+ 
+ 
++        log_debug("SP11 stub: calling LoadImage() for the kernel, %zu bytes ...", kernel->iov_len);
++
+         err = BS->LoadImage(/* BootPolicy= */ false,
+                             parent,
+                             &kernel_file_path->memmap_path.Header,
+@@ -79,6 +84,8 @@
+                             kernel->iov_len,
+                             &kernel_image);
+ 
++        log_debug_status(err, "SP11 stub: LoadImage() returned: %m");
++
+         if (!shim_loader_available())
+                 uninstall_security_override();
+ 
+@@ -100,6 +107,7 @@
+         if (err != EFI_SUCCESS)
+                 return log_error_status(err, "Error registering initrd: %m");
+ 
++        log_debug("SP11 stub: initrd registered; StartImage() for the kernel follows this pause.");
+         log_wait();
+ 
+         err = BS->StartImage(kernel_image, NULL, NULL);
+@@ -245,7 +253,8 @@
+          *
+          * See https://github.com/rhboot/shim/blob/main/README.md#shim-loader-protocol
+          */
+-        if (secure_boot_enabled() && (shim_loader_available() || (shim_loaded() && security_override_available())))
++        if (!sp11_own_loader &&
++            secure_boot_enabled() && (shim_loader_available() || (shim_loaded() && security_override_available())))
+                 return load_via_boot_services(
+                                 parent_image,
+                                 parent_loaded_image,
+@@ -363,6 +372,7 @@
+                 return log_error_status(err, "Error registering initrd: %m");
+         }
+ 
++        log_debug("SP11 stub: kernel copied by the stub's own loader; the jump to it follows this pause.");
+         log_wait();
+ 
+         if (entry_point > 0) {
+--- a/src/boot/linux.h
++++ b/src/boot/linux.h
+@@ -4,6 +4,10 @@
+ #include "efi.h"
+ #include "iovec-util.h"
+ 
++/* SP11: true unless the command line carries sp11_stub=shim-loader. On the Surface Pro 11 shim's
++ * LoadImage() does not return for an image it has verified, so the kernel must not be handed to it. */
++extern bool sp11_own_loader;
++
+ EFI_STATUS linux_exec(
+                 EFI_HANDLE parent,
+                 const char16_t *cmdline,
+--- a/src/boot/stub.c
++++ b/src/boot/stub.c
+@@ -203,6 +203,155 @@
+         return false;
+ }
+ 
++/* SP11: does the command line carry sp11_stub=<words separated by commas> with this word? */
++static bool sp11_switch(const char16_t *cmdline, const char *word) {
++        static const char key[] = "sp11_stub=";
++
++        if (!cmdline)
++                return false;
++
++        for (const char16_t *p = cmdline; *p; p++) {
++                if (p != cmdline && p[-1] != u' ')
++                        continue;
++
++                size_t i = 0;
++                while (key[i] && p[i] == (char16_t) key[i])
++                        i++;
++                if (key[i])
++                        continue;
++
++                const char16_t *v = p + i;
++                while (*v && *v != u' ') {
++                        size_t j = 0;
++                        while (word[j] && v[j] == (char16_t) word[j])
++                                j++;
++                        if (!word[j] && (v[j] == u',' || v[j] == u' ' || v[j] == u'\0'))
++                                return true;
++                        while (*v && *v != u' ' && *v != u',')
++                                v++;
++                        if (*v == u',')
++                                v++;
++                }
++        }
++
++        return false;
++}
++
++/* SP11: copy the value of a "key=value" word of the command line; false if there is none. */
++static bool sp11_value(const char16_t *cmdline, const char *key, char16_t *ret, size_t ret_len) {
++        if (!cmdline || ret_len == 0)
++                return false;
++
++        for (const char16_t *p = cmdline; *p; p++) {
++                if (p != cmdline && p[-1] != u' ')
++                        continue;
++
++                size_t i = 0;
++                while (key[i] && p[i] == (char16_t) key[i])
++                        i++;
++                if (key[i])
++                        continue;
++
++                size_t n = 0;
++                for (const char16_t *v = p + i; *v && *v != u' ' && n + 1 < ret_len; v++)
++                        ret[n++] = *v;
++                ret[n] = u'\0';
++                return n > 0;
++        }
++
++        return false;
++}
++
++/* SP11: read one file of a volume completely, in the chunks chunked_read() uses for firmware that
++ * cannot read a large file in one call. */
++static EFI_STATUS sp11_read_from(EFI_HANDLE device, const char16_t *path, struct iovec *ret) {
++        _cleanup_file_close_ EFI_FILE *root = NULL, *file = NULL;
++        _cleanup_free_ EFI_FILE_INFO *info = NULL;
++        EFI_STATUS err;
++
++        err = open_volume(device, &root);
++        if (err != EFI_SUCCESS)
++                return err;
++
++        err = root->Open(root, &file, (char16_t *) path, EFI_FILE_MODE_READ, 0);
++        if (err != EFI_SUCCESS)
++                return err;
++
++        err = get_file_info(file, &info, NULL);
++        if (err != EFI_SUCCESS)
++                return err;
++        if (info->FileSize == 0 || info->FileSize > SIZE_MAX / 4)
++                return EFI_BAD_BUFFER_SIZE;
++
++        size_t size = info->FileSize;
++        _cleanup_free_ void *data = xmalloc(size);
++        err = chunked_read(file, &size, data);
++        if (err != EFI_SUCCESS)
++                return err;
++        if (size != info->FileSize)
++                return EFI_END_OF_FILE;
++
++        *ret = (struct iovec) {
++                .iov_base = TAKE_PTR(data),
++                .iov_len = size,
++        };
++        return EFI_SUCCESS;
++}
++
++/* SP11: sp11_initrd=<path> names an initramfs file on the volume the image was started from. The stub reads
++ * it and hands it to the kernel in the place of an initrd of the boot loader, so that no file access is left
++ * to the kernel (GRUB's chainloader passes no initrd, and the kernel's own reading of initrd= files does not
++ * work with this firmware). If the image's own volume does not give the file, the other volumes with a file
++ * system are tried. Without the file the kernel is not started: it could only stop at the root mount. */
++static EFI_STATUS sp11_load_initrd_file(
++                EFI_LOADED_IMAGE_PROTOCOL *loaded_image,
++                const char16_t *cmdline,
++                struct iovec *ret) {
++
++        char16_t path[256];
++        EFI_STATUS err = EFI_NOT_FOUND;
++
++        if (!sp11_value(cmdline, "sp11_initrd=", path, ELEMENTSOF(path)))
++                return EFI_SUCCESS;
++
++        for (char16_t *p = path; *p; p++)
++                if (*p == u'/')
++                        *p = u'\\';
++
++        if (loaded_image->DeviceHandle) {
++                err = sp11_read_from(loaded_image->DeviceHandle, path, ret);
++                if (err == EFI_SUCCESS) {
++                        log_debug("SP11 stub: initramfs %ls: %zu bytes read from the image's own volume.",
++                                  path, ret->iov_len);
++                        return EFI_SUCCESS;
++                }
++        }
++        log_debug_status(err, "SP11 stub: initramfs %ls not read from the image's own volume (%m); trying the others.",
++                         path);
++
++        _cleanup_free_ EFI_HANDLE *handles = NULL;
++        size_t n_handles = 0;
++        err = BS->LocateHandleBuffer(
++                        ByProtocol, MAKE_GUID_PTR(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL), NULL, &n_handles, &handles);
++        if (err != EFI_SUCCESS)
++                n_handles = 0;
++        err = EFI_NOT_FOUND;
++
++        for (size_t i = 0; i < n_handles; i++) {
++                err = sp11_read_from(handles[i], path, ret);
++                if (err == EFI_SUCCESS) {
++                        log_debug("SP11 stub: initramfs %ls: %zu bytes read from volume %zu of %zu.",
++                                  path, ret->iov_len, i + 1, n_handles);
++                        return EFI_SUCCESS;
++                }
++        }
++
++        log_error_status(err, "SP11 stub: initramfs %ls NOT LOADED from any of %zu volumes: %m", path, n_handles);
++        log_error("SP11 stub: the kernel is not started without it; back to the boot loader in a moment.");
++        BS->Stall(10U * 1000U * 1000U);
++        return err;
++}
++
+ static void process_arguments(
+                 EFI_HANDLE stub_image,
+                 EFI_LOADED_IMAGE_PROTOCOL *loaded_image,
+@@ -1214,6 +1363,18 @@
+          * as potential command line to use. */
+         process_arguments(image, loaded_image, &profile, &cmdline);
+ 
++        /* SP11: sp11_stub=debug raises the log level, which shows the progress lines below and makes the stub
++         * pause before it starts the kernel; sp11_stub=shim-loader hands the kernel to shim's LoadImage() as
++         * the unpatched stub does (for a test of a later shim; it does not return on the Surface Pro 11). */
++        if (sp11_switch(cmdline, "debug"))
++                (void) log_set_max_level(LOG_DEBUG);
++        if (sp11_switch(cmdline, "shim-loader"))
++                sp11_own_loader = false;
++        log_debug("SP11 stub: started. Secure Boot %s, shim's loader %s, kernel through %s.",
++                  secure_boot_enabled() ? "on" : "off",
++                  shim_loader_available() ? "present" : "absent",
++                  sp11_own_loader ? "the stub's own loader" : "shim's loader");
++
+         /* Find the sections we want to operate on, both the basic ones, and the one appropriate for the
+          * selected profile. */
+         err = find_sections(loaded_image, profile, sections);
+@@ -1262,10 +1423,17 @@
+ 
+         /* First load the base device tree, then fix it up using addons - global first, then per-UKI. */
+         install_embedded_devicetree(loaded_image, sections, &dt_state);
++        log_debug("SP11 stub: device tree %s.", dt_state.pages > 0 ? "installed" : "not installed");
+         install_addon_devicetrees(&dt_state, dt_addons, n_dt_addons, &parameters_measured);
+ 
+         /* Generate & find all initrds */
+         acquire_previous_initrd(initrds);
++        log_debug("SP11 stub: initrd from the boot loader: %zu bytes.", initrds[INITRD_PREVIOUS].iov_len);
++        if (!iovec_is_set(initrds + INITRD_PREVIOUS)) {
++                err = sp11_load_initrd_file(loaded_image, cmdline, initrds + INITRD_PREVIOUS);
++                if (err != EFI_SUCCESS)
++                        return err;
++        }
+         generate_sidecar_initrds(loaded_image, initrds, &parameters_measured, &sysext_measured, &confext_measured);
+         generate_embedded_initrds(loaded_image, sections, initrds);
+         generate_boot_secret_initrd(boot_secret, initrds);

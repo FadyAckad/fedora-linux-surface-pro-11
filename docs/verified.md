@@ -492,3 +492,32 @@ One entry per round; the facts each established live in the topic notes.
   `sleep_stats` assert during the sensors check.
 - By hand (owner): the round's by-hand checks passed (both speakers, the microphone's recording, the cameras,
   touch and pen, the Bluetooth keyboard, the brightness keys, rotation, charging on USB-C).
+
+## Secure Boot: support 3.12 and the signed boot image (2026-11-21)
+
+- Installed: `sp11-surface-support` 3.12 over 3.11 and `sp11-kernel-secureboot-7.3.5-300.sp11.1.fc45.aarch64`
+  1-1 in one `dnf install`, under kernel `7.3.5-300.sp11.1.fc45`; the test entry of the rounds of 2026-11-20
+  removed first. The owner's key had been enrolled in shim's list on 2026-11-20.
+- Confirmed with Secure Boot off: `sp11-secureboot status` `READY`; after `try`, one start through the signed
+  entry (`TRIED`, stub `systemd-stub 262.1-sp11.1`), the request cleared.
+- Confirmed with Secure Boot on (`Microsoft & 3rd party CA`): two starts through the signed entry without a choice
+  in the menu (`ACTIVE`, lockdown `integrity`); a deep sleep of 68 s and its wake; mobile data connected 46 s
+  after the start, IPv4 and IPv6; the unit's sync at the start and at the shutdown; `sp11-diag` without an
+  SELinux denial. No module refused, lockdown lines for hibernation only, the journal's errors those of a boot
+  with Secure Boot off. The menu stood in GRUB's small built-in font with a frame of question marks (owner).
+- Not part of the round: the standard checks and the checks by hand (`docs/secure-boot.md`).
+- Support 3.13 by `dnf upgrade` over 3.12 the same day, with Secure Boot on: the entries file carries the console
+  rule, the next start came up by itself through the signed entry (`ACTIVE`), and the menu had a drawn frame in
+  the firmware console's font, its text still small (owner).
+- Support 3.14 by `dnf upgrade` over 3.13 on 2026-11-22: GRUB showed the graphical menu at 2880x1920 with the
+  signed entry, Windows and the firmware settings; the restart came up by itself through the signed entry
+  (`ACTIVE`); Windows started from the menu with Secure Boot on. The entries' names stood large beside small
+  titles, and while Windows started the menu's edges stayed around a black box (owner, photographs). Escape was
+  not reported.
+- Support 3.15 by `dnf upgrade` over 3.14 the same day, with Secure Boot on: `status` names the graphical menu,
+  its three entries carry their image class, and the restart came up by itself through the signed entry
+  (`ACTIVE`). The menu looked as QEMU drew it at 2880x1920, Escape led to the text menu, and Windows started
+  from the menu (owner).
+- Support 3.16 by `dnf upgrade` over 3.15 the same day, with Secure Boot on: `status` `ACTIVE` with the graphical
+  menu and the kernel ready; the restart came up by itself through the signed entry (`ACTIVE`); Fedora and
+  Windows started from the menu, and Escape led to the text menu (owner).

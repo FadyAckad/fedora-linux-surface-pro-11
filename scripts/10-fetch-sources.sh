@@ -114,4 +114,8 @@ fetch "$LIBDISPLAY_INFO_SRPM_URL" "$CACHE_DIR/$LIBDISPLAY_INFO_SRPM"
 verify_sha256 "$CACHE_DIR/$LIBDISPLAY_INFO_SRPM" "$LIBDISPLAY_INFO_SRPM_SHA256"
 fetch "$LIBDISPLAY_INFO_STOCK_URL" "$CACHE_DIR/$LIBDISPLAY_INFO_STOCK_RPM"
 verify_sha256 "$CACHE_DIR/$LIBDISPLAY_INFO_STOCK_RPM" "$LIBDISPLAY_INFO_STOCK_SHA256"
+## Secure Boot (scripts/25): Fedora's systemd source RPM, whose tarball the boot stub is built from (pinned in
+## sp11.conf). Fetched on every host, with or without a signing key: the download is small and the pin is checked.
+fetch "$SECUREBOOT_STUB_SRPM_URL" "$CACHE_DIR/$SECUREBOOT_STUB_SRPM"
+verify_sha256 "$CACHE_DIR/$SECUREBOOT_STUB_SRPM" "$SECUREBOOT_STUB_SRPM_SHA256"
 log "all sources present under $CACHE_DIR"

@@ -1,0 +1,55 @@
+# The signed boot image of one SP11 kernel build (docs/secure-boot.md): what GRUB's chainloader starts while
+# Secure Boot is on. scripts/25-build-secureboot-rpms.sh packs and signs the file on the build host; this package
+# only carries it, next to the kernel's own files. The kernel version is part of the package name, as in a
+# kernel module package, so the packages of several installed kernels coexist and each one goes with its kernel.
+%global debug_package %{nil}
+%global __os_install_post %{nil}
+%global __strip /bin/true
+%global _build_id_links none
+%undefine _missing_build_ids_terminate_build
+
+Name:           sp11-kernel-secureboot-@KERNEL_ABI@
+Version:        1
+Release:        @RELEASE@%{?dist}
+Summary:        Signed boot image of kernel @KERNEL_ABI@ for the Surface Pro 11 with Secure Boot on
+License:        GPL-2.0-only AND LGPL-2.1-or-later
+ExclusiveArch:  aarch64
+AutoReqProv:    no
+# The kernel package by its version and release: kernel-uki-dtbloader provides the same kernel-core-uname-r.
+Requires:       kernel-core = @KERNEL_EVR@
+
+%description
+One file for the Surface Pro 11 (SKU @SKU@) with Secure Boot on: kernel @KERNEL_ABI@ and its
+device tree @DTB@ behind systemd's EFI stub @STUB@,
+signed with the builder's own key (certificate SHA-256 @CERT_SHA256@).
+The stub carries the SP11 patch: it starts the kernel itself and reads the initramfs from the ESP.
+sp11-secureboot of sp11-surface-support copies the file to the ESP and writes its GRUB entry. The
+certificate lies beside the file, for the enrolment as a machine owner key.
+Inputs: @INPUTS@
+
+%prep
+%build
+
+%install
+install -d %{buildroot}/lib/modules/@KERNEL_ABI@
+install -m 0644 %{_sourcedir}/sp11-secureboot.efi %{_sourcedir}/sp11-secureboot.der \
+        %{_sourcedir}/sp11-secureboot.info %{buildroot}/lib/modules/@KERNEL_ABI@/
+
+# The copies on the ESP and the GRUB entry follow the package: both scriptlets hand over to the support RPM's
+# tool, which finds what is installed. Installed in one transaction with its kernel, the kernel's own
+# kernel-install run has done the work already and this is a second look.
+%posttrans
+[ -x /usr/libexec/sp11/sp11-secureboot ] && /usr/libexec/sp11/sp11-secureboot sync >/dev/null 2>&1 || :
+
+%postun
+[ -x /usr/libexec/sp11/sp11-secureboot ] && /usr/libexec/sp11/sp11-secureboot sync >/dev/null 2>&1 || :
+
+%files
+%defattr(-,root,root,-)
+/lib/modules/@KERNEL_ABI@/sp11-secureboot.efi
+/lib/modules/@KERNEL_ABI@/sp11-secureboot.der
+/lib/modules/@KERNEL_ABI@/sp11-secureboot.info
+
+%changelog
+* Fri Nov 20 2026 SP11 build <sp11@localhost> - 1-@RELEASE@
+- Signed boot image of kernel @KERNEL_ABI@

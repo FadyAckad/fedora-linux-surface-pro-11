@@ -36,6 +36,10 @@ running one, in the transaction that installs a fourth. Check `df -h /boot` befo
 SP11 kernel takes about 212 MB there. A dracut failure inside the install leaves the new kernel without a boot
 entry, and only the transaction's output says so.
 
+With Secure Boot in use ([`docs/guide/secure-boot.md`](secure-boot.md)), add the kernel's signed image to the same
+command: `./sp11-kernel-secureboot-<kernel version>-1-1.fc45.aarch64.rpm`. A kernel installed without it is not
+offered while Secure Boot is on.
+
 Stock Fedora kernels, which lack the SP11 patch set, are hidden from every configured repository (support RPM 3.0),
 so `dnf upgrade` leaves the kernel alone until an SP11 build of a newer Fedora kernel is installed from local RPMs.
 The override is `/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo`, and `dnf --setopt=disable_excludes='*' ...`
