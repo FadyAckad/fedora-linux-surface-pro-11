@@ -1,0 +1,356 @@
+#!/usr/bin/bash
+# sp11-secureboot: the signed boot images of the Surface Pro 11 (docs/secure-boot.md).
+#
+# With Secure Boot on, Fedora's own boot entries start no kernel on this firmware. GRUB's chainloader does start
+# one signed file per kernel (/usr/lib/modules/<version>/sp11-secureboot.efi, package
+# sp11-kernel-secureboot-<version>): a stub that starts the kernel and reads the initramfs from the ESP.
+#
+#   sync     copy every ready kernel's image and initramfs to the ESP, write GRUB's entries for them
+#            (/boot/grub2/sp11-secureboot.cfg) and the menu shown with Secure Boot on, and delete what belongs to
+#            no kernel. Run by the kernel-install plugin, the packages' scriptlets and sp11-secureboot.service.
+#   status   what is in place, and one RESULT line
+#   remove   delete the copies, the entries and the menu
+#
+# grub.cfg reads the entries only while GRUB runs locked down, its state with Secure Boot on
+# (/etc/grub.d/09_sp11_secureboot). Without a mounted ESP or a signed image every command does nothing.
+# Test mode: SP11_SB_ROOT=<sandbox directory> runs against a fake root with the commands found in PATH.
+set -euo pipefail
+
+die() { echo "sp11-secureboot: $*" >&2; exit 1; }
+note() { echo "sp11-secureboot: $*" >&2; }
+
+R=${SP11_SB_ROOT:-}
+if [ -n "${SP11_SB_ROOT+set}" ]; then
+  case "$R" in
+    ''|/) die "test mode needs a sandbox directory in SP11_SB_ROOT, not '$R'" ;;
+    /*) [ -d "$R" ] || die "sandbox directory $R does not exist" ;;
+    *) die "SP11_SB_ROOT must be an absolute path" ;;
+  esac
+  R=${R%/}
+elif [ "$(id -u)" -ne 0 ]; then
+  echo "sp11-secureboot: run it as root" >&2
+  exit 2
+fi
+
+BOOT=$R/boot
+ESP=$BOOT/efi
+MODULES=$R/usr/lib/modules
+ENTRIES=$BOOT/loader/entries
+GRUBCFG=$BOOT/grub2/grub.cfg
+CFG=$BOOT/grub2/sp11-secureboot.cfg
+MENU=$BOOT/grub2/sp11-secureboot-menu.cfg
+THEME=$BOOT/grub2/themes/sp11-secureboot
+THEME_TOOL=$R/usr/libexec/sp11/sp11-secureboot-theme
+LOCK=$R/run/sp11-secureboot.lock
+IMAGE=sp11-secureboot.efi
+# blscfg lists Fedora's entries from the directory blsdir names; this one, on GRUB's boot filesystem, holds none.
+NO_ENTRIES_DIR=/grub2/fonts
+env_value() { sed -n "s/^$1=\"\\(.*\\)\"\$/\\1/p" "$R/etc/sp11/sp11.env" 2>/dev/null | tail -n 1 || true; }
+ESP_SUBDIR=EFI/sp11sb FONT= SCREEN=
+v=$(env_value SP11_SB_ESP_DIR)
+if [[ "$v" =~ ^[A-Za-z0-9]+(/[A-Za-z0-9]+)*$ ]]; then ESP_SUBDIR=$v; fi
+v=$(env_value SP11_GRUB_FONT)
+if [[ "$v" =~ ^/[A-Za-z0-9._/-]+$ ]]; then FONT=$R$v; fi
+v=$(env_value SP11_GRUB_GFXMODE); v=${v%%,*}
+if [[ "$v" =~ ^[0-9]{3,5}x[0-9]{3,5}$ ]]; then SCREEN=$v; fi
+ESP_DIR=$ESP/$ESP_SUBDIR
+
+sha_of() { sha256sum "$1" | cut -d' ' -f1; }
+same() { [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2"; }
+id_of() { printf 'k%s' "$(printf '%s' "$1" | sha256sum | cut -c1-7)"; }       # the 8.3 name of a kernel's copies
+grub_quote() { printf '%s' "${1//\'/\'\\\'\'}"; }
+lock() { mkdir -p "$(dirname "$LOCK")"; exec 9> "$LOCK"; flock 9; }
+
+ESP_UUID=
+esp_ok() {
+  [ "$(findmnt -n -o TARGET --target "$ESP" 2>/dev/null || true)" = "$ESP" ] \
+    && [ "$(findmnt -n -o FSTYPE --target "$ESP" 2>/dev/null || true)" = vfat ] \
+    && ESP_UUID=$(findmnt -n -o UUID --target "$ESP" 2>/dev/null) \
+    && [[ "$ESP_UUID" =~ ^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$ ]]
+}
+
+# The kernels with a signed image, newest first; for each, whether it can be offered (K_OK 1) or why not.
+KVERS=()
+declare -A K_OK=() K_NOTE=() K_TITLE=() K_OPTS=() K_INITRD=()
+examine() {
+  local kver=$1 want entry word first options=
+  local -a words
+  K_OK[$kver]=0; K_NOTE[$kver]=
+  # A kernel rebuilt under the same version has other module keys, which lockdown would refuse: offer the image
+  # only for the build it holds.
+  want=$(sed -n 's/^VMLINUZ_SHA256=//p' "$MODULES/$kver/sp11-secureboot.info" 2>/dev/null | head -n 1 || true)
+  if [ -z "$want" ] || [ ! -f "$MODULES/$kver/vmlinuz" ] || [ "$(sha_of "$MODULES/$kver/vmlinuz")" != "$want" ]; then
+    K_NOTE[$kver]="the signed image holds another build of this kernel"; return 0
+  fi
+  entry=$(ls -1 "$ENTRIES"/*-"$kver".conf 2>/dev/null | head -n 1 || true)
+  if [ -z "$entry" ]; then K_NOTE[$kver]="no boot entry"; return 0; fi
+  K_TITLE[$kver]=$(sed -n 's/^title[[:space:]]\+//p' "$entry" | head -n 1)
+  # The entry's options go to the kernel as GRUB would pass them; this tool's own words are dropped, and a word
+  # GRUB would interpret is refused ($tuned_params, which Fedora's entries end in, is GRUB's to expand).
+  read -r -a words <<< "$(sed -n 's/^options[[:space:]]\+//p' "$entry" | head -n 1)"
+  for word in ${words[@]+"${words[@]}"}; do
+    case "$word" in
+      sp11_initrd=*|sp11_stub=*|initrd=*) ;;
+      '$tuned_params') options="$options $word" ;;
+      *[\$\"\'\;\\\{\}\<\>\|\&]*|'#'*) K_NOTE[$kver]="its boot entry's options hold a word GRUB would interpret: $word"; return 0 ;;
+      *) options="$options $word" ;;
+    esac
+  done
+  K_OPTS[$kver]=${options# }
+  if [ -z "${K_OPTS[$kver]}" ]; then K_NOTE[$kver]="its boot entry has no options"; return 0; fi
+  # The stub hands the kernel one initramfs: the entry's first file ($tuned_initrd behind it is empty).
+  first=$(sed -n 's/^initrd[[:space:]]\+\([^[:space:]]*\).*/\1/p' "$entry" | head -n 1)
+  if [[ ! "$first" =~ ^/[A-Za-z0-9._/+-]+$ ]] || [ ! -f "$BOOT$first" ]; then
+    K_NOTE[$kver]="its initramfs ${first:-(none named)} is not in /boot"; return 0
+  fi
+  K_INITRD[$kver]=$BOOT$first
+  K_OK[$kver]=1
+}
+scan() {
+  local kver
+  KVERS=()
+  while IFS= read -r kver; do
+    if [ -n "$kver" ] && [ -f "$MODULES/$kver/$IMAGE" ]; then KVERS+=("$kver"); examine "$kver"; fi
+  done < <(ls -1 "$MODULES" 2>/dev/null | sort -rV)
+}
+
+copy() {  # copy SOURCE TARGET: under a temporary name, compared, then renamed; nothing when the target is the same
+  local tmp=${2%.*}.new
+  if same "$1" "$2"; then return 0; fi
+  if cp -f -- "$1" "$tmp" && sync "$tmp" && cmp -s "$1" "$tmp" && mv -f "$tmp" "$2"; then
+    echo "copied: ${2#"$R"}"; return 0
+  fi
+  rm -f "${tmp:?}"; return 1
+}
+block_of() {  # block_of HELPER: what that grub-mkconfig helper wrote into grub.cfg, without its marker lines
+  if [ -f "$GRUBCFG" ]; then
+    sed -n "\\|^### BEGIN /etc/grub.d/$1 ###\$|,\\|^### END /etc/grub.d/$1 ###\$|p" "$GRUBCFG" | sed '1d;$d'
+  fi
+}
+
+# The menu shown with Secure Boot on: GRUB loads no font file then, so sp11-secureboot-theme draws its text as
+# images. A theme shows an entry's image by class, so every entry gets the class sp11-menu-N.
+MENU_TEXT=
+make_menu() {  # make_menu ENTRIES: the menu's text and its theme; fails when the menu stays a text menu
+  local line titles= n=0 new=$THEME.new
+  local entry="^([[:space:]]*menuentry[[:space:]]+'([^'\\\\]+)')([[:space:]]+[^'\\\\].*)\$"
+  MENU_TEXT=
+  while IFS= read -r line; do
+    if [[ "$line" =~ $entry ]]; then
+      n=$((n + 1)); titles+=${BASH_REMATCH[2]}$'\n'
+      line="${BASH_REMATCH[1]} --class sp11-menu-$n${BASH_REMATCH[3]}"
+    elif [[ "$line" =~ ^[[:space:]]*(menuentry|submenu)[[:space:]] ]]; then
+      note "an entry's title in grub.cfg cannot be read; the menu stays a text menu"; return 1
+    fi
+    MENU_TEXT+=$line$'\n'
+  done < <(printf '%s\n' "$1"; block_of 29_sp11_windows; block_of 30_uefi-firmware)
+  rm -rf "${new:?}"
+  if [ -f "$THEME_TOOL" ] && [ -n "$FONT" ] && [ -n "$SCREEN" ] \
+     && printf '%s' "$titles" | python3 -I "$THEME_TOOL" "$FONT" "$new" "$SCREEN" > /dev/null 2>&1 \
+     && [ -s "$new/theme.txt" ]; then
+    if ! diff -r -q "$new" "$THEME" > /dev/null 2>&1; then
+      rm -rf "${THEME:?}"; mv "$new" "$THEME"; echo "theme: /boot/grub2/themes/sp11-secureboot written"
+    fi
+    rm -rf "${new:?}"
+    return 0
+  fi
+  rm -rf "${new:?}"
+  note "the menu's theme could not be drawn; the menu stays a text menu"
+  return 1
+}
+
+install_file() {  # install_file TEMP TARGET: TEMP replaces TARGET unless they are equal; fails when nothing changed
+  if [ -f "$2" ] && cmp -s "$1" "$2"; then rm -f "${1:?}"; return 1; fi
+  chmod 0600 "$1"; mv -f "$1" "$2"
+}
+WRITTEN=
+write_files() {  # write_files KERNEL...: the entries file and the menu; WRITTEN says whether either changed
+  local kver id entries theme=1 f
+  WRITTEN=unchanged
+  entries=$(
+    for kver in "$@"; do
+      id=$(id_of "$kver")
+      printf "menuentry '%s' --class fedora --class gnu-linux --class gnu --class os --unrestricted --id 'sp11-sb-%s' {\n" \
+        "$(grub_quote "${K_TITLE[$kver]:-Fedora Linux ($kver)}, Secure Boot")" "$kver"
+      echo "  terminal_output console"
+      echo "  search --no-floppy --fs-uuid --set=sp11esp $ESP_UUID"
+      echo "  chainloader (\$sp11esp)/$ESP_SUBDIR/$id.efi ${K_OPTS[$kver]} sp11_initrd=/$ESP_SUBDIR/$id.img"
+      echo "}"
+    done
+  )
+  # GRUB reads this file only with Secure Boot on. It shows the graphical menu first; Escape, or a menu that
+  # cannot be shown, leads to the text menu on the firmware's console, whose font has the frame's characters.
+  # A default that names one of Fedora's entries matches nothing here, and GRUB takes the first: the newest kernel.
+  {
+    echo "# Written by /usr/libexec/sp11/sp11-secureboot sync; grub.cfg reads it while Secure Boot is on."
+    echo "if [ -f \${config_directory}/sp11-secureboot-menu.cfg -a -f \${config_directory}/themes/sp11-secureboot/theme.txt ]; then"
+    echo "  if loadfont unicode; then"
+    echo "    set theme=\${config_directory}/themes/sp11-secureboot/theme.txt"
+    echo "    export theme default timeout timeout_style"
+    echo "    configfile \${config_directory}/sp11-secureboot-menu.cfg"
+    echo "    unset theme"
+    echo "  fi"
+    echo "fi"
+    echo "terminal_output console"
+    printf '%s\n' "$entries"
+    echo "set blsdir=\"$NO_ENTRIES_DIR\""
+  } > "$CFG.new"
+  make_menu "$entries" || theme=0
+  if [ "$theme" = 1 ]; then
+    { echo "# Written by /usr/libexec/sp11/sp11-secureboot sync: the graphical menu, read by sp11-secureboot.cfg."
+      printf '%s' "$MENU_TEXT"; } > "$MENU.new"
+  fi
+  if command -v grub2-script-check > /dev/null 2>&1; then
+    if ! grub2-script-check "$CFG.new" > /dev/null 2>&1 \
+       || { [ "$theme" = 1 ] && ! grub2-script-check "$MENU.new" > /dev/null 2>&1; }; then
+      rm -f "${CFG:?}.new" "${MENU:?}.new"
+      return 1
+    fi
+  fi
+  if install_file "$CFG.new" "$CFG"; then WRITTEN=written; fi
+  if [ "$theme" = 1 ]; then
+    if install_file "$MENU.new" "$MENU"; then WRITTEN=written; fi
+  else
+    for f in "$MENU" "$THEME"; do
+      if [ -e "$f" ]; then rm -rf "${f:?}"; echo "removed: ${f#"$R"}"; WRITTEN=written; fi
+    done
+  fi
+}
+remove_entries() {  # the entries file, the menu's file and the theme
+  local f
+  for f in "$CFG" "$MENU" "$THEME"; do
+    if [ -e "$f" ]; then rm -rf "${f:?}"; echo "removed: ${f#"$R"}"; fi
+  done
+}
+prune_copies() {  # prune_copies ID...: delete this tool's copies on the ESP that belong to none of the IDs
+  local f id keep
+  [ -d "$ESP_DIR" ] || return 0
+  for f in "$ESP_DIR"/k???????.efi "$ESP_DIR"/k???????.img "$ESP_DIR"/k???????.new; do
+    [ -e "$f" ] || continue
+    keep=0
+    for id in "$@"; do case "${f##*/}" in "$id.efi"|"$id.img") keep=1 ;; esac; done
+    if [ "$keep" = 0 ]; then rm -f "${f:?}"; echo "removed: ${f#"$R"}"; fi
+  done
+  rmdir "${ESP_DIR:?}" 2> /dev/null || true
+}
+
+cmd_sync() {
+  local kver id problems=0
+  local -a ready=() ids=()
+  [ $# -eq 0 ] || die "usage: sp11-secureboot sync"
+  if [ ! -d "$BOOT/grub2" ]; then echo "SYNC: nothing to do (no /boot/grub2)"; return 0; fi
+  lock
+  scan
+  if [ "${#KVERS[@]}" -eq 0 ] && [ ! -e "$CFG" ] && [ ! -d "$ESP_DIR" ]; then
+    echo "SYNC: nothing to do (no signed boot image is installed)"; return 0
+  fi
+  if ! esp_ok; then echo "SYNC: nothing done (no ESP mounted at /boot/efi)"; return 0; fi
+  for kver in ${KVERS[@]+"${KVERS[@]}"}; do
+    id=$(id_of "$kver")
+    if [ "${K_OK[$kver]}" != 1 ]; then
+      # a kernel without a boot entry is on its way out: kernel-install removes the entry before the package
+      if [ "${K_NOTE[$kver]}" != "no boot entry" ]; then note "kernel $kver is not offered: ${K_NOTE[$kver]}"; problems=1; fi
+      continue
+    fi
+    mkdir -p "$ESP_DIR"
+    if copy "$MODULES/$kver/$IMAGE" "$ESP_DIR/$id.efi" && copy "${K_INITRD[$kver]}" "$ESP_DIR/$id.img"; then
+      ready+=("$kver"); ids+=("$id")
+    else
+      note "kernel $kver is not offered: its copies could not be written to the ESP"; problems=1
+    fi
+  done
+  if [ "${#ready[@]}" -eq 0 ]; then
+    remove_entries
+    prune_copies
+    sync
+    echo "SYNC: no kernel is ready for Secure Boot"
+    return "$problems"
+  fi
+  if ! write_files "${ready[@]}"; then
+    note "the entries did not pass GRUB's syntax check; the files under /boot/grub2 are left as they were"
+    return 1
+  fi
+  prune_copies "${ids[@]}"
+  sync
+  echo "entries: /boot/grub2/sp11-secureboot.cfg $WRITTEN"
+  echo "SYNC OK: ${#ready[@]} kernel(s) ready for Secure Boot: ${ready[*]}"
+  return "$problems"
+}
+
+cmd_status() {
+  local sb cert= key= kver id signed=no enabled=no ready=0 block=no stub
+  [ $# -eq 0 ] || die "usage: sp11-secureboot status"
+  scan
+  sb=$(mokutil --sb-state 2>&1 | head -n 1 || true)
+  case "$sb" in *"SecureBoot enabled"*) enabled=yes ;; esac
+  case " $(cat "$R/proc/cmdline" 2>/dev/null || true) " in *" sp11_initrd="*) signed=yes ;; esac
+  stub=$(tail -c +5 "$R/sys/firmware/efi/efivars/StubInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f" 2>/dev/null | tr -d '\0' || true)
+  echo "== sp11-secureboot status: $(date '+%Y-%m-%d %H:%M:%S') =="
+  echo "Secure Boot:    ${sb:-no answer from mokutil}"
+  echo "lockdown:       $(cat "$R/sys/kernel/security/lockdown" 2>/dev/null || echo "not readable")"
+  if [ "$signed" = yes ]; then echo "this boot:      through a signed entry (stub: ${stub:-none})"
+  else echo "this boot:      through Fedora's own entry"; fi
+  for kver in ${KVERS[@]+"${KVERS[@]}"}; do
+    if [ -f "$MODULES/$kver/sp11-secureboot.der" ]; then cert=$MODULES/$kver/sp11-secureboot.der; break; fi
+  done
+  if [ -n "$cert" ]; then
+    key=$(mokutil --test-key "$cert" 2>&1 | head -n 1 || true)
+    case "$key" in
+      *"is already enrolled"*) echo "key:            enrolled (${cert#"$R"})" ;;
+      *) echo "key:            NOT enrolled (${cert#"$R"}): ${key:-no answer from mokutil}" ;;
+    esac
+  fi
+  if [ -f "$MENU" ] && [ -s "$THEME/theme.txt" ]; then echo "menu:           graphical while Secure Boot is on"
+  else echo "menu:           a text menu while Secure Boot is on"; fi
+  for kver in ${KVERS[@]+"${KVERS[@]}"}; do
+    id=$(id_of "$kver")
+    if [ "${K_OK[$kver]}" != 1 ]; then
+      echo "kernel:         $kver: NOT offered: ${K_NOTE[$kver]}"
+    elif same "$MODULES/$kver/$IMAGE" "$ESP_DIR/$id.efi" && same "${K_INITRD[$kver]}" "$ESP_DIR/$id.img" \
+         && [ -f "$CFG" ] && grep -q -- "--id 'sp11-sb-$kver' " "$CFG"; then
+      ready=$((ready + 1)); echo "kernel:         $kver: ready ($id.efi, $id.img)"
+    else
+      echo "kernel:         $kver: copies or entry NOT current (run sync)"
+    fi
+  done
+  # a kernel that came without its signed image is not offered while Secure Boot is on
+  while IFS= read -r kver; do
+    if [ -f "$MODULES/$kver/vmlinuz" ] && [ ! -f "$MODULES/$kver/$IMAGE" ]; then
+      echo "kernel:         $kver: no signed boot image (package sp11-kernel-secureboot-$kver is not installed)"
+    fi
+  done < <(ls -1 "$MODULES" 2>/dev/null | sort -rV)
+  if [ -f "$GRUBCFG" ] && grep -q 'sp11-secureboot\.cfg' "$GRUBCFG"; then block=yes; fi
+  if [ "$signed" = yes ] && [ "$enabled" = yes ]; then
+    echo "RESULT: ACTIVE: this boot came through a signed entry with Secure Boot on"
+  elif [ "${#KVERS[@]}" -eq 0 ]; then
+    echo "RESULT: NOT SET UP: no signed boot image is installed"
+  elif [ "$ready" -eq 0 ]; then
+    echo "RESULT: NOT READY: no kernel is ready (see the lines above)"
+  elif [ "$block" != yes ]; then
+    echo "RESULT: NOT READY: grub.cfg does not read the signed entries (regenerate it with grub2-mkconfig)"
+  elif [[ "$key" != *"is already enrolled"* ]]; then
+    echo "RESULT: NOT READY: the key is not enrolled"
+  else
+    echo "RESULT: READY: with Secure Boot on, the Surface starts through the signed entries"
+  fi
+}
+
+cmd_remove() {
+  [ $# -eq 0 ] || die "usage: sp11-secureboot remove"
+  lock
+  remove_entries
+  if esp_ok; then
+    prune_copies
+  elif [ -d "$ESP_DIR" ]; then
+    note "no ESP mounted at /boot/efi: its copies were not removed"
+  fi
+  sync
+  echo "REMOVE OK: the copies on the ESP and the entries are gone; the key and the firmware setting are untouched"
+}
+
+case "${1:-}" in
+  sync) shift; cmd_sync "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  remove) shift; cmd_remove "$@" ;;
+  *) echo "usage: sp11-secureboot sync | status | remove" >&2; exit 2 ;;
+esac

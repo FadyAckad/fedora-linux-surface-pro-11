@@ -1,0 +1,10 @@
+#!/usr/bin/sh
+# grub-mkconfig helper for the Surface Pro 11's signed boot images (docs/secure-boot.md). With Secure Boot on (GRUB
+# runs locked down) Fedora's own entries start no kernel on this firmware; the menu then comes from the file that
+# /usr/libexec/sp11/sp11-secureboot writes beside grub.cfg. With Secure Boot off the block does nothing.
+# 09 places it before Fedora's 10_linux.
+cat << 'BLOCK'
+if [ "${lockdown}" = "y" -a -f ${config_directory}/sp11-secureboot.cfg ]; then
+  source ${config_directory}/sp11-secureboot.cfg
+fi
+BLOCK

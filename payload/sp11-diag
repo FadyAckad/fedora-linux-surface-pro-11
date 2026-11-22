@@ -17,6 +17,8 @@ sec "security / secure boot"; run cat /sys/kernel/security/lsm; run getenforce
 # The whole journal: with auditd running, SELinux denials come through audit, not as kernel messages.
 run sh -c "journalctl -b --no-pager -g 'avc: +denied' | tail -n 60"
 run mokutil --sb-state
+# The signed boot images that start Fedora while Secure Boot is on (docs/secure-boot.md).
+run /usr/libexec/sp11/sp11-secureboot status
 
 # run() caps output at LINES_MAX lines, so filter inside the command and truncate last.
 sec "touchscreen kernel driver (mshw0485)"; run lsmod; run sh -c "dmesg | grep -iE 'mshw0485|g6ts|hid-generic|hidraw|spi|qspi|iptsd' | tail -n 80"

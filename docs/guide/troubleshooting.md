@@ -56,6 +56,14 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   KDE Plasma, with the cover closed, it goes back to sleep about 10 s after each wake.
 - Under KDE Plasma, with the power button set to Sleep, waking the tablet with the power key puts it back to sleep
   a few seconds later. Set the power button to Lock screen (below).
+- With Secure Boot on ([`docs/guide/secure-boot.md`](secure-boot.md)), Fedora's own boot entries start no kernel
+  on this tablet: a kernel without a signed boot image needs Secure Boot off, and so does the installer. The
+  kernel also refuses modules its build did not sign.
+- With Secure Boot on, GRUB loads no font file from the disk. From support RPM 3.15 its menu is drawn from
+  images and looks like the usual one; the text menu behind it, GRUB's editor and its command line are in small
+  text. A menu in small text from the start means the images could not be drawn
+  ([`docs/guide/secure-boot.md`](secure-boot.md), GRUB's menu while Secure Boot is on). Fedora starts by itself
+  after ten seconds either way.
 - Boot messages seen on the tested unit that mean nothing:
   - `qcom_pmic_glink … Failed to create device link` for the PD and USB nodes (probe deferral, retried);
   - `surface_hid … unexpected descriptor length` for one Surface Aggregator endpoint nothing depends on;

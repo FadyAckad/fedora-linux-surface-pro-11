@@ -10,7 +10,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.11"
+VERSION="3.16"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, the font's cell
@@ -23,6 +23,7 @@ support_inputs() {
     "GRUB_TIMEOUT_VALUE=$GRUB_TIMEOUT_VALUE" "GRUB_FONT_FILE=$GRUB_FONT_FILE" "GRUB_FONT_SIZE=$GRUB_FONT_SIZE" \
     "GRUB_FONT_NAME=$GRUB_FONT_NAME" "UCM_SP11_REGEX=$UCM_SP11_REGEX" "WIFI_BOARD_ENTRY=$WIFI_BOARD_ENTRY" \
     "AUDIO_RELEASE_TAG=$AUDIO_RELEASE_TAG" "UCM_MIC_GAIN=$UCM_MIC_GAIN" "BT_HELPER_SHA256=$BT_HELPER_SHA256" \
+    "SECUREBOOT_ESP_DIR=$SECUREBOOT_ESP_DIR" \
     | inputs_sha256 "$SPEC_DIR/sp11-surface-support.spec.in" "$FONT_CELL" \
         $(find "$PAYLOAD_DIR" -maxdepth 1 -type f ! -name '*.in' ! -name "$KERNEL_CONFIG_FRAGMENT" | sort)
 }
@@ -169,6 +170,17 @@ install -D -m 0644 "$PAYLOAD_DIR/sp11-first-boot.service" "$STAGE/usr/lib/system
 install -d "$STAGE/usr/lib/systemd/system/multi-user.target.wants"
 ln -sf ../sp11-first-boot.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service"
 install -D -m 0755 "$PAYLOAD_DIR/15-sp11-surface.install" "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install"
+# Secure Boot (docs/secure-boot.md): the tool that keeps the signed boot images' copies on the ESP and their GRUB
+# entries, the tool that draws the menu shown then, the kernel-install plugin and the unit that run the first,
+# and the generator whose block makes grub.cfg read those entries while Secure Boot is on. Without a signed boot
+# image (scripts/25-build-secureboot-rpms.sh) none of it does anything; with Secure Boot off the menu is Fedora's.
+install -m 0755 "$PAYLOAD_DIR/sp11-secureboot" "$PAYLOAD_DIR/sp11-secureboot-theme" "$STAGE/usr/libexec/sp11/"
+python3 -I -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' "$STAGE/usr/libexec/sp11/sp11-secureboot-theme" \
+  || die "Python syntax error in sp11-secureboot-theme"
+install -D -m 0755 "$PAYLOAD_DIR/96-sp11-secureboot.install" "$STAGE/usr/lib/kernel/install.d/96-sp11-secureboot.install"
+install -D -m 0755 "$PAYLOAD_DIR/09_sp11_secureboot" "$STAGE/etc/grub.d/09_sp11_secureboot"
+install -D -m 0644 "$PAYLOAD_DIR/sp11-secureboot.service" "$STAGE/usr/lib/systemd/system/sp11-secureboot.service"
+ln -sf ../sp11-secureboot.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-secureboot.service"
 install -D -m 0644 "$PAYLOAD_DIR/90-sp11.conf" "$STAGE/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
 install -D -m 0644 "$PAYLOAD_DIR/sp11-scmi-cpufreq.conf" "$STAGE/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
 cat > "$STAGE/etc/sp11/sp11.env" <<ENV
@@ -180,13 +192,16 @@ SP11_GRUB_GFXMODE="$GRUB_GFXMODE_VALUE"
 SP11_GRUB_TIMEOUT="$GRUB_TIMEOUT_VALUE"
 SP11_GRUB_FONT="/usr/share/sp11/fonts/$GRUB_FONT_FILE"
 SP11_GRUB_FONT_BOOT="/boot/grub2/fonts/$GRUB_FONT_FILE"
+SP11_SB_ESP_DIR="$SECUREBOOT_ESP_DIR"
 ENV
 # `bash -n A B C` parses only A (B and C become positional parameters): check every script on its own.
-for f in "$STAGE/usr/lib/kernel/install.d/15-sp11-surface.install" \
-         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,bt-import-pairings,diag,bt-apply,ucm-apply}; do
+for f in "$STAGE"/usr/lib/kernel/install.d/{15-sp11-surface,96-sp11-secureboot}.install \
+         "$STAGE"/usr/libexec/sp11/sp11-{first-boot,grub-modules,grub-defaults,bt-import-pairings,diag,bt-apply,ucm-apply,secureboot}; do
   bash -n "$f" || die "shell syntax error in ${f#"$STAGE"}"
 done
-sh -n "$STAGE/etc/grub.d/29_sp11_windows" || die "syntax error in 29_sp11_windows"
+for f in 29_sp11_windows 09_sp11_secureboot; do
+  sh -n "$STAGE/etc/grub.d/$f" || die "syntax error in $f"
+done
 
 ## 7. The 5G SKU's modem (docs/modem.md): ModemManager kept off its QMI port, which never answers (a request queued
 ##    there blocks suspend; ModemManager's probe of it costs 45 s at start and at shutdown), and the GNSS feed for

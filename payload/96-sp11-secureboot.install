@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+# kernel-install plugin for the signed boot images (docs/secure-boot.md). 96 runs it after the plugins whose
+# results it copies (20-grub's entry, 50-dracut's initramfs, 92-tuned, 95-set-boot-entry). It never fails the
+# install: a kernel it cannot offer is its message and a line of `sp11-secureboot status`.
+case "${1:-}" in add|remove) ;; *) exit 0 ;; esac
+[ -x /usr/libexec/sp11/sp11-secureboot ] || exit 0
+timeout 300 /usr/libexec/sp11/sp11-secureboot sync > /dev/null || :
+exit 0

@@ -68,32 +68,39 @@ release.
    buildroot of the target release, with the patch set, `payload/kernel-local` and the buildid `.sp11.<revision>`.
    `sp11.conf` pins the content of the declared revision (`KERNEL_SP11_REV_SHA256`): a changed patch set or
    `kernel-local` without a new revision stops the step.
-5. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: the firmware from the Windows DriverStore, the
+5. `scripts/25-build-secureboot-rpms.sh` runs only with a Secure Boot signing key
+   ([`docs/guide/secure-boot.md`](secure-boot.md)); without one it says so and builds nothing. It builds the boot
+   stub, packs it with the kernel and the device tree into one signed file and packages that as
+   `sp11-kernel-secureboot-<kernel version>`, for an installed system; signing asks for the key's passphrase. The
+   ISO does not carry it.
+6. `scripts/30-build-support-rpm.sh` builds `sp11-surface-support`: the firmware from the Windows DriverStore, the
    audio topology and UCM, the Wi-Fi board data, the Bluetooth address service, the boot policy (kernel-install
    plugin, dracut and module settings, the dnf override that keeps stock kernels off the system), the Windows GRUB
-   entry, the first-boot service, `sp11-bt-import-pairings` and `sp11-diag`; on the 5G SKU also the modem's udev
-   rule and the GNSS feed. The step rebuilds when its `VERSION=` or the target Fedora release changes, refuses to
-   rebuild the same version from a changed payload, and then runs step 35 (see Checks) when a live root is there.
-6. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface Pro 11
+   entry, the first-boot service, `sp11-bt-import-pairings`, `sp11-diag`, `sp11-secureboot` and the tool that
+   draws the menu shown while Secure Boot is on; on the 5G SKU also the modem's udev rule and the GNSS feed. The
+   step rebuilds when its `VERSION=` or the target Fedora release changes, refuses to rebuild the same version from
+   a changed payload, and then runs step 35 (see Checks) when a live root is there.
+7. `scripts/40-build-iptsd-rpm.sh` builds `sp11-iptsd`: pinned upstream iptsd with ooaklee's Surface Pro 11
    integration.
-7. `scripts/45-build-sensors-rpms.sh` builds the sensors stack: `hexagonrpc`, `libssc` and the SSC-enabled
+8. `scripts/45-build-sensors-rpms.sh` builds the sensors stack: `hexagonrpc`, `libssc` and the SSC-enabled
    `iio-sensor-proxy` in a mock buildroot of the target release, and `sp11-sensors` from this unit's registry
    export (step 75) and the Windows sensor configuration. The step runs step 46 when a live root is there.
-8. `scripts/47-build-libdisplay-info-rpm.sh` rebuilds Fedora's `libdisplay-info` in a mock buildroot of the
+9. `scripts/47-build-libdisplay-info-rpm.sh` rebuilds Fedora's `libdisplay-info` in a mock buildroot of the
    target release with the upstream commits that read the panel's HDR data
    ([`docs/display.md`](../display.md)), compares the result with Fedora's own build and runs step 48 when a
    live root is there.
-9. `scripts/50-build-iso.sh` builds the ISO: it replaces the live root's stock kernel packages with the SP11 build
-   of the same packages, installs the support, iptsd and sensors RPMs, builds the live initramfs, adds the device
-   tree, the kernel arguments and the console font to Fedora's own live GRUB menu, then assembles the ISO and
-   implants the media-check checksum. The result is, for example,
-   `build/out/Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.1.fc45.aarch64.iso`, plus `.sha256`.
+10. `scripts/50-build-iso.sh` builds the ISO: it replaces the live root's stock kernel packages with the SP11
+    build of the same packages, installs the support, iptsd and sensors RPMs, builds the live initramfs, adds the
+    device tree, the kernel arguments and the console font to Fedora's own live GRUB menu, then assembles the ISO
+    and implants the media-check checksum. The result is, for example,
+    `build/out/Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.1.fc45.aarch64.iso`, plus `.sha256`.
 
 ## Checks
 
 `build-all.sh` runs the steps above and then `scripts/35-verify-support-rpm.sh`,
 `scripts/46-verify-sensors-rpms.sh` and `scripts/48-verify-libdisplay-info-rpm.sh`.
-`scripts/36-verify-kernel-install.sh` and `scripts/60-verify-rootfs.sh` run by hand. Each check works in an
+`scripts/26-verify-secureboot-rpms.sh`, `scripts/36-verify-kernel-install.sh` and `scripts/60-verify-rootfs.sh`
+run by hand. Each check works in an
 overlay of the live root that step 50 extracts, so it never touches the host. What each one installs and asserts
 is in [`docs/pipeline.md`](../pipeline.md).
 
@@ -106,6 +113,9 @@ is in [`docs/pipeline.md`](../pipeline.md).
 - Step 36 is for kernel RPMs built for an existing installation. It installs them next to the live root's kernel as
   `dnf install` does, then the support RPM, and checks the boot entries, the initramfs, the GRUB default and menu,
   and that removing the new kernel puts the previous one back.
+- Step 26 is for the signed boot image. It installs the support RPM, the kernel and the image's package together
+  and checks the copies on the ESP, GRUB's entries and the menu, through a changed initramfs and the kernel's
+  removal.
 - Step 60 is optional and checks the root that step 50 left behind: packages and binaries, the installer and its
   viewer, the firmware, the SP11 kernel in place of the stock one, the sensors stack and the boot configuration an
   installation would get.

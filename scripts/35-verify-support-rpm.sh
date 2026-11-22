@@ -90,6 +90,11 @@ assert_policy() {
     check as_root grep -qx "  set gfxmode=$GRUB_GFXMODE_VALUE" "$menu"
     check as_root grep -qx "if loadfont /grub2/fonts/$GRUB_FONT_FILE ; then" "$menu"
     check as_root grep -qx "  set timeout=$GRUB_TIMEOUT_VALUE" "$menu"
+    # 3.12: the block of 09_sp11_secureboot, which reads the signed boot entries only while GRUB is locked down,
+    # ahead of Fedora's own entries; and the menu as a whole still parses.
+    check as_root grep -qxF 'if [ "${lockdown}" = "y" -a -f ${config_directory}/sp11-secureboot.cfg ]; then' "$menu"
+    check as_root sh -c "[ \"\$(grep -n 'sp11-secureboot.cfg' '$menu' | head -n 1 | cut -d: -f1)\" -lt \"\$(grep -n '^blscfg\$' '$menu' | head -n 1 | cut -d: -f1)\" ]"
+    check as_root chroot "$M" /usr/bin/grub2-script-check /boot/grub2/grub.cfg
   fi
 }
 
@@ -125,6 +130,30 @@ assert_payload() {
   check as_root grep -qx 'ACTION=="add", SUBSYSTEM=="platform", KERNEL=="6e80000.pinctrl", ATTR{power/control}="on"' \
     "$M/usr/lib/udev/rules.d/78-sp11-speakers.rules"
   check as_root grep -qF '6e80000.pinctrl power/control' "$M/usr/libexec/sp11/sp11-diag"
+  # 3.12: the signed boot images' tool, its kernel-install plugin, its unit and the GRUB generator
+  # (docs/secure-boot.md). In a root without a signed boot image the tool does nothing and says so, and leaves
+  # neither an entries file nor a directory on the ESP.
+  check as_root test -x "$M/usr/libexec/sp11/sp11-secureboot"
+  check as_root test -x "$M/usr/lib/kernel/install.d/96-sp11-secureboot.install"
+  check as_root test -x "$M/etc/grub.d/09_sp11_secureboot"
+  check as_root test -L "$M/usr/lib/systemd/system/multi-user.target.wants/sp11-secureboot.service"
+  check as_root chroot "$M" /usr/bin/systemd-analyze verify /usr/lib/systemd/system/sp11-secureboot.service
+  check as_root grep -qx "SP11_SB_ESP_DIR=\"$SECUREBOOT_ESP_DIR\"" "$M/etc/sp11/sp11.env"
+  check as_root grep -qF '/usr/libexec/sp11/sp11-secureboot status' "$M/usr/libexec/sp11/sp11-diag"
+  # 3.15: the tool that draws the menu shown while Secure Boot is on, run as sp11-secureboot runs it: with the
+  # installed console font and the screen of sp11.env (its own tests are step 26's)
+  check as_root grep -qx "SP11_GRUB_FONT=\"/usr/share/sp11/fonts/$GRUB_FONT_FILE\"" "$M/etc/sp11/sp11.env"
+  check as_root grep -qx "SP11_GRUB_GFXMODE=\"$GRUB_GFXMODE_VALUE\"" "$M/etc/sp11/sp11.env"
+  as_root rm -rf "$M/tmp/sp11-theme"
+  check as_root sh -c "printf 'Fedora Linux\nWindows\n' | chroot '$M' /usr/bin/python3 -I /usr/libexec/sp11/sp11-secureboot-theme \
+    /usr/share/sp11/fonts/$GRUB_FONT_FILE /tmp/sp11-theme ${GRUB_GFXMODE_VALUE%%,*} | grep -qx '2 labels of [0-9]*x[0-9]* px'"
+  check as_root test -s "$M/tmp/sp11-theme/theme.txt"
+  as_root rm -rf "$M/tmp/sp11-theme"
+  check as_root sh -c "chroot '$M' /usr/libexec/sp11/sp11-secureboot sync | grep -qx 'SYNC: nothing to do (no signed boot image is installed)'"
+  check as_root sh -c "chroot '$M' /usr/libexec/sp11/sp11-secureboot status | grep -qx 'RESULT: NOT SET UP: no signed boot image is installed'"
+  check as_root sh -c "chroot '$M' /usr/lib/kernel/install.d/96-sp11-secureboot.install add 0.0.0-test /nonexistent"
+  check as_root test ! -e "$M/boot/grub2/sp11-secureboot.cfg"
+  check as_root test ! -e "$M/boot/efi/$SECUREBOOT_ESP_DIR"
   # 3.7: sp11-diag searches the whole journal for SELinux denials (audit's lines are no kernel messages).
   check as_root grep -qF "journalctl -b --no-pager -g 'avc: +denied'" "$M/usr/libexec/sp11/sp11-diag"
   check as_root sh -c "! grep -q 'journalctl -k -b --no-pager -g .avc' '$M/usr/libexec/sp11/sp11-diag'"
@@ -241,11 +270,17 @@ assert_payload live
 assert_dnf_override
 log "live path: shipped helpers"
 for h in sp11-first-boot sp11-grub-defaults sp11-grub-modules sp11-bt-apply sp11-ucm-apply \
-         sp11-bt-import-pairings sp11-diag; do
+         sp11-bt-import-pairings sp11-diag sp11-secureboot; do
   check as_root chroot "$M" /usr/bin/bash -n "/usr/libexec/sp11/$h"
 done
-check as_root chroot "$M" /usr/bin/bash -n /usr/lib/kernel/install.d/15-sp11-surface.install
-check as_root chroot "$M" /usr/bin/sh -n /etc/grub.d/29_sp11_windows
+for p in 15-sp11-surface 96-sp11-secureboot; do
+  check as_root chroot "$M" /usr/bin/bash -n "/usr/lib/kernel/install.d/$p.install"
+done
+for g in 29_sp11_windows 09_sp11_secureboot; do
+  check as_root chroot "$M" /usr/bin/sh -n "/etc/grub.d/$g"
+done
+# The live path runs no grub2-mkconfig: the Secure Boot generator's block, checked by GRUB's own parser.
+check as_root chroot "$M" /usr/bin/sh -c '/etc/grub.d/09_sp11_secureboot > /tmp/sp11-secureboot-block.cfg && /usr/bin/grub2-script-check /tmp/sp11-secureboot-block.cfg'
 check as_root test -x "$M/usr/libexec/sp11/sp11-bt-set-addr"
 check as_root test -f "$M/boot/grub2/arm64-efi/chain.mod"
 

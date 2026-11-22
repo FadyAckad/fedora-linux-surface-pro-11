@@ -230,10 +230,20 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 ## TPM
 
 - None under Linux (the kernel arguments carry `systemd.tpm2_wait=0`). Windows reports Microsoft Pluton
-  (`tpmtool getdeviceinformation`: manufacturer `MSFT`, vendor `Pluton.TPM.Q`) behind the ACPI `TPM2` table's start
-  method 14 (OEM `QCOM`), which Linux's `include/acpi/actbl3.h` does not define (13 is Pluton's CRB). TrustZone
-  runs no `qcom.tz.tpm`, the application the X1E QSEE TPM driver uses (`qcom_scm_qseecom_app_get_id()` finds only
-  `qcom.tz.uefisecapp`).
+  (`tpmtool getdeviceinformation`: manufacturer `MSFT`, vendor `Pluton.TPM.Q`).
+- The ACPI `TPM2` table (OEM `QCOM`) names start method 14 and a control area in memory, without parameters, and
+  the DSDT has no TPM device. The TCG ACPI specification 1.5 lists 14 as "Reserved for future Memory Mapped I/O
+  Interface"; Linux's `include/acpi/actbl3.h` defines 13 (Pluton's CRB on other PCs) and 15 (Arm FF-A), not 14.
+- Windows' TPM device is a child of a TrustZone secure service of Qualcomm's gateway driver, whose configuration
+  maps that service to the application `qcom.tz.mssecapp`, expected loaded by the firmware (read from Windows,
+  2026-11-21). The service of Qualcomm's own TPM application, `qcom.tz.tpm`, has no device under Windows, and
+  `qcom_scm_qseecom_app_get_id()` finds only `qcom.tz.uefisecapp` under Linux (2026-11-03): the Linux driver for
+  `qcom.tz.tpm` that was in review upstream in 2026-11 does not fit this unit.
+- `qcom.tz.mssecapp` is loaded while Linux runs, as are `qcom.tz.winsecapp` and `qcom.tz.mfgmodemgmt`;
+  `qcom.tz.tpm` is not (name lookups from a kernel module, 2026-11-21). The request format of Microsoft's
+  application is not published.
+- The kernel's object interface to TrustZone (`qcomtee`) is up under Linux and reports its QTEE version at every
+  start.
 
 ## Live-only DSP blacklist
 
@@ -248,6 +258,8 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - `/etc/grub.d/29_sp11_windows` with `/usr/libexec/sp11/sp11-grub-modules`, which copies `chain.mod` and its
   dependency closure from `moddep.lst` into `/boot/grub2/arm64-efi` on every grub2-mkconfig and on an RPM trigger
   on `grub2-efi-aa64-modules`.
+- The `chainloader` command is built into Fedora's GRUB image 2.12-81 and 2.12-83 (`docs/secure-boot.md`); the
+  copied module serves an image without it and loads only with Secure Boot off.
 
 ## Bluetooth pairings shared with Windows
 

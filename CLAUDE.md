@@ -15,9 +15,10 @@ says only what concretely works. Update the guide whose procedure or result chan
 - `payload/`: payload of the support RPM (`payload/15-sp11-surface.install` is the kernel-install plugin), the
   kernel's `payload/kernel-local`, `payload/sensors/` (the sensors stack's packaged files, the libssc and
   iio-sensor-proxy patches and the unpackaged posture probe), `payload/camera/` (the unpackaged raw-capture
-  probe) and `payload/display/` (the libdisplay-info patches, upstream's commits, and the unpackaged display
-  probe). The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), the
-  submodule `linux-sp11`: its gitlink pins the head, `sp11.conf` the base; step 10 fetches only the pinned commit.
+  probe), `payload/display/` (the libdisplay-info patches, upstream's commits, and the unpackaged display
+  probe) and `payload/secureboot/` (the Secure Boot stub's patch).
+  The kernel patches are commits of the project's kernel fork (GPL-2.0, authors in each commit), the submodule
+  `linux-sp11`: its gitlink pins the head, `sp11.conf` the base; step 10 fetches only the pinned commit.
   The hexagonrpc fork is the submodule `hexagonrpc` under the same scheme (its gitlink is the pin step 45 builds
   from).
 - `docs/`: the working notes, indexed in `docs/README.md`; `docs/guide/`: the user guides. `build/` (git-ignored):
@@ -37,9 +38,14 @@ says only what concretely works. Update the guide whose procedure or result chan
   `build/hardware.env`, `build/bt-pairings/`, `build/sensors/` and, inside the built RPMs,
   `/etc/sp11/bluetooth-address` and the `sp11-sensors` registry. Check before staging:
   `git grep -nE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}'` must show only the `AA:BB:CC:DD:EE:FF` placeholders.
+- The Secure Boot signing key lives in `sp11-secureboot/` of the checkout (`SECUREBOOT_KEY_DIR` in `sp11.conf`),
+  which `.gitignore` keeps out of git; never stage it, never `git add -f` anything there. The private key enters no
+  tracked file, no RPM, no mock root and nothing under `build/`; only step 25's `sbsign` reads it
+  (`docs/secure-boot.md`). It is encrypted with the owner's passphrase: when step 25 has to sign, the owner runs it
+  in a terminal.
 - `CLAUDE.local.md` (git-ignored, loaded by Claude Code after this file) holds the owner's private working rules and
-  hand-off notes. `.gitattributes` forces LF. `.gitignore` also blocks `hardware.env`, `*.hiv`, `*.iso`, `*.rpm` and
-  the pairing tarball anywhere in the tree.
+  hand-off notes. `.gitattributes` forces LF. `.gitignore` also blocks `hardware.env`, `*.hiv`, `*.iso`, `*.rpm`,
+  `sp11-mok.key` and the pairing tarball anywhere in the tree.
 
 ## Version bumps
 
@@ -60,7 +66,9 @@ Rationale and the enforcement (content pins and input hashes since 2026-09-22) i
   `SENSORS_VERSION` (`payload/sensors/`, the sp11-sensors spec, the registry export),
   `LIBDISPLAY_INFO_RPM_SUFFIX` (its template or its patches in `payload/display/libdisplay-info/`; for a new SRPM
   its pins `LIBDISPLAY_INFO_SRPM` and `LIBDISPLAY_INFO_STOCK_RPM` with URL and checksum, and
-  `LIBDISPLAY_INFO_BASE_SPEC_SHA256`).
+  `LIBDISPLAY_INFO_BASE_SPEC_SHA256`), `SECUREBOOT_STUB_RELEASE` (the stub's patch in `payload/secureboot/stub/` or
+  its spec; for a new systemd its pin `SECUREBOOT_STUB_SRPM` with URL and checksum), `SECUREBOOT_IMAGE_RELEASE`
+  (the signed image's spec; a new kernel revision rebuilds the image under the same release).
 - The spec templates are part of the RPM input hashes: a comment change there needs the release bump too.
 
 ## Conventions

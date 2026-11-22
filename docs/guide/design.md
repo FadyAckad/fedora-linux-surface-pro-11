@@ -36,16 +36,23 @@ bullet is in the working note it names.
   SP11 audio patches). The live media adds `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas`,
   the same page's advice for booting from USB-C, because restarting the ADSP resets the port; the installed system
   drops them. [`docs/hardware.md`](../hardware.md).
-- GRUB: `gfxterm` at the panel's native `2880x1920,auto` with a DejaVu Sans Mono PF2 font of size 32 (151x50
+- GRUB: `gfxterm` at the panel's native `2880x1920,auto` with a DejaVu Sans Mono PF2 font of size 32 (150x50
   characters), built with `grub2-mkfont` to fit GRUB's character cell and shipped in the support RPM
   (`/usr/share/sp11/fonts/sp11-console.pf2`, named by `GRUB_FONT`), since GRUB has no text-scale setting and sizes
   its character cell from the loaded font. The live menu is Fedora's own with the device tree and the kernel
   arguments added to each entry. Installed menu order: Fedora entries, Windows Boot Manager, UEFI Firmware Settings.
   [`docs/fedora-media.md`](../fedora-media.md).
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` finds the ESP holding `EFI/Microsoft/Boot/bootmgfw.efi` (a
-  separate Windows ESP is fine) and adds a chainload entry. Fedora's aarch64 GRUB image lacks the `chain` module,
-  and Fedora's os-prober cannot find Windows on aarch64, so the module is copied from `grub2-efi-aa64-modules` to
-  `/boot/grub2/arm64-efi/`; it is loadable because Secure Boot is off. [`docs/hardware.md`](../hardware.md).
+  separate Windows ESP is fine) and adds a chainload entry, since Fedora's os-prober cannot find Windows on
+  aarch64. The `chainloader` command is built into Fedora's current GRUB image; for an image without it the
+  `chain` module is copied from `grub2-efi-aa64-modules` to `/boot/grub2/arm64-efi/`, loadable while Secure Boot is
+  off. [`docs/hardware.md`](../hardware.md).
+- Secure Boot, optional: Fedora's own boot entries start no kernel on this firmware while Secure Boot is on,
+  because shim's loader does not return. GRUB's `chainloader` does start an image, so each kernel gets one file
+  signed with the owner's key (a boot stub, the kernel and the device tree), built by step 25 and packaged
+  beside the kernel. The support RPM's `sp11-secureboot` copies it and the initramfs to the ESP and writes GRUB
+  entries that the menu reads only while Secure Boot is on. The key never enters the repository or a package.
+  [`docs/secure-boot.md`](../secure-boot.md).
 - SELinux, sandboxes and CPU frequency: the kernel uses Fedora's configuration, so SELinux runs enforcing with
   Fedora's targeted policy and unprivileged user namespaces (Flatpak's bwrap, browser sandboxes) work as on any
   Fedora. Fedora builds `scmi-cpufreq` as a module that does not load on its own on these laptops; the support RPM

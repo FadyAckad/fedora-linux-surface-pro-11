@@ -1,0 +1,227 @@
+#!/usr/bin/python3 -I
+"""Write the GRUB theme of the menu that is shown while Secure Boot is on (docs/secure-boot.md).
+
+With Secure Boot on GRUB loads no font file from the disk, and its menu would be in the small font inside
+GRUB's own image. A theme and its images it does load. This tool draws the menu's text as images, with the
+glyphs of the console font the usual menu is drawn in and at the usual menu's places: the frame, one line per
+entry, the two help lines and the countdown below them. sp11-secureboot runs it at every sync.
+
+Usage: sp11-secureboot-theme FONT.pf2 OUTDIR WIDTHxHEIGHT < TITLES
+TITLES holds one menu entry's title per line; WIDTHxHEIGHT is the screen GRUB draws the menu on. Writes
+OUTDIR/theme.txt, OUTDIR/icons/sp11-menu-N.png for line N (GRUB shows it as the icon of the entry that carries
+the class sp11-menu-N) and the images of the frame, the selection, the help lines and the countdown. Prints the
+number of labels and their size. Python's standard library only.
+"""
+import os
+import re
+import struct
+import sys
+import zlib
+
+TEXT_FONT = 'Unifont Regular 16'  # the font inside Fedora's GRUB image, the only one it loads under Secure Boot
+ENTRY = (0xff, 0xff, 0xff)        # the entries' names
+TEXT = (0xa8, 0xa8, 0xa8)         # the frame, the help lines and the countdown: the usual menu's light grey
+HIGHLIGHT = (0x2c, 0x5a, 0x9a)    # the bar behind the highlighted entry, and the countdown's bar
+TRACK = (0x38, 0x38, 0x38)        # the part of the countdown's bar that is not filled yet
+BORDER = 10                       # what GRUB's graphical terminal leaves free around its character cells
+TRACK_CELLS = 30                  # the countdown bar's length, in characters
+# The usual menu's own sentences. GRUB enters this menu from its text menu, so Escape leads back there.
+HELP = (
+    'Use the \u2191 and \u2193 keys to select which entry is highlighted.',
+    "Press enter to boot the selected OS, `e' to edit the commands before booting or `c' for a command-line."
+    ' ESC to return previous menu.',
+)
+COUNTDOWN = 'The highlighted entry will be executed automatically: '
+# The glyphs GRUB's text menu draws its frame with, the heavy lines, in the parts of a styled box.
+CORNERS = {'nw': '\u250f', 'ne': '\u2513', 'sw': '\u2517', 'se': '\u251b'}
+HORIZONTAL, VERTICAL = '\u2501', '\u2503'
+
+
+class Font:
+    """A PF2 font: the cell GRUB's graphical terminal draws it in, and its glyphs."""
+
+    def __init__(self, path):
+        data = open(path, 'rb').read()
+        if data[:12] != b'FILE\0\0\0\4PFF2':
+            raise ValueError(f'{path}: not a PF2 font')
+        # Sections: a 4-byte name, a 4-byte big-endian length, the body. CHIX holds 9 bytes per glyph (code
+        # point, flags, file offset); a glyph is width, height, x offset, y offset (of its bottom row, from
+        # the baseline), advance and the bitmap, its bits in one run across the rows. DATA is the last section.
+        head, index, pos = {}, b'', 0
+        while data[pos:pos + 4] != b'DATA':
+            name, size = data[pos:pos + 4], struct.unpack_from('>I', data, pos + 4)[0]
+            if name == b'CHIX':
+                index = data[pos + 8:pos + 8 + size]
+            elif size == 2:
+                head[name] = struct.unpack_from('>H', data, pos + 8)[0]
+            pos += 8 + size
+            if pos + 8 > len(data):
+                raise ValueError(f'{path}: no glyph data')
+        self.glyphs = {}
+        for i in range(0, len(index), 9):
+            code, _, offset = struct.unpack_from('>IBI', index, i)
+            width, height, xoff, yoff, advance = struct.unpack_from('>HHhhh', data, offset)
+            bits = data[offset + 10:offset + 10 + (width * height + 7) // 8]
+            if len(bits) != (width * height + 7) // 8:
+                raise ValueError(f'{path}: the glyph U+{code:04X} is cut short')
+            self.glyphs[code] = (width, height, xoff, yoff, advance, bits)
+        missing = [c for c in range(0x20, 0x7f) if c not in self.glyphs]
+        if missing:
+            raise ValueError(f'{path}: no glyph for ' + ' '.join(f'U+{c:04X}' for c in missing))
+        # The terminal's cell: as wide as the widest printable ASCII glyph's advance, as high as the tallest
+        # glyph, the baseline ASCE rows below its top.
+        self.width = max(self.glyphs[c][4] for c in range(0x20, 0x7f))
+        self.height = head[b'MAXH']
+        self.ascent = head[b'ASCE']
+        if self.width < 4 or self.height < 8 or not 0 < self.ascent <= self.height:
+            raise ValueError(f'{path}: a cell of {self.width}x{self.height} with the baseline at {self.ascent}')
+
+    def draw(self, lines, columns):
+        """The lines as rows of 0 and 1, every character in its cell, COLUMNS cells wide."""
+        grid = [bytearray(columns * self.width) for _ in range(len(lines) * self.height)]
+        for number, line in enumerate(lines):
+            for column, ch in enumerate(line[:columns]):
+                gw, gh, xoff, yoff, _, bits = self.glyphs.get(ord(ch)) or self.glyphs[ord('?')]
+                top = number * self.height + self.ascent - yoff - gh
+                left = column * self.width + xoff
+                for n in range(gw * gh):
+                    if bits[n >> 3] & (0x80 >> (n & 7)):
+                        y, x = top + n // gw, left + n % gw
+                        if number * self.height <= y < (number + 1) * self.height and 0 <= x < columns * self.width:
+                            grid[y][x] = 1
+        return grid
+
+
+def write_png(path, rows):
+    """An RGBA image; ROWS holds one bytes object of four bytes per pixel for every row."""
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    width, height = len(rows[0]) // 4, len(rows)
+    raw = b''.join(b'\0' + bytes(row) for row in rows)
+    with open(path, 'wb') as out:
+        out.write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0))
+                  + chunk(b'IDAT', zlib.compress(raw, 9)) + chunk(b'IEND', b''))
+
+
+def coloured(grid, colour):
+    """Drawn rows as RGBA: COLOUR where a glyph has a pixel, transparent elsewhere."""
+    table = (b'\0\0\0\0', bytes(colour) + b'\xff')
+    return [b''.join(table[bit] for bit in row) for row in grid]
+
+
+def flat(width, height, colour):
+    return [(bytes(colour) + b'\xff') * width] * height
+
+
+def main():
+    if len(sys.argv) != 4:
+        sys.exit(__doc__)
+    font_path, outdir = sys.argv[1:3]
+    screen = re.fullmatch(r'([1-9][0-9]{2,4})x([1-9][0-9]{2,4})', sys.argv[3])
+    if not screen:
+        sys.exit(f'sp11-secureboot-theme: {sys.argv[3]}: not a screen size such as 2880x1920')
+    titles = [line.rstrip('\n') for line in sys.stdin]
+    if not titles or not all(title.strip() for title in titles):
+        sys.exit('sp11-secureboot-theme: the titles on the standard input: one per line, none empty')
+    try:
+        font = Font(font_path)
+    except (OSError, ValueError, KeyError, struct.error) as err:
+        sys.exit(f'sp11-secureboot-theme: {err}')
+    w, h = font.width, font.height
+
+    # GRUB's text menu, in the cells of its terminal: BORDER pixels free on every side, then the frame in
+    # column 1 and row 3, the entries from column 2 and row 4, the frame again in the last column but one and
+    # the last row but six, the help lines and the countdown in the rows below it. What is left of the
+    # screen beyond the last whole cell lies at the right and at the bottom.
+    rest_x, rest_y = (int(screen[1]) - 2 * BORDER) % w, (int(screen[2]) - 2 * BORDER) % h
+
+    def image(name, rows):
+        write_png(os.path.join(outdir, name), rows)
+
+    os.makedirs(os.path.join(outdir, 'icons'), exist_ok=True)
+    # The entries. GRUB scales every icon to one size, so all labels get the widest one's. The first cell stays
+    # empty: the bar behind the highlighted entry begins one character before the text, as in the usual menu.
+    titles = [' ' + t for t in titles]
+    columns = max(len(t) for t in titles)
+    for number, title in enumerate(titles, 1):
+        image(f'icons/sp11-menu-{number}.png', coloured(font.draw([title], columns), ENTRY))
+    # The bar behind the highlighted entry: GRUB stretches the centre of a styled box to the entry's size.
+    image('select_c.png', flat(4, 4, HIGHLIGHT))
+    # The frame, in the parts of a styled box: the corners are the font's own glyphs, each in its cell. GRUB
+    # stretches the sides to the frame's length, so a side is the line's profile only: what the glyph of the
+    # line holds in its middle column, or row, repeated.
+    for name, ch in CORNERS.items():
+        image(f'menu_{name}.png', coloured(font.draw([ch], 1), TEXT))
+    across, down = font.draw([HORIZONTAL], 1), font.draw([VERTICAL], 1)
+    for name in ('n', 's'):
+        image(f'menu_{name}.png', coloured([bytearray([row[w // 2]] * 4) for row in across], TEXT))
+    for name in ('w', 'e'):
+        image(f'menu_{name}.png', coloured([down[h // 2]] * 4, TEXT))
+    # The help lines: one image.
+    image('help.png', coloured(font.draw(HELP, max(len(text) for text in HELP)), TEXT))
+    # The countdown: a progress bar whose left edge is the sentence. A styled box draws its left parts as they
+    # are, top, middle and bottom, and stretches only the centre: the sentence is cut into those three, the
+    # middle one as high as the bar.
+    bar_h = 2 * (h // 6) + 2
+    middle = font.ascent - font.glyphs[ord('x')][1] / 2     # the middle of the lower-case letters
+    bar_top = max(0, min(h - bar_h, round(middle - bar_h / 2)))
+    caption = coloured(font.draw([COUNTDOWN], len(COUNTDOWN)), TEXT)
+    for part, rows in (('nw', caption[:bar_top]), ('w', caption[bar_top:bar_top + bar_h]),
+                       ('sw', caption[bar_top + bar_h:])):
+        if rows:
+            image(f'countdown_{part}.png', rows)
+    image('countdown_c.png', flat(4, 4, TRACK))
+    image('countdown_fill_c.png', flat(4, 4, HIGHLIGHT))
+
+    below = BORDER + rest_y                                   # from the screen's bottom to the last row's
+    with open(os.path.join(outdir, 'theme.txt'), 'w') as out:
+        out.write(f'''# Written by sp11-secureboot-theme: the menu while Secure Boot is on, its text drawn as images.
+title-text: ""
+desktop-color: "#000000"
+terminal-font: "{TEXT_FONT}"
+# GRUB clears its terminal's window before it starts an entry: the whole screen, not a box in its middle.
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
++ boot_menu {{
+  left = {BORDER + w}
+  top = {BORDER + 3 * h}
+  width = 100%-{2 * BORDER + 2 * w + rest_x}
+  height = 100%-{2 * BORDER + 9 * h + rest_y}
+  menu_pixmap_style = "menu_*.png"
+  selected_item_pixmap_style = "select_*.png"
+  icon_width = {columns * w}
+  icon_height = {h}
+  item_height = {h}
+  item_padding = 0
+  item_spacing = 0
+  item_icon_space = 0
+  # The titles GRUB draws itself, in its small font, are not shown: the images name the entries.
+  item_font = "{TEXT_FONT}"
+  item_color = "#00000000"
+  selected_item_color = "#00000000"
+  scrollbar = false
+  scrollbar_left_pad = 0
+}}
++ image {{
+  left = {BORDER + 6 * w}
+  top = 100%-{below + (3 + len(HELP)) * h}
+  file = "help.png"
+}}
++ progress_bar {{
+  id = "__timeout__"
+  left = {BORDER + 3 * w}
+  top = 100%-{below + 3 * h}
+  width = {(len(COUNTDOWN) + TRACK_CELLS) * w}
+  height = {h}
+  bar_style = "countdown_*.png"
+  highlight_style = "countdown_fill_*.png"
+}}
+''')
+    print(f'{len(titles)} labels of {columns * w}x{h} px')
+
+
+if __name__ == '__main__':
+    main()

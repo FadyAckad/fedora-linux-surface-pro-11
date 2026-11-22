@@ -18,7 +18,8 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
 | Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 1 (`7.3.5-300.sp11.1.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.11 |
+| Support RPM (`sp11-surface-support`) | 3.16 |
+| Signed boot image for Secure Boot (`sp11-kernel-secureboot-<kernel>`, optional, built with your own key) | 1-1, with the boot stub `262.1-sp11.1` |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
 | HDR library (`libdisplay-info`, Fedora's with upstream's DisplayID 2.0 support) | 0.3.0-2.sp11.1 |
@@ -34,7 +35,8 @@ use again, with the standard checks, the microphone, GPS, mobile data and a nigh
 Revision 5 (2026-11-16) passed the standard checks and its round's checks by hand; its second probe of the 5G
 modem's PCIe controller brought the modem up in the one boot whose link was not up at first (2026-11-19). Kernel
 7.3.5 revision 1 (2026-11-19) passed the standard checks and its round's checks by hand, and opening the cover
-wakes the tablet again.
+wakes the tablet again. With support 3.12 and a signed boot image (2026-11-21) Fedora started with Secure Boot on,
+through a sleep and with mobile data.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
@@ -72,6 +74,10 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
 
 ✅: confirmed on the tested unit. ❌: not covered by this project. Notes:
 
+- Secure Boot can be switched on for the installed system with a signing key of your own: Fedora then starts
+  through a signed boot image and the kernel runs locked down (2026-11-21, kernel 7.3.5 revision 1), and Windows
+  starts from GRUB's menu (2026-11-22). The installer needs it off, and so does a kernel without a signed image
+  ([`docs/guide/secure-boot.md`](docs/guide/secure-boot.md), [`docs/secure-boot.md`](docs/secure-boot.md)).
 - GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
   minutes ([`docs/gnss.md`](docs/gnss.md)).
 - HDR takes two parts: the kernel's DisplayPort HDR commits and a rebuild of Fedora's `libdisplay-info` that
@@ -108,7 +114,9 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
   (`Surface_Pro_11th_Edition_2076`, `Surface_Pro_11th_Edition_For_Business_2085`), which share the firmware; the
   build gives them the OLED device tree without the modem and leaves the modem's files out of their support RPM.
   No build from one has been reported. The X1P64100 LCD variant uses a different device tree and is rejected.
-- Secure Boot must be disabled: the kernel is a local build of Fedora's kernel package and is not signed.
+- Secure Boot must be disabled for the installer: the kernel is a local build of Fedora's kernel package and is
+  not signed. An installed system can run with it enabled once you sign a boot image with a key of your own
+  ([`docs/guide/secure-boot.md`](docs/guide/secure-boot.md)).
 - Windows must stay on the device: the build reads the hardware identity, the built-in radio's Bluetooth address,
   the ADSP/CDSP/GPU/video firmware and the sensor configuration and registry from it. Without the firmware an
   installed system has no audio, battery reporting, GPU acceleration or hardware video decoding.
@@ -160,6 +168,8 @@ Start here:
 - [`docs/guide/install.md`](docs/guide/install.md): writing the USB, the firmware settings, the installer, the
   first boot.
 - [`docs/guide/update.md`](docs/guide/update.md): updating the support RPM and installing a new SP11 kernel.
+- [`docs/guide/secure-boot.md`](docs/guide/secure-boot.md): switching Secure Boot on for the installed system,
+  with a signing key of your own.
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md): diagnostics, known limitations, what earlier
   releases fixed.
 

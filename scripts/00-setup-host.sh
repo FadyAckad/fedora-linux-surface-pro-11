@@ -30,6 +30,8 @@ PKGS=(
   mock
   # sensors stack (scripts/45): `mock --chain` keeps a local repository between the builds
   createrepo_c
+  # Secure Boot images (scripts/25, only with a signing key): ukify packs the file, sbsign signs it
+  systemd-ukify sbsigntools
 )
 log "installing build dependencies"
 as_root dnf install -y -q "${PKGS[@]}"

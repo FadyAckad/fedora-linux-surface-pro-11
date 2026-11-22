@@ -1,8 +1,8 @@
 # Build one set of RPMs alone
 
-Building the kernel, support, pen daemon, sensors or `libdisplay-info` RPMs for a system that is already
-installed, without a new ISO. Installing the result: [`docs/guide/update.md`](update.md); the full pipeline:
-[`docs/guide/build.md`](build.md).
+Building the kernel, support, pen daemon, sensors or `libdisplay-info` RPMs, or the signed boot image for Secure
+Boot, for a system that is already installed, without a new ISO. Installing the result:
+[`docs/guide/update.md`](update.md); the full pipeline: [`docs/guide/build.md`](build.md).
 
 Every set needs a full `scripts/build-all.sh` run first: it provides the host setup, the downloads and the live
 root the checks install into. Use that run's `FEDORA_TARGET` and `FEDORA_EDITION` with every command below, and run
@@ -97,3 +97,25 @@ Fedora's in the extracted live root, checks what links against it and takes it b
 `LIBDISPLAY_INFO_RPM_SUFFIX` in `sp11.conf` versions the rebuild; changed patches or a changed template under the
 same suffix stop the step, as does a change in Fedora's spec until the template is refreshed. Installing the
 result: [`docs/guide/update.md`](update.md).
+
+## Signed boot image
+
+Only with a signing key ([`docs/guide/secure-boot.md`](secure-boot.md)); without one the step says so and builds
+nothing. It needs the kernel RPMs of the configured kernel in `build/rpms/`.
+
+```bash
+scripts/25-build-secureboot-rpms.sh
+```
+
+This builds the boot stub from Fedora's systemd source RPM in a mock buildroot, packs it with the kernel and this
+unit's device tree into one file, signs it and packages it as `sp11-kernel-secureboot-<kernel version>`. It checks
+the signature and that the kernel and the device tree inside are the kernel package's files. Signing asks for the
+key's passphrase, so run the step in a terminal.
+`SECUREBOOT_STUB_RELEASE` and `SECUREBOOT_IMAGE_RELEASE` in `sp11.conf` version the stub and the package. The
+check together with the support RPM, in the extracted live root:
+
+```bash
+scripts/26-verify-secureboot-rpms.sh
+```
+
+Installing the result: [`docs/guide/secure-boot.md`](secure-boot.md).

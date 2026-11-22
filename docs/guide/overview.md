@@ -66,3 +66,6 @@ The build runs in WSL on the Surface itself and is a chain of numbered scripts u
 - 5G SKU: the model with the Snapdragon X65 modem, which also provides GPS.
 - Pen daemon: `sp11-iptsd`, the user-space driver that turns the touch controller's data into pen and
   multi-touch input.
+- Secure Boot: the firmware's rule that only signed boot loaders start. The installer needs it off; an installed
+  system can run with it on through a boot image signed with a key of your own
+  ([`docs/guide/secure-boot.md`](secure-boot.md)).

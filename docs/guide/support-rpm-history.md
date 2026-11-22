@@ -59,10 +59,26 @@ in [`docs/verified.md`](../verified.md).
 - 3.8: the video codec's firmware (`qcvss8380.mbn`), which the kernel requests from 7.2.11 revision 6 on.
 - 3.9: on the 5G SKU, ModemManager's quick suspend/resume (a drop-in on its unit): with a kernel from 7.2.11
   revision 9, whose modem keeps its power through a sleep, mobile data is back 2 s after a wake instead of 52 s.
-- 3.10: GRUB's console font is smaller (size 32 instead of 40: 151x50 characters instead of 120x40) and built to
+- 3.10: GRUB's console font is smaller (size 32 instead of 40: 150x50 characters instead of 119x39) and built to
   fit GRUB's character cell. With the earlier font the menu and its editor showed no underscores and cut the
   letters' descenders.
 - 3.11: a udev rule keeps two clock votes of the audio block held (`78-sp11-speakers.rules`). With kernel 7.3.3
   the speakers could stay silent after a pause in the sound until the sound was stopped and started again;
   `sp11-diag` lists the amplifiers' bus state and the rule's setting
   ([`docs/hardware.md`](../hardware.md), Audio).
+- 3.12: Secure Boot for the installed system, optional. `sp11-secureboot` keeps the copies and GRUB entries of
+  signed boot images current, through a kernel-install plugin, a block in GRUB's menu and a unit, and `sp11-diag`
+  lists its status; without a signed image none of it does anything
+  ([`docs/guide/secure-boot.md`](secure-boot.md)).
+- 3.13: with Secure Boot on, GRUB's menu is drawn on the firmware's console and has its frame again, where 3.12
+  showed question marks. The text stays small ([`docs/secure-boot.md`](../secure-boot.md), GRUB under Secure
+  Boot).
+- 3.14: with Secure Boot on, a graphical menu names its entries by images, since GRUB loads no font file then:
+  the signed kernels, Windows and the firmware settings, with a countdown bar. Escape leads to 3.13's text
+  menu.
+- 3.15: that menu looks like the usual one: every entry's full title, the frame, the help lines and the
+  countdown in the usual font and size, drawn on the tablet at every sync
+  (`/usr/libexec/sp11/sp11-secureboot-theme`). The screen is cleared whole before an entry starts: with 3.14
+  a black box lay over the menu's middle while Windows started. Python is a requirement on every model now.
+- 3.16: the same Secure Boot route with less code. `sp11-secureboot try`, the one start through the signed
+  entry with Secure Boot still off, is gone: the guide goes from enrolling the key to switching Secure Boot on.

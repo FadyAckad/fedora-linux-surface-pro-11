@@ -1,7 +1,9 @@
 # Kernel update: hand-off
 
 The folder (location and naming in `CLAUDE.local.md`) holds the five `KERNEL_PKGS` RPMs of the new uname with a
-`.sha256` each (`sha256sum <rpm> > <rpm>.sha256`), `sp11-dsp-ping.py` from this skill's directory, the series as
+`.sha256` each (`sha256sum <rpm> > <rpm>.sha256`), with them `sp11-kernel-secureboot-<abi>-*.rpm` when step 25
+built it (the device step 3 then names it in the same `dnf install`, and `sp11-secureboot status` after it shows
+the new kernel `ready`), `sp11-dsp-ping.py` from this skill's directory, the series as
 `sp11-<new>-series.tar.gz` (`git format-patch --no-signature v<new>..<head>`, packed without a directory), and the
 three files below. Before handing over, apply the tarball with `git am` onto `v<new>` in a throwaway clone
 (`git clone --shared --no-checkout linux-sp11`, detached at the tag's commit, signing off): 58 commits and one

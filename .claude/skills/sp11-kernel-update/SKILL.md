@@ -108,6 +108,11 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 4. Beyond step 20: the source RPM's `linux-kernel-test.patch` holds the adapted and new code, the shipped modules
    carry the SP11 strings, the module list differs from the previous revision's only as Fedora's configuration
    explains.
+5. On a host with the Secure Boot signing key (`docs/secure-boot.md`): step 25 builds the signed boot image's
+   package for the new uname, and step 26 checks it with the support RPM. The key is encrypted and step 25 asks
+   for its passphrase on a terminal, which the session has not: ask the maintainer to run
+   `scripts/25-build-secureboot-rpms.sh` in WSL, then run step 26. A unit that runs with Secure Boot on starts the
+   previous kernel until the new one's image is installed.
 
 ## 6. Documents now
 
@@ -124,7 +129,8 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 ## 7. Hand-off
 
 A folder in the hand-off standard ([sp11-handoff](../sp11-handoff/SKILL.md); location in `CLAUDE.local.md`): the
-five `KERNEL_PKGS` RPMs with a `.sha256` each, the device steps, the fork steps, the series as a tarball,
+five `KERNEL_PKGS` RPMs with a `.sha256` each (and `sp11-kernel-secureboot-<uname>` when step 25 built it), the
+device steps, the fork steps, the series as a tarball,
 [sp11-dsp-ping.py](sp11-dsp-ping.py), `README.txt`. Templates, and what each device check covers, in
 [handoff.md](handoff.md). Expected log lines come from the previous device round (the maintainer's returned
 `sp11-diag` output), not from reading the code.

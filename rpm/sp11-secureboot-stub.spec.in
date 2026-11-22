@@ -1,0 +1,59 @@
+# systemd's EFI stub with the SP11 patch: the first part of the signed boot image that
+# scripts/25-build-secureboot-rpms.sh packs for each kernel (docs/secure-boot.md). A build input: the package is
+# never installed on the device, step 25 takes the stub out of it.
+#
+# Only the stub is built. Fedora's own patches to systemd do not touch src/boot, so the source is the tarball
+# of Fedora's source RPM plus the patch; the configuration is Fedora's for the boot loader part (release mode,
+# TPM measurements, the SBAT entries taken from the build root's os-release), with every optional feature of
+# the rest of systemd switched off, which keeps the build requirements short and the result independent of
+# what the build root happens to hold.
+%global debug_package %{nil}
+%global __meson_auto_features disabled
+
+Name:           sp11-secureboot-stub
+Version:        @VERSION@
+Release:        @RELEASE@%{?dist}
+Summary:        systemd-stub for the Surface Pro 11's signed boot images (build input)
+License:        LGPL-2.1-or-later
+URL:            https://systemd.io
+ExclusiveArch:  aarch64
+Source0:        systemd-%{version}.tar.gz
+Patch1:         0001-stub-start-the-kernel-without-LoadImage-and-read-the-initramfs.patch
+
+BuildRequires:  gcc
+BuildRequires:  meson
+BuildRequires:  ninja-build
+BuildRequires:  gperf
+BuildRequires:  patch
+BuildRequires:  libcap-devel
+BuildRequires:  libmount-devel
+BuildRequires:  libxcrypt-devel
+BuildRequires:  python3
+BuildRequires:  python3dist(jinja2)
+BuildRequires:  python3dist(pyelftools)
+
+%description
+systemd's EFI stub @VERSION@ (linuxaa64.efi.stub) with one patch for the Surface Pro 11: the stub starts the
+kernel itself instead of handing it to shim's loader, which does not return on this firmware, and with
+sp11_initrd=<path> on the command line it reads the initramfs from the ESP.
+Inputs: @INPUTS@
+
+%prep
+%autosetup -n systemd-%{version} -p1
+
+%build
+%meson -Dmode=release -Defi=true -Dtpm=true -Db_ndebug=false -Dbootloader=enabled \
+       -Dversion-tag=@VERSION_TAG@
+ninja -C %{_vpath_builddir} -v src/boot/linuxaa64.efi.stub
+
+%install
+install -D -m 0644 %{_vpath_builddir}/src/boot/linuxaa64.efi.stub \
+        %{buildroot}%{_prefix}/lib/sp11/secureboot/linuxaa64.efi.stub
+
+%files
+%license LICENSE.LGPL2.1
+%{_prefix}/lib/sp11/secureboot/linuxaa64.efi.stub
+
+%changelog
+* Fri Nov 20 2026 SP11 build <sp11@localhost> - @VERSION@-@RELEASE@
+- systemd-stub with the Surface Pro 11 patch

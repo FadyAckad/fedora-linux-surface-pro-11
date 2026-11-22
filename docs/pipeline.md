@@ -9,19 +9,21 @@ What each file is, for a user: `docs/guide/layout.md`. What matters to the pipel
 - `sp11.conf`: every version, URL, regex, boot-policy string and content pin, sourced through `scripts/lib.sh`; only
   the support RPM's `VERSION=` lives in step 30.
 - `rpm/*.spec.in`: the spec templates; `render()` fills their `@KEY@` placeholders, a leftover one fails the build.
-- `scripts/NN-*.sh`: the pipeline steps, idempotent; `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 30,
-  40, 45, 47 and 50, then steps 35, 46 and 48, which need step 50's live root (steps 30, 45 and 47 run them when
-  it exists).
+- `scripts/NN-*.sh`: the pipeline steps, idempotent; `FORCE=1` rebuilds. `build-all.sh` runs 00, 05, 10, 20, 25,
+  30, 40, 45, 47 and 50, then steps 35, 46 and 48, which need step 50's live root (steps 30, 45 and 47 run them
+  when it exists). Step 25 builds only on a host with a Secure Boot signing key (`docs/secure-boot.md`).
   Outside the pipeline: `70-export-bt-pairings.sh` (`docs/hardware.md`), `75-export-sensor-registry.sh`
   (`docs/sensors.md`), `sync-state-drivers.py`, step 20's check that the Denali device trees' rail and
   interconnect users all have a driver (`docs/kernel.md`), and `grub-font-cell.py`, step 30's fit of the GRUB
-  console font to `gfxterm`'s cell (`docs/fedora-media.md`).
+  console font to `gfxterm`'s cell and its check that the font holds the glyphs GRUB's menu draws
+  (`docs/fedora-media.md`).
 - `payload/`: the support RPM's payload, installed under `/usr/libexec/sp11`, `/etc/grub.d` and `/usr/lib/...`
   (the modem rule and GNSS feed in 5G builds only); `kernel-local`, a build input of step 20 and part of
   `KERNEL_SP11_REV` (the patch set itself is the kernel fork's, the submodule `linux-sp11` below); `sensors/`
   (`sp11-sensors`' payload, hexagonrpc's sysusers entry and udev rule, the libssc and iio-sensor-proxy patches, the
   unpackaged posture probe); `camera/` (the unpackaged raw-capture probe); `display/` (the libdisplay-info
-  patches and the unpackaged display probe); `README-iso.txt.in`, the note inside the ISO.
+  patches and the unpackaged display probe); `secureboot/` (the boot stub's patch and the tests of
+  `sp11-secureboot`); `README-iso.txt.in`, the note inside the ISO.
 - `linux-sp11/` and `hexagonrpc/`: the kernel fork and the hexagonrpc fork as submodules, checked out at the
   pinned commits. The gitlink in the index is the pin: `KERNEL_PATCH_COMMIT`, read by `lib.sh`, with the base
   pinned in `sp11.conf`; `HEXAGONRPC_COMMIT`, read by `sp11.conf` into the release string. Step 10 owns them: a
@@ -71,6 +73,17 @@ never touches the host.
   plugin turns `tmp_saved_entry` into `saved_entry`, so a kernel without an initramfs never becomes the default.
   Dracut's `selinux` module is in no initramfs here (`check()` returns 255); systemd loads the policy.
 
+### Steps 25 and 26: the signed boot image
+
+- Step 25 builds the boot stub and the signed image's add-on (`docs/secure-boot.md`). Every run checks the
+  package it built or found: the signature against the certificate, the sections present and absent, the kernel
+  and device tree sections byte for byte against the `kernel-core` RPM, the requirement on that kernel.
+- Step 26 is not in `build-all.sh`: the live root must carry another kernel than the one under test. It
+  installs the support RPM and, in one transaction, the kernel packages and the add-on, with a FAT filesystem
+  on `/boot/efi`, and checks the copies on the ESP, the entries file and the menu (both through
+  `grub2-script-check`), a changed initramfs carried over by the next `sync`, the add-on erased and installed
+  alone, and the kernel's removal. Step 35 runs the menu's theme tool once with the installed font.
+
 ### Steps 45 and 46: the sensors stack
 
 - Step 45 builds `hexagonrpc`, `libssc` and `iio-sensor-proxy` with `mock --chain` (`mock_chain` in `lib.sh`) and
@@ -118,9 +131,10 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
   works; its `%posttrans` must run `sp11-grub-defaults` before regenerating `grub.cfg` (up to 2.3 a changed policy
   never reached the machine), which step 35 guards.
 - Input hashes: steps 30, 45 and 47 record `inputs_sha256` (`lib.sh`; the payload, the spec template, the rendered
-  `sp11.conf` values, for step 30 also `grub-font-cell.py`, for step 45 also the registry export and the DriverStore
-  package, for step 47 the patches and the source RPM's checksum) as `Inputs:` in the RPM description and die when
-  the cached RPM of the same version was built from other inputs, `FORCE=1` or not. The hash covers repo-relative
+  `sp11.conf` values, for step 30 also `grub-font-cell.py`, for step 45 also the
+  registry export and the DriverStore package, for step 47 the patches and the source RPM's checksum) as
+  `Inputs:` in the RPM description and die when the cached RPM of the same version was built from other
+  inputs, `FORCE=1` or not. The hash covers repo-relative
   paths, so a payload rename invalidates it too.
 - The input hash does not cover the host's toolchain: step 30 compiles `sp11-bt-set-addr` with the host's gcc and
   links glibc's startup code in. The helper of support 3.9 (built 2026-11-01 on the Fedora 44 host) and of 3.10
@@ -137,14 +151,21 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
   of that build the same way (the binary's payload equals the Fedora-signed copy's, 2026-11-12);
   `LIBDISPLAY_INFO_BASE_SPEC_SHA256` pins Fedora's spec the template was derived from. A Fedora update of the
   package is taken over by all three pins and the template.
+- Secure Boot: `SECUREBOOT_STUB_SRPM` pins systemd's source RPM by URL and checksum. `SECUREBOOT_STUB_RELEASE` is
+  the stub build's release (its patch and spec template), `SECUREBOOT_IMAGE_RELEASE` the add-on's (its template).
+  The add-on's input hash holds the stub's inputs, the `kernel-core` RPM's checksum, the device tree's name and
+  the certificate's checksum, not the signature: `sbsign` records the signing time. The key directory
+  (`SECUREBOOT_KEY_DIR`, `sp11-secureboot/` of the checkout) is ignored by git, the key in it encrypted: signing
+  needs a terminal for its passphrase.
 
-Cache checks: steps 20, 30, 40, 45 and 47 skip when the cached RPM matches, so a bump or a release switch rebuilds;
-`build_rpm`, `mock_rebuild` and `mock_rebuild_family` delete older RPMs of the same name, so `build/rpms/` holds
-one release's set.
+Cache checks: steps 20, 25, 30, 40, 45 and 47 skip when the cached RPM matches, so a bump or a release switch
+rebuilds; `build_rpm`, `mock_rebuild` and `mock_rebuild_family` delete older RPMs of the same name, so
+`build/rpms/` holds one release's set.
 
 | Step | The cached RPM matches on                                                                          |
 |------|----------------------------------------------------------------------------------------------------|
 | 20   | the `kernel-core` RPM's version-release-arch against the configured uname, Fedora release included |
+| 25   | the stub's and the add-on's version-release; the add-on's package checks run again                 |
 | 30   | the support RPM's `%{VERSION}` and the `.fc<release>` dist tag                                     |
 | 40   | iptsd's version-release and commit                                                                 |
 | 45   | the sensors chain's version-release                                                                |

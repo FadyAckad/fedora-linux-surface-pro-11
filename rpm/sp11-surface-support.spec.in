@@ -27,9 +27,10 @@ Requires:       grub2-tools
 Requires:       grub2-efi-aa64-modules
 Requires:       util-linux
 Requires:       kmod
-%if %{sp11_modem}
-# The 5G modem's GNSS feed: the service is Python, GeoClue reads it, semodule loads its policy module.
+# sp11-secureboot-theme, which draws the menu shown while Secure Boot is on, is Python; so is the modem's GNSS feed.
 Requires:       python3
+%if %{sp11_modem}
+# The 5G modem's GNSS feed: GeoClue reads it, semodule loads its policy module.
 Requires:       geoclue2
 Requires:       policycoreutils
 %endif
@@ -41,7 +42,9 @@ ooaklee FullIO @AUDIO_TAG@ AudioReach topology and ALSA UCM, a udev rule that
 holds the LPASS clock votes of the speakers' bus, WCN7850 Wi-Fi board
 data, Bluetooth public-address service, kernel-install boot policy plugin
 (Denali DTB, GRUB resolution, kernel arguments), dracut policy, scmi-cpufreq loading,
-a GRUB menu entry that chainloads the Windows Boot Manager, a dnf repository override
+a GRUB menu entry that chainloads the Windows Boot Manager, the tool, kernel-install plugin
+and GRUB block that start a kernel's signed boot image while Secure Boot is on (the
+sp11-kernel-secureboot packages carry the images), a dnf repository override
 that keeps Fedora's stock kernel packages (which lack the SP11 patch set) off the
 system, the first-boot finalizer and, built for the 5G SKU, a udev rule that keeps
 the modem's QMI port from ModemManager, a GNSS feed that passes the modem's
@@ -80,6 +83,16 @@ if [ -f /boot/grub2/grub.cfg ]; then
   /usr/libexec/sp11/sp11-grub-defaults || :
   /usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg >/dev/null 2>&1 || :
 fi
+# The signed boot images' copies on the ESP and their GRUB entries, after the menu: grub2-mkconfig rewrites the
+# options of every boot entry, and the signed entries take theirs from there. Nothing to do, and nothing done,
+# without an sp11-kernel-secureboot package.
+/usr/libexec/sp11/sp11-secureboot sync >/dev/null 2>&1 || :
+
+# On erase the copies on the ESP and the entries file go with the tool that keeps them.
+%preun
+if [ $1 -eq 0 ]; then
+  /usr/libexec/sp11/sp11-secureboot remove >/dev/null 2>&1 || :
+fi
 
 %triggerin -- alsa-ucm
 /usr/libexec/sp11/sp11-ucm-apply || :
@@ -99,10 +112,14 @@ fi
 /usr/lib/systemd/system/sp11-bluetooth-address@.service
 /usr/lib/systemd/system/sp11-first-boot.service
 /usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service
+/usr/lib/systemd/system/sp11-secureboot.service
+/usr/lib/systemd/system/multi-user.target.wants/sp11-secureboot.service
 /usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules
 /usr/lib/udev/rules.d/78-sp11-speakers.rules
 /usr/lib/kernel/install.d/15-sp11-surface.install
+/usr/lib/kernel/install.d/96-sp11-secureboot.install
 /etc/grub.d/29_sp11_windows
+/etc/grub.d/09_sp11_secureboot
 /usr/lib/dracut/dracut.conf.d/90-sp11.conf
 /usr/lib/modules-load.d/sp11-scmi-cpufreq.conf
 /usr/share/dnf5/repos.override.d/90-sp11-kernel.repo

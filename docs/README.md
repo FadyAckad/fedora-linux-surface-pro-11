@@ -7,19 +7,19 @@ short dated history at its end. A guide states only what a note holds the eviden
 
 ## Guides
 
-`overview` (how it works, glossary), `install`, `update`, `troubleshooting`, `build`, `build-rpms`, `sensors`,
-`bluetooth-pairings`, `new-release`, `design`, `support-rpm-history`, `layout`, `credits`.
+`overview` (how it works, glossary), `install`, `update`, `secure-boot`, `troubleshooting`, `build`, `build-rpms`,
+`sensors`, `bluetooth-pairings`, `new-release`, `design`, `support-rpm-history`, `layout`, `credits`.
 
 ## Notes
 
 Read the note named below before working on its area.
 
-- `docs/pipeline.md`: the repository's files and the build tree, the verification steps 35, 36, 46, 48 and 60,
+- `docs/pipeline.md`: the repository's files and the build tree, the verification steps 26, 35, 36, 46, 48 and 60,
   the version and content-pin rules, the WSL host, shell pitfalls. Read before touching `sp11.conf`, `scripts/`,
   `rpm/` or `payload/`.
 - `docs/hardware.md`: the tested unit and how the build identifies it, firmware, audio, Wi-Fi, Bluetooth, pen,
-  power supplies, video codec, USB-C, the live-only DSP blacklist, the Windows GRUB entry, the Bluetooth pairings
-  shared with Windows. Read before anything that depends on the device.
+  power supplies, video codec, USB-C, the TPM, the live-only DSP blacklist, the Windows GRUB entry, the Bluetooth
+  pairings shared with Windows. Read before anything that depends on the device.
 - `docs/sleep.md`: deep sleep and its wake sources, what kept the memory awake and the drain measured, the wakes
   without a wake interrupt, the power key under KDE, what a wake costs until the panel is lit. Read before touching
   sleep or power.
@@ -32,6 +32,10 @@ Read the note named below before working on its area.
 - `docs/fedora-media.md`: the live media, GRUB, Anaconda and the installer's viewer, kernel-install and BLS
   entries, the live initramfs and root, the Fedora 45 differences. Read before touching steps 50 and 60, GRUB, the
   installer path or a Fedora release switch.
+- `docs/secure-boot.md`: the installed system with Secure Boot on: why Fedora's own boot path starts no kernel
+  on this firmware, the route through GRUB's `chainloader` and a signed boot image, the stub, the add-on package,
+  `sp11-secureboot` and its entries file, GRUB under Secure Boot, what it protects. Read before touching steps 25
+  and 26, `payload/secureboot/`, `payload/sp11-secureboot*` or `payload/09_sp11_secureboot`.
 - `docs/sensors.md`: the Snapdragon Sensor Core stack (hexagonrpc, libssc, iio-sensor-proxy, sp11-sensors): the
   inputs from Windows, packaging, runtime design, the compass, known issues. Read before touching steps 45, 46
   and 75, `payload/sensors/` or the hexagonrpc fork (the submodule `hexagonrpc`).

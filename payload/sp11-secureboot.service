@@ -1,0 +1,19 @@
+# Keeps the signed boot images' copies on the ESP and their GRUB entries current (docs/secure-boot.md), at boot
+# and at shutdown, for what changes without kernel-install: an initramfs rebuilt by hand, an entry edited with
+# grubby. Without a signed boot image the tool does nothing.
+[Unit]
+Description=Surface Pro 11: copies and GRUB entries of the signed boot images
+ConditionKernelCommandLine=!rd.live.image
+ConditionPathExists=/usr/libexec/sp11/sp11-secureboot
+RequiresMountsFor=/boot /boot/efi
+After=sp11-first-boot.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/libexec/sp11/sp11-secureboot sync
+ExecStop=-/usr/libexec/sp11/sp11-secureboot sync
+TimeoutSec=300
+
+[Install]
+WantedBy=multi-user.target
