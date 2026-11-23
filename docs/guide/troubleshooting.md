@@ -21,6 +21,8 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   from USB-C (an ADSP restart resets the port). Both work once installed.
 - Once in a boot, a few minutes after it, the compute DSP's firmware can report a `sleep_stats` fatal error.
   remoteproc restarts that DSP by itself, and nothing on Linux uses it.
+- From kernel 7.3.5 revision 2 the start takes about 3 s longer: the TPM's first self test keeps the firmware busy,
+  and the start waits for it to read the EFI variables ([`docs/hardware.md`](../hardware.md), TPM).
 - HDR switches itself off when the tablet is rotated (GNOME 51.1): mutter loses the colour mode in the
   configuration it applies for a rotation. Fixed upstream for mutter 51.2; until Fedora ships it, switch HDR on
   again in Settings, Displays ([`docs/display.md`](../display.md), Known issues).

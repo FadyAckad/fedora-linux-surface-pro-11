@@ -17,8 +17,8 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Component | Version |
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
-| Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 1 (`7.3.5-300.sp11.1.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.16 |
+| Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 3 (`7.3.5-300.sp11.3.fc45.aarch64`) |
+| Support RPM (`sp11-surface-support`) | 3.17 |
 | Signed boot image for Secure Boot (`sp11-kernel-secureboot-<kernel>`, optional, built with your own key) | 1-1, with the boot stub `262.1-sp11.1` |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -36,11 +36,12 @@ Revision 5 (2026-11-16) passed the standard checks and its round's checks by han
 modem's PCIe controller brought the modem up in the one boot whose link was not up at first (2026-11-19). Kernel
 7.3.5 revision 1 (2026-11-19) passed the standard checks and its round's checks by hand, and opening the cover
 wakes the tablet again. With support 3.12 and a signed boot image (2026-11-21) Fedora started with Secure Boot on,
-through a sleep and with mobile data.
+through a sleep and with mobile data. Revision 2 (2026-11-22) passed the standard checks and its round's checks
+by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-23).
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
-| Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.1) |
+| Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.3) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Display with GPU acceleration | ✅ |
@@ -78,6 +79,9 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
   through a signed boot image and the kernel runs locked down (2026-11-21, kernel 7.3.5 revision 1), and Windows
   starts from GRUB's menu (2026-11-22). The installer needs it off, and so does a kernel without a signed image
   ([`docs/guide/secure-boot.md`](docs/guide/secure-boot.md), [`docs/secure-boot.md`](docs/secure-boot.md)).
+- Fedora has the tablet's TPM (Microsoft Pluton) from kernel 7.3.5 revision 2: `/dev/tpm0` and `/dev/tpmrm0`,
+  the firmware's boot measurements, and Windows uses the TPM as before (2026-11-22). Nothing in the build uses it
+  yet, and the start takes about 3 s longer with it ([`docs/hardware.md`](docs/hardware.md), TPM).
 - GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
   minutes ([`docs/gnss.md`](docs/gnss.md)).
 - HDR takes two parts: the kernel's DisplayPort HDR commits and a rebuild of Fedora's `libdisplay-info` that
@@ -149,8 +153,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.1.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.5-300.sp11.1.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+`Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.3.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.5-300.sp11.3.fc45.aarch64.iso`, with a `.sha256` beside it. Then
 write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
 ## Reporting results

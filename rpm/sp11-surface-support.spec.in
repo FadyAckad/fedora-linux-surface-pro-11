@@ -114,6 +114,8 @@ fi
 /usr/lib/systemd/system/multi-user.target.wants/sp11-first-boot.service
 /usr/lib/systemd/system/sp11-secureboot.service
 /usr/lib/systemd/system/multi-user.target.wants/sp11-secureboot.service
+%dir /usr/lib/systemd/system/systemd-tpm2-setup-early.service.d
+/usr/lib/systemd/system/systemd-tpm2-setup-early.service.d/sp11-initrd-only.conf
 /usr/lib/udev/rules.d/99-sp11-bluetooth-address.rules
 /usr/lib/udev/rules.d/78-sp11-speakers.rules
 /usr/lib/kernel/install.d/15-sp11-surface.install

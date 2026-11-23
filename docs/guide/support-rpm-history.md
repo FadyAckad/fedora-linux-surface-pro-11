@@ -82,3 +82,6 @@ in [`docs/verified.md`](../verified.md).
   a black box lay over the menu's middle while Windows started. Python is a requirement on every model now.
 - 3.16: the same Secure Boot route with less code. `sp11-secureboot try`, the one start through the signed
   entry with Secure Boot still off, is gone: the guide goes from enrolling the key to switching Secure Boot on.
+- 3.17: systemd's early TPM setup (`systemd-tpm2-setup-early.service`) runs only in the initramfs, which on
+  Fedora does not carry it. In the root, SELinux refused it a write to systemd's TPM measurement log at every start
+  with kernel 7.3.5 revision 2 or later ([`docs/hardware.md`](../hardware.md), TPM).

@@ -9,9 +9,9 @@ the Surface once, and the support RPM keeps GRUB's entries for it current. The f
 
 - With Secure Boot on, the firmware starts only signed boot loaders, GRUB only your signed image, and the kernel
   refuses modules its build did not sign.
-- The initramfs and the kernel's command line are not signed, as on any Fedora system, and Fedora has no TPM on
-  this tablet. Secure Boot therefore does not protect an unencrypted disk and cannot unlock an encrypted one by
-  itself.
+- The initramfs and the kernel's command line are not signed, as on any Fedora system. Fedora has the tablet's
+  TPM from kernel 7.3.5 revision 2, but nothing binds a disk key to it: Secure Boot does not protect an
+  unencrypted disk and does not unlock an encrypted one by itself.
 - Fedora's own boot entries start no kernel on this tablet while Secure Boot is on. A kernel without a signed
   image, an older one for instance, needs Secure Boot off.
 - If an update of Fedora's boot loaders ever breaks the route, switching Secure Boot off in the UEFI brings the
@@ -65,7 +65,7 @@ scripts/26-verify-secureboot-rpms.sh
 Copy the support RPM (3.12 or later) and the image's RPM to Fedora and install them, with Secure Boot still off:
 
 ```bash
-sudo dnf install ./sp11-surface-support-3.16-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.1.fc45.aarch64-1-1.fc45.aarch64.rpm
+sudo dnf install ./sp11-surface-support-3.17-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64-1-1.fc45.aarch64.rpm
 ```
 
 ```bash
@@ -139,7 +139,7 @@ starts after it. To take a signed image off as well, remove its package; its cop
 entry go with it:
 
 ```bash
-sudo dnf remove sp11-kernel-secureboot-7.3.5-300.sp11.1.fc45.aarch64
+sudo dnf remove sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64
 ```
 
 The enrolled key stays in shim's list.

@@ -7,7 +7,7 @@ pipeline:
 1. `sp11.conf` pins the base commit (`KERNEL_PATCH_BASE_COMMIT`); the submodule's gitlink pins the head.
 2. Step 10 writes the pinned commits out as a series; step 20 checks it against the pinned tree and feeds it to
    `kernel.spec`'s `linux-kernel-test.patch` slot (`docs/kernel.md`).
-3. `payload/kernel-local` sets the patch set's three new symbols and enables one driver Fedora leaves out.
+3. `payload/kernel-local` sets the patch set's four new symbols and enables one driver Fedora leaves out.
 4. Every change needs a new `KERNEL_SP11_REV`, which restarts at 1 with a new Fedora kernel version; a pushed
    branch is never rewritten: fixes go on top, a new base on a new branch.
 
@@ -362,6 +362,48 @@ after their trailers that names the source and the change.
   `sp11/7.3.5` (head `1b01078e`, tree `b341ab21`, the tree the kernel was built from), signed in place in the
   submodule without a clone of the fork.
 
+### 7.3.5 revision 2: the TPM
+
+- 0115 (this repository): `qcom_qseecom` creates a client device for `qcom.tz.mssecapp`, as for
+  `qcom.tz.uefisecapp`, where the firmware has loaded the application.
+- 0116 (this repository): `tpm_qcom_mssecapp`, the TPM driver for that device. Its probe asks for the interface
+  version (`0x4007`, 1.0 required) and the CRB (`0x4004`), which must lie outside System RAM, maps it and requires
+  the command and response buffers its control area names to lie inside it, after the control area.
+- 0116 registers a synchronous chip: `send()` copies the command in, sets the start register, sends `0x4003` and
+  reads the response once the start register is clear.
+- `kernel-local` builds the driver in (`CONFIG_TCG_QCOM_MSSECAPP=y`), so the TPM is there before the initramfs
+  runs.
+- Why: the TPM is reachable only through that application (`docs/hardware.md`, TPM). The requests are those of
+  Windows' drivers; a probe module sent them on the device on 2026-11-22.
+- Left out: power management, as in `tpm_ftpm_tee` and `tpm_svsm` (without the driver's callbacks the TPM core
+  sends nothing at a suspend; at a poweroff or reboot it sends `TPM2_Shutdown`), the unload request `0x4005`, and
+  a MAINTAINERS entry.
+- The built configuration differs from revision 1's by the new line and the build salt; the four module packages
+  hold the same 5723 modules, and both Denali device trees are byte for byte revision 1's.
+- Passed its device round on 2026-11-22, the day it was built: the standard checks, the TPM through the driver,
+  and Windows' use of the TPM afterwards (`docs/verified.md`). The kernel's start is 3.0 s slower, the probe's
+  time, 2.87 s of it the TPM's first self test (`docs/hardware.md`, TPM).
+- Committed on top of `sp11/7.3.5`'s head `1b01078e` (head `8de86335`, tree `d0ff3635`), signed in the scratch
+  clone; pushed with revision 3.
+
+### 7.3.5 revision 3: the TPM registered from a work item
+
+- 0117 (this repository): `tpm_qcom_mssecapp`'s probe queues the chip's registration (`tpm2_probe()`,
+  `tpm_chip_register()`) on `system_dfl_long_wq` and returns; `remove()` cancels the work and unregisters only a
+  registered chip.
+- Why: the driver binds while the SCM device probes, from the deferred probes `deferred_probe_initcall` waits for,
+  and the TPM's first self test after the firmware takes 2.87 s, so revision 2's kernel ran init 3 s later
+  (`docs/hardware.md`, TPM). An asynchronous probe would not help: `kernel_init()` waits for all async work
+  (`async_synchronize_full()`) before it runs init.
+- What else it changes: the TPM appears about 3 s into the initramfs instead of before it.
+- Passed its device round on 2026-11-23, the day it was built, with support 3.17: the standard checks and the TPM
+  as with revision 2; the kernel ran init at 0.63 s. The hardware still comes up about 3 s late: the self test
+  holds `qcom_scm`'s QSEECOM mutex, which the EFI variables need too (`docs/hardware.md`, TPM). The built
+  configuration is revision 2's but for the build salt, with the same modules and device trees.
+- No change to `kernel-local`'s effective lines. Pushed on 2026-11-23 from the submodule: `sp11/7.3.5` moved
+  forward by revisions 2 and 3's three commits (head `d18c8996`, tree `c9b5b03f`, the tree the kernel was built
+  from), signed in the scratch clone.
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -425,6 +467,9 @@ The patches by number, with their origin and what each is needed for.
 | 0112 | DPU: the mixers' DSPPs reserved with every mode set while mixers with a free one are left | this repository | a compositor's first gamma table without a mode set and the panel's power cycle (`docs/display.md`) |
 | 0113 | PCIe (qcom): the controller probed again, from a work item, once an endpoint whose link missed the probe asserts WAKE# | this repository | the 5G modem in a boot where it is not ready at the first probe (`docs/modem.md`, The link at boot) |
 | 0114 | 5G device tree: the modem's WAKE# (TLMM 151) in PCIe 5's controller node, with its pin state | this repository | 0113's wait for the modem |
+| 0115 | QSEECOM: a client device for the TrustZone application `qcom.tz.mssecapp` | this repository | 0116 |
+| 0116 | TPM: `tpm_qcom_mssecapp`, the TPM 2.0 behind `qcom.tz.mssecapp` (ACPI start method 14's CRB) | this repository | the TPM under Linux (`docs/hardware.md`, TPM) |
+| 0117 | TPM: `tpm_qcom_mssecapp` registers the chip from a work item | this repository | a kernel start that does not wait for the TPM's first self test |
 
 ## Left out of v23.2
 

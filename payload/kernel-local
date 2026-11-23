@@ -22,3 +22,7 @@ CONFIG_VIDEO_VD55G0=m
 # since 7.3 marked its driver BROKEN (it races with the secure world): a disabled node binds nothing and votes for
 # nothing.
 CONFIG_SM_VIDEOCC_8550=m
+
+# The TPM 2.0 driver the SP11 patch set adds, for the TPM behind the TrustZone application qcom.tz.mssecapp
+# (docs/hardware.md, TPM). Built in, so that the TPM's start-up, about 3 s, begins while the kernel boots.
+CONFIG_TCG_QCOM_MSSECAPP=y

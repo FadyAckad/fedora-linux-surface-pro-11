@@ -54,13 +54,16 @@ removal, SELinux.
 | 7.3.3 revision 4 | 2026-11-12 | `kernel-7.3.3-300.fc45` | The mixers' DSPPs reserved with every mode set: a compositor's first gamma table costs no mode set (`docs/display.md`) |
 | 7.3.3 revision 5 | 2026-11-16 | `kernel-7.3.3-300.fc45` | PCIe 5's controller probed again once a modem that missed the link at boot asserts WAKE# (`docs/modem.md`) |
 | 7.3.5 revision 1 | 2026-11-19 | `kernel-7.3.5-300.fc45` | Rebased onto `v7.3.5` (two patches now upstream dropped); the audio patch on 7.3.4's unmap and position fixes |
+| 7.3.5 revision 2 | 2026-11-22 | `kernel-7.3.5-300.fc45` | A driver for the TPM behind the TrustZone application `qcom.tz.mssecapp` (`docs/hardware.md`, TPM) |
+| 7.3.5 revision 3 | 2026-11-23 | `kernel-7.3.5-300.fc45` | The TPM registered from a work item: the kernel's start does not wait for the TPM's first self test |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built, 7.3.3 revision 4 the morning
 after (`docs/verified.md`; revisions 9 to 12 passed but for the country re-send, which the sleep's 11d result
 defeated until revision 13; 7.3.3 revision 1 but for a suspend started with the cover open, which revision 2
 holds; 7.3.3 revision 5 passed the standard checks in boots that did not call for its second probe, which
-first ran on 2026-11-19); the fork branch head and tree of each is in `docs/kernel-patches.md`. Before
+first ran on 2026-11-19; 7.3.5 revisions 2 and 3 with the hardware up about 3 s later, the TPM's first self
+test); the fork branch head and tree of each is in `docs/kernel-patches.md`. Before
 2026-09-23 the project built ooaklee's v23 kernel as `kernel-sp11` (`7.2.5-jg-0sp11v23.2-qcom-x1e`), with
 revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode switch).
 

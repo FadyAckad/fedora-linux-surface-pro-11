@@ -229,19 +229,108 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 
 ## TPM
 
-- None under Linux (the kernel arguments carry `systemd.tpm2_wait=0`). Windows reports Microsoft Pluton
-  (`tpmtool getdeviceinformation`: manufacturer `MSFT`, vendor `Pluton.TPM.Q`).
-- The ACPI `TPM2` table (OEM `QCOM`) names start method 14 and a control area in memory, without parameters, and
-  the DSDT has no TPM device. The TCG ACPI specification 1.5 lists 14 as "Reserved for future Memory Mapped I/O
-  Interface"; Linux's `include/acpi/actbl3.h` defines 13 (Pluton's CRB on other PCs) and 15 (Arm FF-A), not 14.
-- Windows' TPM device is a child of a TrustZone secure service of Qualcomm's gateway driver, whose configuration
-  maps that service to the application `qcom.tz.mssecapp`, expected loaded by the firmware (read from Windows,
-  2026-11-21). The service of Qualcomm's own TPM application, `qcom.tz.tpm`, has no device under Windows, and
-  `qcom_scm_qseecom_app_get_id()` finds only `qcom.tz.uefisecapp` under Linux (2026-11-03): the Linux driver for
-  `qcom.tz.tpm` that was in review upstream in 2026-11 does not fit this unit.
-- `qcom.tz.mssecapp` is loaded while Linux runs, as are `qcom.tz.winsecapp` and `qcom.tz.mfgmodemgmt`;
-  `qcom.tz.tpm` is not (name lookups from a kernel module, 2026-11-21). The request format of Microsoft's
-  application is not published.
+- Microsoft Pluton (`tpmtool getdeviceinformation` under Windows: manufacturer `MSFT`, vendor `Pluton.TPM.Q`), a
+  TPM 2.0 with PCRs in the SHA-256 bank only. Linux reaches it through the TrustZone application
+  `qcom.tz.mssecapp`. From kernel 7.3.5 revision 2 a driver for that path, `tpm_qcom_mssecapp` (patches 0115 and
+  0116, `docs/kernel-patches.md`), gives Fedora `/dev/tpm0` and `/dev/tpmrm0` (the device, 2026-11-22).
+- Up to 7.3.5 revision 1 Linux has no TPM, and every Linux start ends without the TPM's orderly shutdown; from
+  revision 2 the TPM core sends `TPM2_Shutdown` at every restart and poweroff, which this TPM refuses (Under
+  Linux, below). The kernel arguments still carry `systemd.tpm2_wait=0`.
+- The ACPI `TPM2` table (OEM `QCOM`) names start method 14 and a CRB control area at `0x81f10000`, without
+  parameters, and the DSDT has no TPM device. The TCG ACPI specification 1.5 lists 14 as "Reserved for future
+  Memory Mapped I/O Interface"; Linux's `include/acpi/actbl3.h` defines 13 (Pluton's CRB on other PCs) and 15
+  (Arm FF-A), not 14.
+
+### The path through TrustZone
+
+- Windows' `tpm.sys` maps start method 14 to a command response buffer (CRB, TCG PC Client Platform TPM Profile)
+  whose start signal is a request to `qcom.tz.mssecapp` until Windows' secure-processor driver is up, and goes over
+  that driver's channel afterwards. Qualcomm's `QcTrEE.sys` sends the request as the TrustZone call that
+  `qcom_scm_qseecom_app_send()` makes (function 48/0/1). Read from Windows' drivers on 2026-11-22.
+- `qcom.tz.mssecapp` is loaded while Linux runs, as are `qcom.tz.winsecapp` and `qcom.tz.mfgmodemgmt`.
+  Qualcomm's own `qcom.tz.tpm` is not, and has no device under Windows (name lookups from a kernel module,
+  2026-11-21): the Linux driver for `qcom.tz.tpm` that was in review upstream in 2026-11 does not fit this unit.
+- Each request is one 32-bit command ID, answered at offset 8 of the same buffer. `0x4007`: the interface version
+  (status, the ID echoed, `0x00010000` for 1.0). `0x4004`: the CRB (the ID echoed, size, 64-bit physical address,
+  status). `0x4003`: run the command in the CRB (the ID echoed, status).
+- `0x4005` unloads the application; Windows sends it once its own channel is up. The CRB's cmdReady and goIdle
+  never reach TrustZone: `QcTrEE.sys` clears them itself.
+- A command: Windows copies it into the CRB, requires the status register to be 0, writes 1 to the start register,
+  sends `0x4003`, waits for the start register to clear and reads the response. It also registers the CRB with
+  TrustZone as shared memory; the Surface's kernel runs TrustZone memory in the generic mode, without that.
+
+### On the device
+
+- 2026-11-22, 7.3.5 revision 1 with Secure Boot off, a read-only probe module: version 1.0; the CRB at the ACPI
+  table's `0x81f10000`, size `0x3000`, outside System RAM; the 48-byte control area, the command buffer right after
+  it and the response buffer after that, `0x1000` each.
+- Up to 7.2.15 the device tree reserved 64 KiB there (`tpm-control@81f10000`, `no-map`); 7.3's `hamoa.dtsi` has
+  no such node. The range is outside System RAM all the same on 7.3.5, which the probe and the driver check before
+  they map it.
+- The first command took 41 ms, the next ones 7 to 9 ms, and the start register was already clear when `0x4003`
+  returned: the request returns when the command is done.
+- TPM2_GetCapability and TPM2_PCR_Read answered with response code 0 and as under Windows: the manufacturer and
+  vendor, PCRs in the SHA-256 bank only, the four persistent handles Windows sees, PCR 0 as in Windows' log.
+- `qcom_tzmem_alloc()` rounds every request up to a page. One buffer per request, the command ID at 0 and the
+  answer at 8, from a pool set up like the `qcom.tz.uefisecapp` driver's, works; two buffers from a pool of one
+  page failed with -12 before any call reached TrustZone.
+
+### Under Linux
+
+- On the device on 2026-11-22, Secure Boot on: `systemd-analyze has-tpm2` answers `yes`; PCRs 0, 7 and 9 read
+  through the driver (`/sys/class/tpm/tpm0/pcr-sha256/`) equal the replay of the kernel's event log
+  (`binary_bios_measurements`, 22936 bytes), PCR 0 as in Windows' logs. PCR 0 read the same after a deep sleep and
+  after a restart; neither the driver nor the TPM core logged a line.
+- The TPM kept the four persistent keys Windows keeps and no other, and Windows afterwards found it ready, not
+  locked out, with Windows Hello as before.
+- The driver binds while the SCM device probes, from the deferred probes that `deferred_probe_initcall` waits
+  for, and its probe registers the TPM there: the kernel's start is 3.0 s slower than with revision 1 (`Run
+  /init` at 3.72 s, the qseecom clients at 0.54 s).
+- Traced at boot (function_graph, 2026-11-23): the probe takes 3.09 s, of which 2.87 s are the first
+  `TPM2_SelfTest` after the firmware; the other commands 8 to 40 ms each, the null-hierarchy key of Fedora's
+  `CONFIG_TCG_TPM2_HMAC=y` 0.15 s with its context save and flush. At runtime the self test takes 0.03 s.
+- Windows sends no `TPM2_SelfTest`: `tpm.sys` holds no such command, and `TpmTransport::DispatchCommand` waits and
+  sends a command again when the TPM answers `TPM_RC_TESTING`, so Pluton tests an algorithm when a command first
+  needs it (read from `tpm.sys`, 2026-11-23). Linux's TPM core sends `TPM2_SelfTest` at every registration
+  (`tpm2_auto_startup()`).
+- From revision 3 the probe queues the registration on a work item and returns: the kernel runs init at 0.63 s
+  and the TPM arrives at about 4.3 s, in the initramfs (2026-11-23). The initramfs's PCR 11 measurement still ran
+  with the TPM: PCR 11 is the stub's value extended with `enter-initrd`, `leave-initrd`, `sysinit` and `ready`.
+- The hardware still comes up about 3 s late with revision 3 (the touch controller's SPI at 4.36 s, 1.44 s with
+  revision 1). `qcom_scm` runs every QSEECOM call under one mutex (`qcom_scm_qseecom_call_lock`), the self test
+  is one such call, and the EFI variables go through QSEECOM too (`qcom.tz.uefisecapp`): systemd's first EFI
+  variable reads after init wait for the self test, and the initramfs's journald started at 3.88 s (0.97 s with
+  revision 1).
+- This TPM answers `TPM2_Shutdown` with `TPM_RC_FAILURE` (0x101) and refuses every command after it until a
+  reset (a software TPM goes on, as the specification has it). The kernel sends it at every restart and poweroff
+  and when the driver is unbound: harmless before a reset, but an unbound driver cannot bind again (2026-11-22).
+- One SELinux denial per boot: `systemd-tpm2-setup` (`init_t`) may not write `/run/log/systemd/tpm2-measure.log`
+  (`syslogd_var_run_t`), 2026-11-22. Fedora's dracut 111 puts no `systemd-tpm2-setup-early.service` into the
+  initramfs, so the unit runs in the root under SELinux and opens the log before it finds it may not create
+  NvPCRs; the refused write recorded nothing (systemd 262.1's source). From support 3.17 a drop-in
+  (`ConditionPathExists=/etc/initrd-release`) keeps the unit to the initramfs; nothing in systemd 262.1 reads the
+  SRK copies in `/run` that only it writes. On the device with 3.17 the unit is skipped and no denial is logged
+  (2026-11-23).
+
+### Measured boot and the disk
+
+- Windows keeps every boot's event log in `C:\Windows\Logs\MeasuredBoot`. PCRs 0 to 3, 5 and 6 of a Fedora start
+  equal those of Windows' starts before and after it (2026-11-22). PCR 7 follows the Secure Boot state; switching
+  Secure Boot off and on again restored its value.
+- PCR 8 stays empty: Fedora's GRUB measures nothing on this unit. PCR 9 holds the kernel EFI stub's command line
+  and initramfs events. With Secure Boot off (Fedora's own entry) PCRs 11 to 13 stay empty; with Secure Boot on
+  the signed image's stub measures into PCRs 11 and 12, and systemd extends PCR 11 after it (2026-11-22).
+- The kernel finds the firmware's event log at every start (`efi: ... TPMEventLog=...`).
+- IMA starts before `qcom_qseecom` sets up its clients: `ima: No TPM chip found, activating TPM-bypass!` 0.3 ms
+  before `setting up client for qcom.tz.uefisecapp`, in every boot with a kernel log on record.
+- systemd 262 runs its TPM units (`systemd-tpm2-setup`, the `systemd-pcr*` measurements) only when systemd-stub
+  measured the kernel into PCR 11 (`ConditionSecurity=measured-os`). `systemd-tpm2-setup` then takes the storage
+  key at `0x81000001` and the endorsement key at `0x81010001`, which Windows keeps, and creates either only for an
+  empty handle; it allocates no NvPCRs from an image without a PCR public key (systemd 262.1's source). On the
+  Secure Boot route the units ran on 2026-11-22: `SRK already stored in the TPM.`, `Skipped 4 NvPCR(s)`.
+- The TPM is shared with Windows: a sealed LUKS key lives in the LUKS header under Windows' storage key, and wrong
+  PINs would count against the lockout counter Windows Hello uses.
+- The root file system of the tested installation is btrfs without LUKS (2026-11-22).
 - The kernel's object interface to TrustZone (`qcomtee`) is up under Linux and reports its QTEE version at every
   start.
 

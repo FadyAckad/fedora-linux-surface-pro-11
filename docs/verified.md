@@ -521,3 +521,48 @@ One entry per round; the facts each established live in the topic notes.
 - Support 3.16 by `dnf upgrade` over 3.15 the same day, with Secure Boot on: `status` `ACTIVE` with the graphical
   menu and the kernel ready; the restart came up by itself through the signed entry (`ACTIVE`); Fedora and
   Windows started from the menu, and Escape led to the text menu (owner).
+
+## Kernel 7.3.5 revision 2: the TPM (2026-11-22)
+
+- Installed: the kernel RPMs `7.3.5-300.sp11.2.fc45` (revision 1 plus patches 0115 and 0116, the TPM driver built
+  in) and `sp11-kernel-secureboot-7.3.5-300.sp11.2.fc45.aarch64` 1-1 in one `dnf install` next to revision 1 and
+  7.3.3 revision 5 (dnf removed 7.3.3 revision 4), under support 3.16 with Secure Boot on. Both boots came
+  through revision 2's signed entry (`ACTIVE`).
+- Confirmed: the standard checks, but for the front camera's light and the crypto node, which the round did not
+  read (both device trees are byte for byte revision 1's). The bound devices are revision 1's plus
+  `tpm_qcom_mssecapp`; no kernel error in the journal that revision 1's rounds did not have.
+- The TPM: `/dev/tpm0` and `/dev/tpmrm0`, `systemd-analyze has-tpm2` `yes`. PCRs read through the driver: PCR 0
+  as in Windows' logs, PCR 8 empty, PCR 11 set by the signed image's stub. The kernel's event log replays to the
+  TPM's PCRs 0, 7 and 9. The TPM holds the four persistent keys Windows keeps and no other; `systemd-tpm2-setup`
+  found the storage key at `0x81000001` and allocated no NvPCR.
+- PCR 0 read the same after a deep sleep and in the second boot, after a restart in which Linux sent
+  `TPM2_Shutdown`; no line from the driver or the TPM core in either boot.
+- Checks of 2026-11-22 and 23 on the same kernel: the TPM answers `TPM2_Shutdown` with `TPM_RC_FAILURE` and
+  takes no command after it until a restart; traced at boot, the probe's 3.09 s are mostly the first
+  `TPM2_SelfTest` (2.87 s); the SELinux denial comes from `systemd-tpm2-setup-early.service`, which runs in the
+  root (`docs/hardware.md`, TPM).
+- Windows afterwards: Windows Hello as before (owner); `tpmtool getdeviceinformation` ready for storage and
+  attestation, not locked out, lockout counter 0.
+- Not as before: the kernel's start is 3.0 s slower. Every event after the TPM's probe comes that much later,
+  the modem's PCIe link at 4.77 s against 1.75 s with revision 1 and Secure Boot on (`docs/hardware.md`, TPM).
+  `sp11-diag` holds one SELinux denial, where revision 1 with Secure Boot on had none: `systemd-tpm2-setup` was
+  refused a write to `/run/log/systemd/tpm2-measure.log`.
+- By hand (owner): the round's by-hand checks passed.
+
+## Kernel 7.3.5 revision 3 and support 3.17: the TPM's registration, the SELinux denial (2026-11-23)
+
+- Installed: `sp11-surface-support` 3.17 by `dnf upgrade` over 3.16, then the kernel RPMs `7.3.5-300.sp11.3.fc45`
+  (revision 2 plus patch 0117) and `sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64` 1-1 in one
+  `dnf install` next to revisions 1 and 2 (dnf removed 7.3.3 revision 5), Secure Boot on. Both boots came through
+  revision 3's signed entry (`ACTIVE`).
+- Confirmed: the standard checks, but for the front camera's light and the crypto node; the bound devices are
+  revision 2's, and the journal has no error that revision 2's round did not have. The TPM as with revision 2:
+  its devices, `has-tpm2` `yes`, PCR 0, the event log's replay, the four persistent keys, PCR 0 after a sleep.
+- The kernel ran init at 0.63 s (revision 2: 3.72 s); `tpm2.target` came at 4.28 s, in the initramfs. PCR 11 is the
+  stub's value extended with `enter-initrd`, `leave-initrd`, `sysinit` and `ready`, as with revision 2.
+- Support 3.17: `systemd-tpm2-setup-early.service` skipped on its new condition, no SELinux denial in the journal
+  or in `sp11-diag`.
+- Not as before revision 2: the hardware still comes up about 3 s late (the touch controller's SPI at 4.36 s,
+  1.44 s with revision 1), as TrustZone serves the EFI variables only after the TPM's self test
+  (`docs/hardware.md`, TPM).
+- By hand (owner): the round's by-hand checks passed.
