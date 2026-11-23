@@ -592,3 +592,17 @@ One entry per round; the facts each established live in the topic notes.
   `ACTIVE` with Secure Boot on. `Enforcing` without a denial, no ADSP crash, the sensors online, the journal's
   errors those of revision 3's round.
 - By hand (owner): the live session's sound and battery level, and the round's checks, passed.
+
+## The TPM opens the encrypted root, support 3.19 (2026-11-23)
+
+- Installed: `sp11-surface-support` 3.19 by `dnf upgrade` over 3.18 on the previous entry's installation, Secure
+  Boot on. Then a GRUB password (`grub2-setpassword`), a key sealed in the TPM against PCR 7 in key slot 1
+  (`systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7`, in a start through the signed entry),
+  `tpm2-device=auto` in `crypttab`, and the initramfs rebuilt and copied for the signed entry.
+- Confirmed: the next start through the signed entry opened the root without a prompt, 1.3 s after
+  `systemd-cryptsetup` started (systemd 262.1 in the initramfs). `grub.cfg` and the Secure Boot menu hold the SP11
+  Windows entry with `--unrestricted`; `grub.cfg` also holds os-prober's Windows entry, without it. `Enforcing`
+  without a denial, no DSP crash, no provider waiting for `sync_state`, the journal's errors among those of the
+  previous round.
+- By hand (owner): GRUB's editor asked for `root` and the password, Windows started from GRUB's menu without it,
+  and the round's checks passed.

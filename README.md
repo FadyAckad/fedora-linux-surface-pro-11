@@ -18,7 +18,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
 | Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 3 (`7.3.5-300.sp11.3.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.18 |
+| Support RPM (`sp11-surface-support`) | 3.19 |
 | Signed boot image for Secure Boot (`sp11-kernel-secureboot-<kernel>`, optional, built with your own key) | 1-1, with the boot stub `262.1-sp11.1` |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -39,14 +39,15 @@ wakes the tablet again. With support 3.12 and a signed boot image (2026-11-21) F
 through a sleep and with mobile data. Revision 2 (2026-11-22) passed the standard checks and its round's checks
 by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-23). The same day a fresh
 installation from the ISO built with revision 3 and support 3.18, its root encrypted, passed its round's checks by
-hand, with Secure Boot on.
+hand, with Secure Boot on. With support 3.19 a key sealed in the TPM then opened that root without a prompt.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
 | Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.3) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
-| Encrypted root (LUKS2), the passphrase typed on the Type Cover at every start | ✅ |
+| Encrypted root (LUKS2), the passphrase typed on the Type Cover at the start | ✅ |
+| Encrypted root opened by the TPM at the start, with Secure Boot on and a GRUB password | ✅ |
 | Display with GPU acceleration | ✅ |
 | Backlight (brightness slider) | ✅ |
 | HDR on the built-in display (GNOME: Settings, Displays), with the `libdisplay-info` RPM, from kernel 7.3.3 revision 3 | ✅ |
@@ -83,8 +84,10 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
   starts from GRUB's menu (2026-11-22). The installer needs it off, and so does a kernel without a signed image
   ([`docs/guide/secure-boot.md`](docs/guide/secure-boot.md), [`docs/secure-boot.md`](docs/secure-boot.md)).
 - Fedora has the tablet's TPM (Microsoft Pluton) from kernel 7.3.5 revision 2: `/dev/tpm0` and `/dev/tpmrm0`,
-  the firmware's boot measurements, and Windows uses the TPM as before (2026-11-22). Nothing in the build uses it
-  yet, and the start takes about 3 s longer with it ([`docs/hardware.md`](docs/hardware.md), TPM).
+  the firmware's boot measurements, and Windows uses the TPM as before (2026-11-22). With Secure Boot on, a key
+  sealed in it opens an encrypted root at the start (2026-11-23,
+  [`docs/guide/secure-boot.md`](docs/guide/secure-boot.md)). The start takes about 3 s longer with the TPM
+  ([`docs/hardware.md`](docs/hardware.md), TPM).
 - GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
   minutes ([`docs/gnss.md`](docs/gnss.md)).
 - HDR takes two parts: the kernel's DisplayPort HDR commits and a rebuild of Fedora's `libdisplay-info` that
@@ -108,8 +111,6 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
 - USB-C data works with the plug either way round since kernel 7.2.15 revision 1: a USB 3 stick runs at
   5000 Mb/s on both ports, turned over as well. Before, it was not found turned over, because the retimer got its
   mode before it was told of the connection ([`docs/hardware.md`](docs/hardware.md), USB-C data).
-- In the live session, audio and battery status are unavailable because the audio DSP stays off while running
-  from USB-C. Both work once installed.
 - Under KDE Plasma, auto-rotation could stop until iio-sensor-proxy was restarted, and with automatic brightness on
   the tablet did not stay asleep; the sensors RPMs fix both since libssc 0.4.4-3 (2026-10-07) and iio-sensor-proxy
   3.9-3.sp11.2 (2026-10-08) ([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
@@ -176,7 +177,7 @@ Start here:
   first boot.
 - [`docs/guide/update.md`](docs/guide/update.md): updating the support RPM and installing a new SP11 kernel.
 - [`docs/guide/secure-boot.md`](docs/guide/secure-boot.md): switching Secure Boot on for the installed system,
-  with a signing key of your own.
+  with a signing key of your own, and opening an encrypted root with the TPM.
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md): diagnostics, known limitations, what earlier
   releases fixed.
 

@@ -143,6 +143,14 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   was loaded.
 - Errors printed after `terminal_output gfxterm` do not reach a serial log; the signed entries switch to
   `console` first.
+- A GRUB password works under Secure Boot: Fedora's signed image (2.12-81) has `password_pbkdf2` built in, and
+  with `/boot/grub2/user.cfg` from `grub2-setpassword` Fedora's `01_users` block sets the superuser `root`. Pressing
+  `e` then asked for `root` and the password (2026-11-23). Entries marked `--unrestricted` start without it: the
+  signed entries, Fedora's own (`grub_arg --unrestricted` from `20-grub.install`) and, from support 3.19, the SP11
+  Windows entry, which started Windows without the password. UEFI Firmware Settings and os-prober's Windows entry
+  carry no `--unrestricted` and need it.
+- The graphical menu (`sp11-secureboot-menu.cfg`) copies only the blocks of `29_sp11_windows` and
+  `30_uefi-firmware`; the text menu behind Escape is `grub.cfg`'s own, with whatever else `grub2-mkconfig` wrote.
 
 ## What it protects
 
@@ -150,9 +158,11 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   refuses unsigned modules and writes to its own memory. The only lockdown lines in the device's boots are
   hibernation's, which the unit does not use.
 - Not protected: the initramfs and the command line, which are not signed, and the disk's content while the root
-  is not encrypted. Since 2026-11-23 the tested installation's root is in LUKS2, opened with a passphrase on the
-  signed route as well; Linux has the TPM from kernel 7.3.5 revision 2 (`docs/hardware.md`, TPM), but no disk key
-  is bound to it.
+  is not encrypted. The tested installation's root is in LUKS2 with a key sealed in the TPM and bound to PCR 7
+  (`docs/hardware.md`, TPM), which opens it at the start (2026-11-23). PCR 7 does not cover the command line or the
+  initramfs, so GRUB's editor would reach a shell with the root open: a GRUB password (`grub2-setpassword`) guards
+  the editor and GRUB's command line, while Fedora's and Windows' entries start without it. Replacing the unsigned
+  initramfs copy on the ESP remains open to someone with the tablet.
 - Whoever holds the signing key can sign an image the Surface accepts.
 
 ## What the device showed
@@ -210,3 +220,5 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   less code: no `try`, no rules for GRUB's default (its fallback to the first entry does the same), no checks
   for cases this unit does not have, and no sandbox tests (step 26 checks the installed packages); confirmed on
   the device the same day.
+- 2026-11-23: a GRUB password under Secure Boot, the Windows entry `--unrestricted` (support 3.19), and the
+  encrypted root opened by a key sealed in the TPM against PCR 7; confirmed on the device.

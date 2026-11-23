@@ -13,7 +13,8 @@ service do underneath is in [`docs/fedora-media.md`](../fedora-media.md).
    media boot without `quiet`, so a slow start can be told from a frozen one.
 5. Run "Install to Hard Drive" and partition by hand, leaving Windows' two partitions as they are: Fedora's own
    EFI System partition (FAT32, `/boot/efi`, 1 GB or more), `/boot` (ext4, 2 GB, not encrypted) and `/` (btrfs,
-   encrypted with LUKS2 if you want it; the passphrase is typed on the Type Cover at every start). "Share disk
+   encrypted with LUKS2 if you want it; the passphrase is typed on the Type Cover at the start, or the TPM opens
+   it once Secure Boot is on: [`secure-boot.md`](secure-boot.md), 6). "Share disk
    with other operating systems" would put `/boot/efi` on Windows' EFI partition (276 MB on the tested unit),
    too small for the Secure Boot copies ([`docs/fedora-media.md`](../fedora-media.md), Anaconda). Keep a single
    Fedora installation on the machine: a second one takes over the GRUB menu and hides the first.

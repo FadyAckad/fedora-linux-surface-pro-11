@@ -17,8 +17,6 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
 
 ## Known limitations
 
-- In the live session, audio and battery status are unavailable because the audio DSP stays off while running
-  from USB-C (an ADSP restart resets the port). Both work once installed.
 - Once in a boot, a few minutes after it, the compute DSP's firmware can report a `sleep_stats` fatal error.
   remoteproc restarts that DSP by itself, and nothing on Linux uses it.
 - From kernel 7.3.5 revision 2 the start takes about 3 s longer: the TPM's first self test keeps the firmware busy,
@@ -66,6 +64,10 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   text. A menu in small text from the start means the images could not be drawn
   ([`docs/guide/secure-boot.md`](secure-boot.md), GRUB's menu while Secure Boot is on). Fedora starts by itself
   after ten seconds either way.
+- Since Fedora's os-prober 1.81-13 (an update of 2026-11-22), GRUB's menu lists `Windows Boot Manager (on …)`
+  twice; the Secure Boot menu lists it once. The second entry is os-prober's: with a GRUB password set it asks
+  for the password, the first does not ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and
+  modules).
 - Boot messages seen on the tested unit that mean nothing:
   - `qcom_pmic_glink … Failed to create device link` for the PD and USB nodes (probe deferral, retried);
   - `surface_hid … unexpected descriptor length` for one Surface Aggregator endpoint nothing depends on;
@@ -118,6 +120,9 @@ Systems running an older build of the RPMs can show these; the release named fix
 - Opening the cover not waking the tablet from sleep, the power key waking it, with kernel 7.3.3 revisions 2
   and 3: the cover wakes it again with support RPM 3.11 and kernel 7.3.3 revision 5 or later
   ([`docs/sleep.md`](../sleep.md), Sleep state and wake sources).
+- No sound and no battery status in the live session: fixed in the ISO built with support RPM 3.18
+  (2026-11-23), whose live initramfs starts the audio DSP ([`docs/hardware.md`](../hardware.md), The DSP on the
+  live media).
 
 ## The power button under KDE Plasma
 

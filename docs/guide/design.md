@@ -45,10 +45,12 @@ bullet is in the working note it names.
   arguments added to each entry. Installed menu order: Fedora entries, Windows Boot Manager, UEFI Firmware Settings.
   [`docs/fedora-media.md`](../fedora-media.md).
 - Windows dual-boot: `/etc/grub.d/29_sp11_windows` finds the ESP holding `EFI/Microsoft/Boot/bootmgfw.efi` (a
-  separate Windows ESP is fine) and adds a chainload entry, since Fedora's os-prober cannot find Windows on
-  aarch64. The `chainloader` command is built into Fedora's current GRUB image; for an image without it the
-  `chain` module is copied from `grub2-efi-aa64-modules` to `/boot/grub2/arm64-efi/`, loadable while Secure Boot is
-  off. [`docs/hardware.md`](../hardware.md).
+  separate Windows ESP is fine) and adds a chainload entry, `--unrestricted` as Fedora's own (with a GRUB password
+  Windows still starts without it), which the Secure Boot menu copies. Fedora's os-prober finds Windows on aarch64
+  only from 1.81-13, an update newer than the live image, and then adds a second entry of the same name
+  ([`docs/fedora-media.md`](../fedora-media.md)). The `chainloader` command is built into Fedora's current GRUB
+  image; for an image without it the `chain` module is copied from `grub2-efi-aa64-modules` to
+  `/boot/grub2/arm64-efi/`, loadable while Secure Boot is off. [`docs/hardware.md`](../hardware.md).
 - Secure Boot, optional: Fedora's own boot entries start no kernel on this firmware while Secure Boot is on,
   because shim's loader does not return. GRUB's `chainloader` does start an image, so each kernel gets one file
   signed with the owner's key (a boot stub, the kernel and the device tree), built by step 25 and packaged

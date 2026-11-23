@@ -9,9 +9,9 @@ the Surface once, and the support RPM keeps GRUB's entries for it current. The f
 
 - With Secure Boot on, the firmware starts only signed boot loaders, GRUB only your signed image, and the kernel
   refuses modules its build did not sign.
-- The initramfs and the kernel's command line are not signed, as on any Fedora system. Fedora has the tablet's
-  TPM from kernel 7.3.5 revision 2, but nothing binds a disk key to it: Secure Boot does not protect an
-  unencrypted disk and does not unlock an encrypted one by itself.
+- The initramfs and the kernel's command line are not signed, as on any Fedora system. Secure Boot does not
+  protect an unencrypted disk; an encrypted root can be opened by the tablet's TPM once Secure Boot is on
+  (section 6).
 - Fedora's own boot entries start no kernel on this tablet while Secure Boot is on. A kernel without a signed
   image, an older one for instance, needs Secure Boot off.
 - If an update of Fedora's boot loaders ever breaks the route, switching Secure Boot off in the UEFI brings the
@@ -65,7 +65,7 @@ scripts/26-verify-secureboot-rpms.sh
 Copy the support RPM (3.12 or later) and the image's RPM to Fedora and install them, with Secure Boot still off:
 
 ```bash
-sudo dnf install ./sp11-surface-support-3.18-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64-1-1.fc45.aarch64.rpm
+sudo dnf install ./sp11-surface-support-3.19-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64-1-1.fc45.aarch64.rpm
 ```
 
 ```bash
@@ -103,6 +103,53 @@ sudo /usr/libexec/sp11/sp11-secureboot status
 ```
 
 The last line reads `RESULT: ACTIVE: this boot came through a signed entry with Secure Boot on`.
+
+## 6. Open the encrypted root with the TPM, optional
+
+For a root encrypted with LUKS2 ([`install.md`](install.md), step 5) and support 3.19 or later. A second key,
+sealed in the TPM and bound to PCR 7 (the Secure Boot state and keys), opens the root at the start; the passphrase
+stays as the fallback. PCR 7 does not cover the kernel's command line, so set a GRUB password first: it guards
+GRUB's editor and command line, while Fedora's entries and the SP11 Windows entry start without it. GRUB asks for
+the user `root` and this password, typed in the US layout:
+
+```bash
+sudo grub2-setpassword
+```
+
+Then, in a start through the signed entry (`status` reads `ACTIVE`), enroll the key; it asks for the disk's
+passphrase:
+
+```bash
+sudo systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7 /dev/nvme0n1p5
+```
+
+It reports `New TPM2 token enrolled as key slot 1.`. `/dev/nvme0n1p5` is the tested unit's encrypted partition;
+`lsblk -f` shows yours as `crypto_LUKS`. Tell the start to use the TPM, rebuild the initramfs and copy it for the
+signed entry:
+
+```bash
+sudo sed -i '/^luks-/s/$/,tpm2-device=auto/' /etc/crypttab
+```
+
+```bash
+sudo dracut -f
+```
+
+```bash
+sudo /usr/libexec/sp11/sp11-secureboot sync
+```
+
+The next start opens the root without a prompt (1.3 s on the tested unit). The passphrase opens it instead when
+PCR 7 differs, with Secure Boot off or after its keys changed (a Windows update of the revocation list among
+them), and after the TPM was cleared in Windows. After a key change or a cleared TPM, enroll the key anew in a
+start through the signed entry; the same command removes the old one:
+
+```bash
+sudo systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto --tpm2-pcrs=7 /dev/nvme0n1p5
+```
+
+What stays open: someone with the tablet who replaces the unsigned initramfs copy on the EFI partition
+([`docs/secure-boot.md`](../secure-boot.md), What it protects).
 
 ## GRUB's menu while Secure Boot is on
 
@@ -143,3 +190,22 @@ sudo dnf remove sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64
 ```
 
 The enrolled key stays in shim's list.
+
+With Secure Boot off the TPM key no longer matches, and the passphrase opens the root. To remove the key, the
+`crypttab` option and the GRUB password:
+
+```bash
+sudo systemd-cryptenroll --wipe-slot=tpm2 /dev/nvme0n1p5
+```
+
+```bash
+sudo sed -i '/^luks-/s/,tpm2-device=auto$//' /etc/crypttab
+```
+
+```bash
+sudo dracut -f
+```
+
+```bash
+sudo rm /boot/grub2/user.cfg
+```

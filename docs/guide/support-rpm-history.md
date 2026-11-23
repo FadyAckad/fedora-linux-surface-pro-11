@@ -88,3 +88,6 @@ in [`docs/verified.md`](../verified.md).
 - 3.18: the live media add no kernel arguments of their own any more: their initramfs starts the audio DSP, as an
   installed system's does, because with kernel 7.3.5 USB-C carries no data without it. On an installed system it
   changes nothing ([`docs/hardware.md`](../hardware.md), The DSP on the live media).
+- 3.19: the Windows entry is `--unrestricted`, as Fedora's own entries: with a GRUB password (`grub2-setpassword`)
+  Windows starts without it, while the password guards GRUB's editor and command line
+  ([`docs/guide/secure-boot.md`](secure-boot.md), 6).

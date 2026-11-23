@@ -70,9 +70,12 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 - The ESP stub `EFI/fedora/grub.cfg`, which Anaconda writes with `gen_grub_cfgstub`, does
   `search --fs-uuid <boot uuid>` and `configfile $prefix/grub.cfg` with `$prefix` set to `/boot/grub2`; it names
   one /boot, so a second Fedora on the same ESP takes the menu over.
-- Fedora's aarch64 os-prober has no EFI Windows probe (`os-probes/mounted/efi/` holds only `05shell`), so
-  `GRUB_DISABLE_OS_PROBER=false` never finds Windows; the Windows generator is `29_sp11_windows`, named to precede
-  `30_uefi-firmware` (UEFI Firmware Settings) in `/etc/grub.d/` order.
+- The Windows generator is `29_sp11_windows`, named to precede `30_uefi-firmware` (UEFI Firmware Settings) in
+  `/etc/grub.d/` order. Fedora's aarch64 os-prober up to 1.81-12, the live image's, finds no Windows: its build
+  sets no `ARCH` for aarch64, so the arm64 probes land in `os-probes/mounted/arm64/`, which os-prober never runs,
+  and `mounted/efi/` holds only `05shell`. 1.81-13 (update FEDORA-2026-0e1a5d7a05, stable on 2026-11-22) sets
+  `ARCH=arm64`: on the installation of 2026-11-23 `grub.cfg` then held a second `Windows Boot Manager (on …)`
+  entry (`osprober-efi-…`), without `--unrestricted`.
 
 ## Live initramfs and live menu
 

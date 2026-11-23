@@ -45,8 +45,10 @@ uuid=$(blkid -c /dev/null -s UUID -o value "$found_dev")
 [ -n "$uuid" ] || exit 0
 gettext_printf "Adding boot menu entry for Windows Boot Manager on %s ...\n" "$found_dev" >&2
 
+# --unrestricted, as Fedora's own entries: with a GRUB password (grub2-setpassword) Windows starts without it, and
+# the password guards editing and GRUB's command line.
 cat << EOF2
-menuentry 'Windows Boot Manager (on $found_dev)' --class windows --class os \$menuentry_id_option 'sp11-windows-$uuid' {
+menuentry 'Windows Boot Manager (on $found_dev)' --class windows --class os --unrestricted \$menuentry_id_option 'sp11-windows-$uuid' {
 	insmod part_gpt
 	insmod fat
 	insmod chain

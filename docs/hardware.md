@@ -337,7 +337,16 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - The TPM is shared with Windows: a sealed LUKS key lives in the LUKS header under Windows' storage key, and wrong
   PINs would count against the lockout counter Windows Hello uses.
 - Since 2026-11-23 the tested installation's root is btrfs in LUKS2 (`aes-xts-plain64`, 512-bit key), opened in
-  the initramfs about 2 s after the passphrase; no key is bound to the TPM.
+  the initramfs about 2 s after the passphrase. Its second key slot holds a key sealed in the TPM and bound to
+  PCR 7 (`systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7`, enrolled in a start through the signed entry):
+  with `tpm2-device=auto` in `crypttab` the next start opened the root in 1.3 s without a prompt, and
+  `systemd-tpm2-setup` found the TPM's storage root key unchanged (2026-11-23).
+- systemd 262 tries the TPM token only when `crypttab` names `tpm2-device=`. A TPM that is not there yet is
+  waited for, up to `token-timeout` (30 s), only when the firmware or the boot loader reports one: the signed
+  image's stub sets `LoaderTpm2ActivePcrBanks`, while the device-tree start has no ACPI `TPM2` table. A policy that
+  does not match (`TPM policy does not match current system state`) and a timeout both lead to the passphrase
+  prompt. `systemd.tpm2_wait=0` stops only `tpm2.target` from being a synchronisation point (systemd 262.1's
+  source; the refusal and the wipe run against a software TPM).
 - The kernel's object interface to TrustZone (`qcomtee`) is up under Linux and reports its QTEE version at every
   start.
 
