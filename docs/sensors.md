@@ -23,7 +23,8 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   when the channel probes (`qcom_scm_assign_mem()` for the node's two `qcom,vmids`; `9e47ad9c562e`), and a
   refusal fails the probe, leaving no `/dev/fastrpc-adsp`. It passes on this firmware: 7.3.5 revision 1 has the
   device and the five sensors' readings (2026-11-19).
-- Installed system only: the live session blacklists the ADSP (`docs/hardware.md`).
+- Installed system: the live media up to 2026-11-23 blacklisted the ADSP; newer media start it in the live session
+  (`docs/hardware.md`, The DSP on the live media), where the stack is untested.
 
 ## Stack
 
@@ -197,10 +198,10 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   `systemd-tmpfiles --create sp11-sensors.conf`. It asserts the user, the module, the fastrpc-owned registry copy
   and a live initramfs without the stack, puts the RPMs under `/sp11/rpms` and installs missing runtime
   dependencies from `build/cache/rpm-deps` (`protobuf3-c` provides `protobuf-c`).
-- The live session never starts hexagonrpcd or the online unit (the ADSP is blacklisted); Anaconda's rsync carries
-  the policy store, `/etc/passwd` with `fastrpc` and the registry copy, so the installed system runs the stack from
-  its first boot. Step 46 installs the RPMs with `--replacepkgs` and the previous release with `--oldpackage`;
-  step 60 checks them in the ISO.
+- Without the ADSP (live media up to 2026-11-23) nothing starts hexagonrpcd or the online unit; Anaconda's rsync
+  carries the policy store, `/etc/passwd` with `fastrpc` and the registry copy, so the installed system runs the
+  stack from its first boot. Step 46 installs the RPMs with `--replacepkgs` and the previous release with
+  `--oldpackage`; step 60 checks them in the ISO.
 
 ## ADSP safety
 

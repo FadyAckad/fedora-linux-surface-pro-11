@@ -150,8 +150,9 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   refuses unsigned modules and writes to its own memory. The only lockdown lines in the device's boots are
   hibernation's, which the unit does not use.
 - Not protected: the initramfs and the command line, which are not signed, and the disk's content while the root
-  is not encrypted. Linux has the TPM from kernel 7.3.5 revision 2 (`docs/hardware.md`, TPM), but no disk key is
-  bound to it: the root of the tested installation is not encrypted.
+  is not encrypted. Since 2026-11-23 the tested installation's root is in LUKS2, opened with a passphrase on the
+  signed route as well; Linux has the TPM from kernel 7.3.5 revision 2 (`docs/hardware.md`, TPM), but no disk key
+  is bound to it.
 - Whoever holds the signing key can sign an image the Surface accepts.
 
 ## What the device showed

@@ -18,7 +18,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
 | Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 3 (`7.3.5-300.sp11.3.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.17 |
+| Support RPM (`sp11-surface-support`) | 3.18 |
 | Signed boot image for Secure Boot (`sp11-kernel-secureboot-<kernel>`, optional, built with your own key) | 1-1, with the boot stub `262.1-sp11.1` |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -37,13 +37,16 @@ modem's PCIe controller brought the modem up in the one boot whose link was not 
 7.3.5 revision 1 (2026-11-19) passed the standard checks and its round's checks by hand, and opening the cover
 wakes the tablet again. With support 3.12 and a signed boot image (2026-11-21) Fedora started with Secure Boot on,
 through a sleep and with mobile data. Revision 2 (2026-11-22) passed the standard checks and its round's checks
-by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-23).
+by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-23). The same day a fresh
+installation from the ISO built with revision 3 and support 3.18, its root encrypted, passed its round's checks by
+hand, with Secure Boot on.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
 | Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.3) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
+| Encrypted root (LUKS2), the passphrase typed on the Type Cover at every start | ✅ |
 | Display with GPU acceleration | ✅ |
 | Backlight (brightness slider) | ✅ |
 | HDR on the built-in display (GNOME: Settings, Displays), with the `libdisplay-info` RPM, from kernel 7.3.3 revision 3 | ✅ |

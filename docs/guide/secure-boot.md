@@ -65,7 +65,7 @@ scripts/26-verify-secureboot-rpms.sh
 Copy the support RPM (3.12 or later) and the image's RPM to Fedora and install them, with Secure Boot still off:
 
 ```bash
-sudo dnf install ./sp11-surface-support-3.17-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64-1-1.fc45.aarch64.rpm
+sudo dnf install ./sp11-surface-support-3.18-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64-1-1.fc45.aarch64.rpm
 ```
 
 ```bash

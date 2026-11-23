@@ -85,3 +85,6 @@ in [`docs/verified.md`](../verified.md).
 - 3.17: systemd's early TPM setup (`systemd-tpm2-setup-early.service`) runs only in the initramfs, which on
   Fedora does not carry it. In the root, SELinux refused it a write to systemd's TPM measurement log at every start
   with kernel 7.3.5 revision 2 or later ([`docs/hardware.md`](../hardware.md), TPM).
+- 3.18: the live media add no kernel arguments of their own any more: their initramfs starts the audio DSP, as an
+  installed system's does, because with kernel 7.3.5 USB-C carries no data without it. On an installed system it
+  changes nothing ([`docs/hardware.md`](../hardware.md), The DSP on the live media).

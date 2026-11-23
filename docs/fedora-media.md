@@ -78,7 +78,8 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 
 - The stock live initramfs is `dracut --no-hostonly --no-hostonly-cmdline` with `--install /.profile`,
   `--add "dmsquash-live livenet pollcdrom"` and `--omit multipath`; step 50 runs the same in a chroot of the live
-  root, plus the Fedora 45 omissions below.
+  root, plus the omission below, with the support RPM's dracut drop-in active: the live initramfs starts the ADSP
+  (`docs/hardware.md`, The DSP on the live media).
 - Fedora's live `grub.cfg` is kept (`set default="1"` selects the media check, `timeout=10`). Step 50 changes only
   what the SP11 needs: the console-font block replaces `terminal_output console` after the
   `search --file --set=root <marker>` line, every `linux` line gets `$sp11_args` (installed plus live-only
@@ -97,6 +98,16 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
   `systemd.tpm2_wait`) reach the boot args from the live command line, plus `rhgb quiet` and storage arguments;
   `modprobe.blacklist`, `rd.driver.blacklist`, the soundwire argument and the live root's `/etc/default/grub`
   never do. Anaconda's commands and their output are in `/var/log/anaconda/program.log`.
+- The Web UI's "Share disk with other operating systems" partitions the free space automatically and reuses the
+  first valid EFI System partition of the boot disk in name order (`schedule_partitions()` in
+  `modules/storage/partitioning/automatic/utils.py`): on this unit Windows' 276 MB one, also when Fedora's own
+  exists beside it. Run on a disk image with this unit's layout, Anaconda 45.30's storage code chose it whether
+  Fedora's old EFI partition was deleted or kept (2026-11-23). "Encrypt my data" sits on the Storage
+  configuration page, which the Web UI hides for "Mount point assignment" and "Reinstall Fedora" (that one keeps
+  `/home`); "Use entire disk" removes Windows.
+- Partitioned by hand (2026-11-23: Fedora's own 2 GB EFI partition, `/boot` ext4, `/` btrfs in LUKS2), Anaconda
+  writes the `crypttab` line (`none discard,x-initrd.attach`) and `rd.luks.uuid=` into the boot entries, which the
+  Secure Boot entries carry over (`docs/secure-boot.md`).
 
 Installation order, from `modules/boss/installation.py`:
 
@@ -160,8 +171,8 @@ Installation order, from `modules/boss/installation.py`:
   and `blkid -p -s PART_ENTRY_TYPE -o value DEV`.
 - `%systemd_postun_with_restart NAME@.service` on a template unit is a no-op (`systemctl try-restart` rejects a
   name without instance); restart `'NAME@*.service'` explicitly.
-- dracut `install_items` applies to `--no-hostonly` builds too, so step 50 parks the support RPM's drop-in during
-  the live initramfs run and installs only the GPU zap shader.
+- dracut `install_items` applies to `--no-hostonly` builds too: the support RPM's drop-in brings the Denali
+  firmware into the live initramfs as well, which since 2026-11-23 starts the ADSP.
 - `rpm --noscripts` also skips triggers, so step 50 runs `sp11-ucm-apply` in the chroot itself; on a normal install
   the support RPM's `%triggerin -- alsa-ucm` and `%triggerin -- grub2-efi-aa64-modules` fire for its own
   installation too, and systemd's file triggers reload systemd and udev, so the spec needs no `%post`.
@@ -180,8 +191,8 @@ Installation order, from `modules/boss/installation.py`:
 
 The 45 1.4 Workstation image carries Anaconda 45.30 with anaconda-webui 90 and Firefox 158 (no slitherer), dnf5
 5.4.6, dracut 111, grub2 2.12-81, systemd 262, rpm 6.1, fmt 12.1 without spdlog, every `SENSORS_DEPS_PKGS`
-capability (`protobuf-c` from `protobuf3-c`), the stock kernel set below at 7.2.11-300 and the two dracut modules
-`LIVE_DRACUT_OMIT` names; its `os-release` says `VERSION_ID=45`, `RELEASE_TYPE=stable`.
+capability (`protobuf-c` from `protobuf3-c`), the stock kernel set below at 7.2.11-300 and the aarch64 dracut
+modules `devicetree-firmware` and `qcom-adsp`; its `os-release` says `VERSION_ID=45`, `RELEASE_TYPE=stable`.
 
 ### Building for the target release
 
@@ -219,9 +230,10 @@ capability (`protobuf-c` from `protobuf3-c`), the stock kernel set below at 7.2.
 - No rescue image (`dracut_rescue_image="no"` in the support RPM's drop-in): `51-dracut-rescue.install` copies the
   kernel's BLS entry with the version replaced, so `devicetree /dtb-<version>/…` becomes
   `/dtb-0-rescue-<machine-id>/…`, a directory nothing creates.
-- `LIVE_DRACUT_OMIT` in step 50 omits two aarch64 dracut modules that defeat the live-media policy:
-  `devicetree-firmware`, whose `--no-hostonly` path globs `$fw_dir/qcom/x1e80100/*/*/*.mbn|elf` (the Denali set),
-  and `qcom-adsp`, which modprobes `qcom_q6v5_pas` from a pre-udev hook past the live-only DSP blacklist.
+- `LIVE_DRACUT_OMIT` in step 50 omits `devicetree-firmware`, whose `--no-hostonly` path globs
+  `$fw_dir/qcom/x1e80100/*/*/*.mbn|elf`, the Denali set the support RPM's drop-in installs anyway. `qcom-adsp` stays
+  since 2026-11-23: it modprobes `qcom_q6v5_pas` from a pre-udev hook, before the live root is looked for. Up to
+  then step 50 omitted it as well and parked the drop-in, keeping the live initramfs free of DSP firmware.
 - The installed initramfs needs the Adreno microcode for plymouth's GPU probe, or early boot logs
   `failed to load gen70500_sqe.fw` until switch-root: `payload/90-sp11.conf` installs `qcom/gen70500_sqe.fw.xz`
   and `qcom/gen70500_gmu.bin.xz` from `qcom-firmware`, a support RPM `Requires:` since 2.0.

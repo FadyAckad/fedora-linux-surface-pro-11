@@ -34,9 +34,10 @@ bullet is in the working note it names.
   [`docs/fedora-media.md`](../fedora-media.md).
 - Kernel arguments: `clk_ignore_unused pd_ignore_unused systemd.tpm2_wait=0`, which Fedora's "Snapdragon WoA
   Laptop Install" page prescribes for X1E laptops, and `soundwire_qcom.sp11_feedback_active_offset2_zero=1` (the
-  SP11 audio patches). The live media adds `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas`,
-  the same page's advice for booting from USB-C, because restarting the ADSP resets the port; the installed system
-  drops them. [`docs/hardware.md`](../hardware.md).
+  SP11 audio patches). The live media adds nothing: with kernel 7.3.5 USB-C carries no data until the audio DSP's
+  driver runs, so the live initramfs starts the DSP before it looks for the stick, as the installed system's does.
+  Media up to 2026-11-23 kept the DSP off with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas`,
+  the same page's advice for booting from USB-C. [`docs/hardware.md`](../hardware.md), The DSP on the live media.
 - GRUB: `gfxterm` at the panel's native `2880x1920,auto` with a DejaVu Sans Mono PF2 font of size 32 (150x50
   characters), built with `grub2-mkfont` to fit GRUB's character cell and shipped in the support RPM
   (`/usr/share/sp11/fonts/sp11-console.pf2`, named by `GRUB_FONT`), since GRUB has no text-scale setting and sizes
@@ -75,15 +76,14 @@ bullet is in the working note it names.
   [`docs/fedora-media.md`](../fedora-media.md).
 - Firmware: only the six files the Denali device tree requests (ADSP and CDSP images with their device-tree
   blobs, GPU zap shader, video codec), under the names it requests them by. [`docs/hardware.md`](../hardware.md).
-- Initramfs: the live one carries only the GPU zap shader; the ADSP/CDSP firmware (about 24 MiB) and the Adreno
-  microcode go into the installed system's initramfs. No rescue image: Fedora's rescue entry would name a
-  device-tree directory that does not exist. [`docs/fedora-media.md`](../fedora-media.md).
+- Initramfs: the ADSP/CDSP firmware (about 24 MiB) and the Adreno microcode go into every initramfs, the live
+  one included, so that the DSP starts before the root is looked for. No rescue image: Fedora's rescue entry would
+  name a device-tree directory that does not exist. [`docs/fedora-media.md`](../fedora-media.md).
 - Live image: repacked as LZMA EROFS with the source image's file times (`mkfs.erofs --mkfs-time`), because `-T`
   alone stamps every file with the build time, which the installer then copies onto the installed system.
   [`docs/fedora-media.md`](../fedora-media.md).
 - Sensors: the four RPMs of the stack are installed into the live root with their scriptlet effects applied by the
-  build. The live session never starts them, since there is no FastRPC node while the ADSP is off; the installed
-  system starts them on its first boot. [`docs/sensors.md`](../sensors.md).
+  build, and the installed system starts them on its first boot. [`docs/sensors.md`](../sensors.md).
 - Tablet mode: mainline gives the Surface Pro 11 the Surface Aggregator's KIP cover switch, whose change event this
   firmware never sends, so the kernel always reported laptop mode. The SP11 patch set registers the POS posture
   switch instead, which follows the keyboard: tablet mode while it is detached or folded back. GNOME then offers

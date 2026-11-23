@@ -566,3 +566,29 @@ One entry per round; the facts each established live in the topic notes.
   1.44 s with revision 1), as TrustZone serves the EFI variables only after the TPM's self test
   (`docs/hardware.md`, TPM).
 - By hand (owner): the round's by-hand checks passed.
+
+## The live media on 7.3.5 revision 3: no USB disk without the ADSP (2026-11-23)
+
+- Media: `Fedora-Workstation-Live-45-1.4` remastered with kernel `7.3.5-300.sp11.3`, the ADSP blacklisted live.
+  GRUB and the kernel came from the stick; the live initramfs waited for `/dev/disk/by-label/Fedora-WS-Live-45`
+  until the emergency shell.
+- On the installed system, same kernel: in the usual start the stick ran at 5000 Mb/s (`uas`); started with
+  `module_blacklist=qcom_q6v5_pas` both xHCI controllers came up and the stick enumerated on neither port, either
+  way round. The UEFI version was the one of 2026-11-06 (`docs/hardware.md`, USB-C data).
+- The KIP hub's four HID devices stayed registered with the cover detached, and an initramfs built with the cover
+  detached (support 3.17) carried `surface_aggregator_hub` (`docs/tablet-mode.md`).
+
+## Fresh installation with an encrypted root, support 3.18 (2026-11-23)
+
+- Media: `Fedora-Workstation-Live-45-1.4` remastered with kernel `7.3.5-300.sp11.3` and support 3.18, whose live
+  initramfs starts the ADSP. The ADSP was up 5.8 s into the live start, the stick enumerated at 5000 Mb/s at
+  6.9 s and the live root was mounted at 10.9 s; no USB disconnect, no DSP crash in the session.
+- Installed: partitioned by hand, Windows' two partitions untouched: Fedora's own EFI partition (2 GB, at
+  `/boot/efi`), `/boot` ext4, `/` btrfs in LUKS2 (`aes-xts-plain64`); then libdisplay-info `0.3.0-2.sp11.1`, the
+  pairings from the tarball and `sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64` 1-1.
+- Confirmed: the passphrase prompt takes the Type Cover's keys (the initramfs carries `surface_aggregator_hub`);
+  the volume was open 2.1 s after the passphrase and the root switched 0.7 s later. `crypttab` and the boot
+  entries carry the volume, the signed entries as well. The enrolled key outlived the reinstall: `READY`, then
+  `ACTIVE` with Secure Boot on. `Enforcing` without a denial, no ADSP crash, the sensors online, the journal's
+  errors those of revision 3's round.
+- By hand (owner): the live session's sound and battery level, and the round's checks, passed.

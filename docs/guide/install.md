@@ -11,11 +11,15 @@ service do underneath is in [`docs/fedora-media.md`](../fedora-media.md).
 3. Enter the Surface UEFI (hold Volume-Up + Power), disable Secure Boot and put USB first in the boot order.
 4. Boot the USB and take the first GRUB entry. The boot messages scroll by until the desktop appears: the live
    media boot without `quiet`, so a slow start can be told from a frozen one.
-5. Run "Install to Hard Drive" and choose "Share disk with other operating systems". Keep a single Fedora
-   installation on the machine: a second one takes over the GRUB menu and hides the first.
-6. Reboot without the USB and log in. On the first boot, a one-shot service enables the audio DSP, gives GRUB the
-   Denali DTB, its display settings and the Windows entry, and rebuilds the initramfs. If audio is not up yet,
-   reboot once. The sensors stack comes up with the DSP (auto-rotation, ambient light, compass).
+5. Run "Install to Hard Drive" and partition by hand, leaving Windows' two partitions as they are: Fedora's own
+   EFI System partition (FAT32, `/boot/efi`, 1 GB or more), `/boot` (ext4, 2 GB, not encrypted) and `/` (btrfs,
+   encrypted with LUKS2 if you want it; the passphrase is typed on the Type Cover at every start). "Share disk
+   with other operating systems" would put `/boot/efi` on Windows' EFI partition (276 MB on the tested unit),
+   too small for the Secure Boot copies ([`docs/fedora-media.md`](../fedora-media.md), Anaconda). Keep a single
+   Fedora installation on the machine: a second one takes over the GRUB menu and hides the first.
+6. Reboot without the USB and log in. On the first boot, a one-shot service gives GRUB the Denali DTB, its display
+   settings and the Windows entry, and rebuilds the initramfs. If audio is not up yet, reboot once. The sensors
+   stack comes up with the DSP (auto-rotation, ambient light, compass).
 
 The media carries a note at `/sp11/README.txt` and, under `/sp11/rpms`, every RPM it was built with: the source for
 later updates ([`docs/guide/update.md`](update.md)).

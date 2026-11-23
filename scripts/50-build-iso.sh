@@ -23,9 +23,9 @@ for n in $KERNEL_PKGS; do
 done
 SRPM=$(rpm_of sp11-surface-support); [ -n "$SRPM" ] || die "sp11-surface-support RPM missing (run scripts/30-build-support-rpm.sh)"
 IRPM=$(rpm_of sp11-iptsd);           [ -n "$IRPM" ] || die "sp11-iptsd RPM missing (run scripts/40-build-iptsd-rpm.sh)"
-# The sensors stack (scripts/45): inert on the live media, where the ADSP is blacklisted and its FastRPC node never
-# appears (nothing starts hexagonrpcd or the online unit, and iio-sensor-proxy without sensors behaves as the stock
-# build); active on the installed system from its first boot.
+# The sensors stack (scripts/45): active wherever the ADSP runs, on the installed system from its first boot and,
+# since the live initramfs starts the ADSP (step 6 below), on the live media; without the ADSP's FastRPC node nothing
+# starts hexagonrpcd or the online unit, and iio-sensor-proxy without sensors behaves as the stock build.
 SENSOR_RPMS=()
 for n in hexagonrpc libssc iio-sensor-proxy sp11-sensors; do
   r=$(rpm_of "$n"); [ -n "$r" ] || die "$n RPM missing (run scripts/75-export-sensor-registry.sh once, then scripts/45-build-sensors-rpms.sh)"
@@ -211,18 +211,16 @@ as_root install -m 0644 -o "$(id -u)" -g "$(id -g)" "$FONT_SP11_SRC" "$W/$GRUB_F
 [ "$(dd if="$W/$GRUB_FONT_FILE" bs=1 count=4 skip=8 status=none)" = PFF2 ] || die "$GRUB_FONT_FILE is not a PF2 font"
 
 ## 6. dracut-live initramfs for the SP11 kernel, generated inside the live root (same arguments Fedora uses).
-##    The support RPM's dracut drop-in pulls the whole Denali firmware set into every initramfs. The installed
-##    system needs that (host-only initramfs starts the DSP early); the live media does not (the ADSP driver is
-##    blacklisted there), so park the drop-in for this run and install only the GPU zap shader.
-# Fedora 45 added two aarch64 dracut modules that both defeat the live-media policy above:
-# devicetree-firmware's generic path globs $fw_dir/qcom/x1e80100/*/*/*.mbn|elf, which is exactly the Denali
-# set, and qcom-adsp modprobes qcom_q6v5_pas from a pre-udev hook. Omitting them is what keeps the live
-# image free of the DSP firmware. multipath is Fedora's own live omission.
-LIVE_DRACUT_OMIT="multipath devicetree-firmware qcom-adsp"
+##    The live media starts the ADSP from its initramfs as the installed system does: on kernel 7.3.5 USB-C carries
+##    no data until the ADSP driver runs, so the stick the live system boots from appears only then
+##    (docs/hardware.md, The DSP on the live media). Fedora 45's qcom-adsp module modprobes qcom_q6v5_pas from a
+##    pre-udev hook, before the root is looked for; the support RPM's dracut drop-in brings the Denali firmware.
+# devicetree-firmware stays omitted: its --no-hostonly glob ($fw_dir/qcom/x1e80100/*/*/*.mbn|elf) would add the
+# same Denali files the drop-in installs. multipath is Fedora's own live omission.
+LIVE_DRACUT_OMIT="multipath devicetree-firmware"
 DRACUT_DROPIN="$ROOTFS/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
 ZAP_FW="/usr/lib/firmware/qcom/x1e80100/microsoft/Denali/qcdxkmsuc8380.mbn"
-restore_dropin() { [ -e "$DRACUT_DROPIN.live-off" ] && as_root mv -f "$DRACUT_DROPIN.live-off" "$DRACUT_DROPIN" || true; }
-cleanup_mounts() { restore_dropin; for m in run sys proc dev; do as_root umount -R "$ROOTFS/$m" 2>/dev/null || true; done; }
+cleanup_mounts() { for m in run sys proc dev; do as_root umount -R "$ROOTFS/$m" 2>/dev/null || true; done; }
 trap cleanup_mounts EXIT
 for m in dev proc sys run; do as_root mount --rbind "/$m" "$ROOTFS/$m"; as_root mount --make-rslave "$ROOTFS/$m"; done
 # The sensors RPMs' scriptlet effects, skipped by --noscripts: the fastrpc user the units run as (hexagonrpc %pre),
@@ -245,20 +243,18 @@ fi
 PROFILE_OPT=""; [ -f "$ROOTFS/.profile" ] && PROFILE_OPT="--install /.profile"
 [ -f "$DRACUT_DROPIN" ] || die "missing $DRACUT_DROPIN (support RPM payload changed?)"
 [ -s "$ROOTFS$ZAP_FW" ] || die "missing GPU zap shader $ZAP_FW in the live root"
-as_root mv -f "$DRACUT_DROPIN" "$DRACUT_DROPIN.live-off"
 log "generating live initramfs for $KERNEL_ABI (dracut in chroot)"
 as_root rm -f "$ROOTFS/boot/initramfs-$KERNEL_ABI.img"
 as_root chroot "$ROOTFS" /usr/bin/dracut --force --reproducible --no-hostonly --no-hostonly-cmdline $PROFILE_OPT \
-  --add "dmsquash-live livenet pollcdrom" --omit "$LIVE_DRACUT_OMIT" --install "$ZAP_FW" \
+  --add "dmsquash-live livenet pollcdrom" --omit "$LIVE_DRACUT_OMIT" \
   --kver "$KERNEL_ABI" "/boot/initramfs-$KERNEL_ABI.img" >"$W/dracut.log" 2>&1 || { tail -30 "$W/dracut.log" >&2; die "dracut failed"; }
-restore_dropin
-[ -f "$DRACUT_DROPIN" ] || die "failed to restore $DRACUT_DROPIN"
 as_root test -s "$ROOTFS/boot/initramfs-$KERNEL_ABI.img" || die "initramfs not produced"
 as_root install -m 0644 -o "$(id -u)" -g "$(id -g)" "$ROOTFS/boot/initramfs-$KERNEL_ABI.img" "$W/initrd"
 lsinitrd -m "$W/initrd" | grep -x dmsquash-live >/dev/null || die "initramfs lacks dmsquash-live"
 lsinitrd "$W/initrd" | grep "usr/lib/modules/$KERNEL_ABI/kernel/fs/erofs/erofs.ko" >/dev/null || die "initramfs lacks the erofs module for $KERNEL_ABI"
 lsinitrd "$W/initrd" | grep -F "${ZAP_FW#/}" >/dev/null || die "live initramfs lacks the GPU zap shader"
-lsinitrd "$W/initrd" | grep -F 'Denali/qcadsp8380.mbn' >/dev/null && die "live initramfs still carries the ADSP firmware"
+lsinitrd "$W/initrd" | grep -F 'Denali/qcadsp8380.mbn' >/dev/null || die "live initramfs lacks the ADSP firmware"
+lsinitrd "$W/initrd" | grep -E 'hooks/pre-udev/[0-9]+-qcom-adsp-pre-udev\.sh$' >/dev/null || die "live initramfs lacks the qcom-adsp hook"
 lsinitrd "$W/initrd" | grep -E 'sp11-sensors|hexagonrpc' >/dev/null && die "live initramfs carries files of the sensors stack"
 as_root rm -f "$ROOTFS/boot/initramfs-$KERNEL_ABI.img"
 cleanup_mounts; trap - EXIT

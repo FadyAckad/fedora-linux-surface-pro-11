@@ -8,15 +8,15 @@ Base media:    @MEDIA@
 Edition:       @EDITION_NOTE@
 Secure Boot:   must be DISABLED (unsigned kernel).
 
-Live session:  Wi-Fi, Bluetooth, GPU acceleration, touch and pen work. Audio and battery status are
-               unavailable on the live USB because the audio DSP is kept off while booting from USB-C
-               (modprobe.blacklist=qcom_q6v5_pas). They work after installation to the internal disk.
+Live session:  Wi-Fi, Bluetooth, GPU acceleration, touch and pen work. The audio DSP starts while the live
+               system boots, as on the installed system: USB-C carries no data without it, and the live system
+               runs from a USB-C stick.
 
 Installation:  run "Install to Hard Drive". The installed system boots this kernel with the Denali DTB;
-               a one-shot service (sp11-first-boot) removes the live-only DSP blacklist on the first boot.
+               a one-shot service (sp11-first-boot) applies its kernel arguments and GRUB settings on the first boot.
 Sensors:       hexagonrpcd, libssc and iio-sensor-proxy with its Qualcomm Sensor Core drivers, plus this unit's
-               sensor registry (sp11-sensors), are installed. They stay inactive on the live USB (the DSP is off)
-               and serve the accelerometer, light sensor and compass on the installed system.
+               sensor registry (sp11-sensors), are installed. They serve the accelerometer, light sensor and
+               compass on the installed system.
 Cameras:       the front and rear cameras through Fedora's libcamera ("cam" comes with libcamera-tools); the
                infrared camera is not supported.
 

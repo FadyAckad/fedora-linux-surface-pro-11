@@ -123,9 +123,10 @@ if r test -x "$ROOTFS/usr/bin/slitherer"; then check r grep -qx 'webui_web_engin
 else check r test ! -e "$ROOTFS/$ANACONDA_WEBUI_DROPIN"; fi
 check r test -x "$ROOTFS/usr/bin/firefox"
 # Anaconda's bootloader step writes /etc/default/grub from scratch (only the preserved live arguments reach
-# GRUB_CMDLINE_LINUX) and its grub2-mkconfig writes /etc/kernel/cmdline from it; its payload step has already turned
-# the live media's modprobe.blacklist= into anaconda-denylist.conf. kernel-install add comes next. (On a BTRFS root
-# Anaconda repeats its bootloader step afterwards, which sp11-first-boot corrects on the first boot.)
+# GRUB_CMDLINE_LINUX) and its grub2-mkconfig writes /etc/kernel/cmdline from it; with media up to 2026-11-23 its
+# payload step had turned their modprobe.blacklist= into anaconda-denylist.conf, which the plugin must still remove.
+# kernel-install add comes next. (On a BTRFS root Anaconda repeats its bootloader step afterwards, which
+# sp11-first-boot corrects on the first boot.)
 ANACONDA_ARGS="rd.luks.uuid=luks-0000-test rhgb quiet clk_ignore_unused pd_ignore_unused"
 r tee "$M/etc/default/grub" >/dev/null <<GRUB
 GRUB_TIMEOUT=5

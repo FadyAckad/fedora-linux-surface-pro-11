@@ -18,7 +18,7 @@ Read the note named below before working on its area.
   the version and content-pin rules, the WSL host, shell pitfalls. Read before touching `sp11.conf`, `scripts/`,
   `rpm/` or `payload/`.
 - `docs/hardware.md`: the tested unit and how the build identifies it, firmware, audio, Wi-Fi, Bluetooth, pen,
-  power supplies, video codec, USB-C, the TPM, the live-only DSP blacklist, the Windows GRUB entry, the Bluetooth
+  power supplies, video codec, USB-C, the TPM, the DSP on the live media, the Windows GRUB entry, the Bluetooth
   pairings shared with Windows. Read before anything that depends on the device.
 - `docs/sleep.md`: deep sleep and its wake sources, what kept the memory awake and the drain measured, the wakes
   without a wake interrupt, the power key under KDE, what a wake costs until the panel is lit. Read before touching

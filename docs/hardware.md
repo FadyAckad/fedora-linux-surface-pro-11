@@ -1,6 +1,6 @@
 # Hardware
 The tested unit and how the build identifies it, its firmware, audio, Wi-Fi, Bluetooth, pen, power supplies, video
-codec and USB-C, the live-only DSP blacklist, the Windows GRUB entry, and the Bluetooth pairings shared with
+codec and USB-C, the DSP on the live media, the Windows GRUB entry, and the Bluetooth pairings shared with
 Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.md`. The cameras: `docs/camera.md`.
 
 ## Tested unit
@@ -226,6 +226,12 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   write the two steps whenever the retimer comes out of reset (`docs/kernel-patches.md`). On 7.2.15 revision 1
   the stick runs at 5000 Mb/s turned over and the usual way on both ports, after a wake and in a second boot
   (2026-11-03).
+- On 7.3.5 revision 3 USB-C carries no data until the ADSP driver runs (2026-11-23): started with
+  `module_blacklist=qcom_q6v5_pas`, both xHCI controllers came up but the stick enumerated on neither port, either
+  way round, not even at USB 2; in the usual start it ran at 5000 Mb/s. The live media of 7.2.15 revision 1 had
+  booted from USB with the ADSP blacklisted (2026-11-03) on the same UEFI version, so the dependency came with a
+  kernel change between the two; its cause is not found. The retimer driver holds the retimer in reset from its
+  probe until a Type-C notification, which comes from `pmic_glink` on the ADSP, in both kernels.
 
 ## TPM
 
@@ -330,17 +336,24 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   Secure Boot route the units ran on 2026-11-22: `SRK already stored in the TPM.`, `Skipped 4 NvPCR(s)`.
 - The TPM is shared with Windows: a sealed LUKS key lives in the LUKS header under Windows' storage key, and wrong
   PINs would count against the lockout counter Windows Hello uses.
-- The root file system of the tested installation is btrfs without LUKS (2026-11-22).
+- Since 2026-11-23 the tested installation's root is btrfs in LUKS2 (`aes-xts-plain64`, 512-bit key), opened in
+  the initramfs about 2 s after the passphrase; no key is bound to the TPM.
 - The kernel's object interface to TrustZone (`qcomtee`) is up under Linux and reports its QTEE version at every
   start.
 
-## Live-only DSP blacklist
+## The DSP on the live media
 
-- An ADSP restart resets USB-C while rooted on USB, so the live media boots with
-  `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (no audio or battery live). The installed
-  system drops both through the kernel-install plugin and `sp11-first-boot.service`; the plugin also removes
-  Anaconda's `/etc/modprobe.d/anaconda-denylist.conf`, made from the first argument, before the initramfs rebuild
-  (`module_blacklist=` would avoid the file but spams `pr_err`).
+- An ADSP restart resets USB-C, and the live system runs from a USB-C stick. Since 2026-11-23 the live initramfs
+  starts the ADSP as the installed one does, before the root is looked for: Fedora 45's dracut module `qcom-adsp`
+  modprobes `qcom_q6v5_pas` from a pre-udev hook, and the support RPM's dracut drop-in installs the Denali firmware.
+  On 7.3.5 the stick is not found otherwise (USB-C data, above): the live initramfs of 2026-11-23 waited for
+  `/dev/disk/by-label/Fedora-WS-Live-45` until the emergency shell. With the ADSP started the ADSP was up 5.8 s
+  into the live start, the stick enumerated at 5000 Mb/s at 6.9 s and the live root was mounted at 10.9 s; sound
+  and the battery level worked live (2026-11-23).
+- Media up to then booted with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (no audio or
+  battery live). Anaconda makes `/etc/modprobe.d/anaconda-denylist.conf` from the first argument; the kernel-install
+  plugin and `sp11-first-boot.service` remove that file and the arguments (`module_blacklist=` would avoid the file
+  but spams `pr_err`).
 
 ## Windows in GRUB
 

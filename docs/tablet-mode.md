@@ -29,6 +29,10 @@ and the posture probe. The sensor stack itself: `docs/sensors.md`.
   touchpad, and a static KIP switch left in tablet state would keep the attached touchpad suspended. Result:
   "Microsoft Surface POS Tablet Mode Switch" reports SW_TABLET_MODE 1 detached or folded back and 0 attached, GNOME
   offers the auto-rotate button, and libinput switches the keyboard and touchpad off while folded back.
+- The KIP hub (`ssam:00:00:01:0e:00`, `surface_aggregator_hub`) waits for the same event, so the keyboard's,
+  touchpad's and two more HID devices below it stay registered while the cover is detached (2026-11-23, 7.3.5
+  revision 3). dracut 111 adds the drivers of a module's devices' parents, so the hub's driver is in every
+  host-only initramfs: one built with the cover detached carried it.
 
 ## Orientation
 
@@ -49,3 +53,4 @@ and the posture probe. The sensor stack itself: `docs/sensors.md`.
 
 - 2026-09-21: the KIP switch found static; the POS switch (kernel revision 2 of v23.2) gives GNOME auto-rotation.
 - 2026-09-30: tablet mode, auto-rotation and automatic brightness confirmed on KDE Plasma.
+- 2026-11-23: the KIP hub's devices stay with the cover detached; dracut takes the hub's driver either way.
