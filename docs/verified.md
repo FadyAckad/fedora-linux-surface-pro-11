@@ -615,3 +615,15 @@ One entry per round; the facts each established live in the topic notes.
   ready.
 - By hand (owner): with Secure Boot off, Fedora's menu listed Windows once. With Secure Boot on, Escape in the
   graphical menu asked for `root` and the GRUB password, then showed the text menu.
+
+## A poweroff after a sleep, support 3.21 and 3.22 (2026-11-23 and 24)
+
+- Found: in a start that slept 30 s after it began, the TPM refused systemd-pcrextend's TPM2_Startup (0x101) from
+  the first measurement after the wake on, and `FailureAction=reboot-force` turned the poweroff into a restart. In
+  the next start the `final` measurement did the same once `shutdown`'s failure was overridden by hand.
+- Installed: `sp11-surface-support` 3.21 over 3.20 (the hand-made drop-in removed with `systemctl revert`), then
+  3.22 over 3.21; Secure Boot on.
+- Confirmed: both drop-ins in effect (`ignore_errors=yes` for `shutdown` and `final`). After a deep sleep of 31 s
+  two minutes into a start the TPM answered as before it (PCR 0, TPM2_Startup, the self test, a measurement), and
+  the poweroff after it went through without a restart.
+- By hand (owner): poweroffs stayed off, with 3.21 without a sleep and with 3.22 after the sleep.

@@ -94,3 +94,7 @@ in [`docs/verified.md`](../verified.md).
 - 3.20: os-prober is switched off (`GRUB_DISABLE_OS_PROBER=true`). From Fedora's os-prober 1.81-13 (2026-11-22)
   it found Windows as well and wrote a second entry of the same name, which asked for the GRUB password; the SP11
   entry is the only one again ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and modules).
+- 3.21: with Secure Boot on, a poweroff no longer turns into a restart when the TPM refuses systemd's `shutdown`
+  measurement (a drop-in for `systemd-pcrphase.service`).
+- 3.22: the same for the `final` measurement (`systemd-pcrphase-sysinit.service`), which with 3.21 alone still
+  turned a poweroff into a restart after the TPM had failed ([`docs/hardware.md`](../hardware.md), TPM).

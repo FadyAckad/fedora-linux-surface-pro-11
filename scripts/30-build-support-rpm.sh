@@ -10,7 +10,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.20"
+VERSION="3.22"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, the font's cell
@@ -183,6 +183,10 @@ install -D -m 0644 "$PAYLOAD_DIR/sp11-secureboot.service" "$STAGE/usr/lib/system
 ln -sf ../sp11-secureboot.service "$STAGE/usr/lib/systemd/system/multi-user.target.wants/sp11-secureboot.service"
 install -D -m 0644 "$PAYLOAD_DIR/sp11-tpm2-setup-early.conf" \
   "$STAGE/usr/lib/systemd/system/systemd-tpm2-setup-early.service.d/sp11-initrd-only.conf"
+install -D -m 0644 "$PAYLOAD_DIR/sp11-pcrphase-shutdown.conf" \
+  "$STAGE/usr/lib/systemd/system/systemd-pcrphase.service.d/sp11-shutdown-measurement.conf"
+install -D -m 0644 "$PAYLOAD_DIR/sp11-pcrphase-final.conf" \
+  "$STAGE/usr/lib/systemd/system/systemd-pcrphase-sysinit.service.d/sp11-final-measurement.conf"
 install -D -m 0644 "$PAYLOAD_DIR/90-sp11.conf" "$STAGE/usr/lib/dracut/dracut.conf.d/90-sp11.conf"
 install -D -m 0644 "$PAYLOAD_DIR/sp11-scmi-cpufreq.conf" "$STAGE/usr/lib/modules-load.d/sp11-scmi-cpufreq.conf"
 cat > "$STAGE/etc/sp11/sp11.env" <<ENV

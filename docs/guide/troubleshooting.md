@@ -21,6 +21,9 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   remoteproc restarts that DSP by itself, and nothing on Linux uses it.
 - From kernel 7.3.5 revision 2 the start takes about 3 s longer: the TPM's first self test keeps the firmware busy,
   and the start waits for it to read the EFI variables ([`docs/hardware.md`](../hardware.md), TPM).
+- Once, after a sleep, the TPM refused systemd's measurements until the next start (2026-11-23): the measurement
+  of a login failed (`systemctl --failed` lists `systemd-pcrlogin@<uid>.service`), and a restart cleared it
+  ([`docs/hardware.md`](../hardware.md), TPM).
 - HDR switches itself off when the tablet is rotated (GNOME 51.1): mutter loses the colour mode in the
   configuration it applies for a rotation. Fixed upstream for mutter 51.2; until Fedora ships it, switch HDR on
   again in Settings, Displays ([`docs/display.md`](../display.md), Known issues).
@@ -122,6 +125,9 @@ Systems running an older build of the RPMs can show these; the release named fix
 - `Windows Boot Manager (on …)` twice in GRUB's menu, the second entry asking for the GRUB password, since
   Fedora's os-prober 1.81-13 (2026-11-22): fixed in support RPM 3.20 (2026-11-23), which switches os-prober off
   ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and modules).
+- A poweroff that restarted the tablet instead, with Secure Boot on, after the TPM had refused systemd's
+  measurements: fixed in support RPM 3.22 (2026-11-24), which lets the poweroff go on when its two TPM
+  measurements fail ([`docs/hardware.md`](../hardware.md), TPM).
 
 ## The power button under KDE Plasma
 

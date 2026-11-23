@@ -347,6 +347,14 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   does not match (`TPM policy does not match current system state`) and a timeout both lead to the passphrase
   prompt. `systemd.tpm2_wait=0` stops only `tpm2.target` from being a synchronisation point (systemd 262.1's
   source; the refusal and the wipe run against a software TPM).
+- At a poweroff `systemd-pcrphase.service` measures `shutdown` and `systemd-pcrphase-sysinit.service` `final` into
+  PCR 11, both with `FailureAction=reboot-force`. On 2026-11-23, after a deep sleep 30 s into a start, the TPM
+  answered systemd-pcrextend's TPM2_Startup with `TPM_RC_FAILURE` (0x101) until the next start: the login's
+  measurement (`systemd-pcrlogin@`) and both stop measurements failed, and every poweroff became a restart.
+- From support 3.21 (`shutdown`) and 3.22 (`final`) drop-ins ignore the failure of these two stop measurements;
+  nothing here reads PCR 11. After a 31 s deep sleep two minutes into a start the TPM answered as before it (PCR 0
+  through the kernel, TPM2_Startup, the self test, a measurement), as after the sleeps of 2026-11-22 and 23: what
+  made it fail is open (2026-11-24).
 - The kernel's object interface to TrustZone (`qcomtee`) is up under Linux and reports its QTEE version at every
   start.
 
