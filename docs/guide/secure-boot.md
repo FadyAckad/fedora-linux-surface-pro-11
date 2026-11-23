@@ -156,7 +156,9 @@ What stays open: someone with the tablet who replaces the unsigned initramfs cop
 GRUB loads no font file from the disk then, so the support RPM (3.15 or later) draws the menu's text as images.
 The menu looks like the usual one, with a blue bar on the highlighted entry and a bar that fills while the ten
 seconds count down. It lists the kernels that have a signed image, Windows and the firmware settings. Escape
-leaves it for a text menu in small text; GRUB's editor and command line are in small text as well.
+leaves it for a text menu in small text; with a GRUB password (section 6) GRUB first asks for the user `root` and
+that password, and shows the graphical menu again if it does not accept them. GRUB's editor and command line are
+in small text as well.
 
 The status names the menu in place:
 

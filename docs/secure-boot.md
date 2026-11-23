@@ -147,8 +147,12 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   with `/boot/grub2/user.cfg` from `grub2-setpassword` Fedora's `01_users` block sets the superuser `root`. Pressing
   `e` then asked for `root` and the password (2026-11-23). Entries marked `--unrestricted` start without it: the
   signed entries, Fedora's own (`grub_arg --unrestricted` from `20-grub.install`) and, from support 3.19, the SP11
-  Windows entry, which started Windows without the password. UEFI Firmware Settings and os-prober's Windows entry
-  carry no `--unrestricted` and need it.
+  Windows entry, which started Windows without the password. UEFI Firmware Settings carries no `--unrestricted`
+  and needs it, as did os-prober's Windows entry until support 3.20 switched os-prober off.
+- With the password, Escape from the graphical menu asks for `root` and the password, then the text menu follows
+  (2026-11-23): GRUB 2.12 lets only an authenticated superuser leave a menu (`grub_show_menu` in
+  `normal/menu.c`). A password it refuses brings the same menu back after a second, without a message (Fedora's
+  GRUB 2.12-81 and 2.12-83 in QEMU).
 - The graphical menu (`sp11-secureboot-menu.cfg`) copies only the blocks of `29_sp11_windows` and
   `30_uefi-firmware`; the text menu behind Escape is `grub.cfg`'s own, with whatever else `grub2-mkconfig` wrote.
 

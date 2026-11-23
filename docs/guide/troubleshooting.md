@@ -64,10 +64,6 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
   text. A menu in small text from the start means the images could not be drawn
   ([`docs/guide/secure-boot.md`](secure-boot.md), GRUB's menu while Secure Boot is on). Fedora starts by itself
   after ten seconds either way.
-- Since Fedora's os-prober 1.81-13 (an update of 2026-11-22), GRUB's menu lists `Windows Boot Manager (on …)`
-  twice; the Secure Boot menu lists it once. The second entry is os-prober's: with a GRUB password set it asks
-  for the password, the first does not ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and
-  modules).
 - Boot messages seen on the tested unit that mean nothing:
   - `qcom_pmic_glink … Failed to create device link` for the PD and USB nodes (probe deferral, retried);
   - `surface_hid … unexpected descriptor length` for one Surface Aggregator endpoint nothing depends on;
@@ -123,6 +119,9 @@ Systems running an older build of the RPMs can show these; the release named fix
 - No sound and no battery status in the live session: fixed in the ISO built with support RPM 3.18
   (2026-11-23), whose live initramfs starts the audio DSP ([`docs/hardware.md`](../hardware.md), The DSP on the
   live media).
+- `Windows Boot Manager (on …)` twice in GRUB's menu, the second entry asking for the GRUB password, since
+  Fedora's os-prober 1.81-13 (2026-11-22): fixed in support RPM 3.20 (2026-11-23), which switches os-prober off
+  ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and modules).
 
 ## The power button under KDE Plasma
 

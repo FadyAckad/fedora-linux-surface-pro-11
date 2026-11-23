@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 # Apply the Surface Pro 11 GRUB policy from /etc/sp11/sp11.env to /etc/default/grub (idempotent):
 # Denali DTB for every BLS entry, gfxterm at the panel's native mode with the large SP11 console font,
-# visible menu with the configured timeout.
+# visible menu with the configured timeout, os-prober off.
 # Single source of truth for the kernel-install plugin (also inside Anaconda), sp11-first-boot, the support
 # RPM's %posttrans (so `dnf upgrade` applies a changed policy) and the ISO build.
 set -eu
@@ -37,3 +37,6 @@ grub_set GRUB_GFXMODE "$SP11_GRUB_GFXMODE"
 grub_set GRUB_TERMINAL_OUTPUT "\"gfxterm\""
 grub_set GRUB_TIMEOUT "$SP11_GRUB_TIMEOUT"
 grub_set GRUB_TIMEOUT_STYLE "menu"
+# 29_sp11_windows writes the Windows entry. os-prober finds Windows on aarch64 from 1.81-13 and would add a second
+# entry of the same name, without --unrestricted, which asks for the GRUB password once one is set.
+grub_set GRUB_DISABLE_OS_PROBER "true"

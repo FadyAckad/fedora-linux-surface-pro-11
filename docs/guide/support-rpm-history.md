@@ -91,3 +91,6 @@ in [`docs/verified.md`](../verified.md).
 - 3.19: the Windows entry is `--unrestricted`, as Fedora's own entries: with a GRUB password (`grub2-setpassword`)
   Windows starts without it, while the password guards GRUB's editor and command line
   ([`docs/guide/secure-boot.md`](secure-boot.md), 6).
+- 3.20: os-prober is switched off (`GRUB_DISABLE_OS_PROBER=true`). From Fedora's os-prober 1.81-13 (2026-11-22)
+  it found Windows as well and wrote a second entry of the same name, which asked for the GRUB password; the SP11
+  entry is the only one again ([`docs/fedora-media.md`](../fedora-media.md), GRUB image, font and modules).

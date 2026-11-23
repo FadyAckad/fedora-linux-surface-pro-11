@@ -74,9 +74,9 @@ STUB
   as_root cp "$SRPM" "$M/tmp/"
 }
 
-# The GRUB policy values (device tree, mode, terminal, timeout, font) have to arrive in /etc/default/grub and, on
-# the update path, through grub2-mkconfig in the generated menu (the live root has no menu; the installer writes
-# it). Asserting both ends is what catches a policy change that installs but never applies.
+# The GRUB policy values (device tree, mode, terminal, timeout, font, os-prober) have to arrive in /etc/default/grub
+# and, on the update path, through grub2-mkconfig in the generated menu (the live root has no menu; the installer
+# writes it). Asserting both ends is what catches a policy change that installs but never applies.
 assert_policy() {
   local what=$1 cfg="$M/etc/default/grub" menu="$M/boot/grub2/grub.cfg"
   log "$what: /etc/default/grub and the generated menu"
@@ -85,6 +85,7 @@ assert_policy() {
   check as_root grep -qx 'GRUB_TERMINAL_OUTPUT="gfxterm"' "$cfg"
   check as_root grep -qx "GRUB_TIMEOUT=$GRUB_TIMEOUT_VALUE" "$cfg"
   check as_root grep -qx "GRUB_FONT=\"/boot/grub2/fonts/$GRUB_FONT_FILE\"" "$cfg"
+  check as_root grep -qx 'GRUB_DISABLE_OS_PROBER=true' "$cfg"
   check as_root cmp -s "$M/usr/share/sp11/fonts/$GRUB_FONT_FILE" "$M/boot/grub2/fonts/$GRUB_FONT_FILE"
   if [ "$what" = update ]; then
     check as_root grep -qx "  set gfxmode=$GRUB_GFXMODE_VALUE" "$menu"

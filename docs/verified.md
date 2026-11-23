@@ -606,3 +606,12 @@ One entry per round; the facts each established live in the topic notes.
   previous round.
 - By hand (owner): GRUB's editor asked for `root` and the password, Windows started from GRUB's menu without it,
   and the round's checks passed.
+
+## One Windows entry, support 3.20 (2026-11-23)
+
+- Installed: `sp11-surface-support` 3.20 by `dnf upgrade` over 3.19, Secure Boot on; os-prober 1.81-13.
+- Confirmed: `GRUB_DISABLE_OS_PROBER=true` in `/etc/default/grub`; `grub.cfg` and the Secure Boot menu hold the
+  SP11 Windows entry alone, no `osprober-efi` entry; `status` `ACTIVE`, with the graphical menu and the kernel
+  ready.
+- By hand (owner): with Secure Boot off, Fedora's menu listed Windows once. With Secure Boot on, Escape in the
+  graphical menu asked for `root` and the GRUB password, then showed the text menu.

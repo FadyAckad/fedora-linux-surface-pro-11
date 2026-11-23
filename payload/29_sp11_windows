@@ -1,9 +1,9 @@
 #!/usr/bin/sh
-# grub-mkconfig helper: add a "Windows Boot Manager" entry for the Surface Pro 11 dual-boot.
-# Fedora's os-prober has no EFI Windows probe on aarch64, so this script locates the ESP that holds
-# bootmgfw.efi itself. The chainloader command is built into Fedora's aarch64 GRUB image (2.12-81 and
-# 2.12-83); for an image without it the entry loads the `chain` module from /boot/grub2/arm64-efi (kept in
-# sync by /usr/libexec/sp11/sp11-grub-modules).
+# grub-mkconfig helper: add a "Windows Boot Manager" entry for the Surface Pro 11 dual-boot, the menu's only one:
+# sp11-grub-defaults switches os-prober off, which finds Windows on aarch64 only from 1.81-13 and writes no
+# --unrestricted. This script locates the ESP that holds bootmgfw.efi itself. The chainloader command is built
+# into Fedora's aarch64 GRUB image (2.12-81 and 2.12-83); for an image without it the entry loads the `chain`
+# module from /boot/grub2/arm64-efi (kept in sync by /usr/libexec/sp11/sp11-grub-modules).
 set -e
 
 prefix="/usr"
