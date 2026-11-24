@@ -56,6 +56,7 @@ removal, SELinux.
 | 7.3.5 revision 1 | 2026-11-19 | `kernel-7.3.5-300.fc45` | Rebased onto `v7.3.5` (two patches now upstream dropped); the audio patch on 7.3.4's unmap and position fixes |
 | 7.3.5 revision 2 | 2026-11-22 | `kernel-7.3.5-300.fc45` | A driver for the TPM behind the TrustZone application `qcom.tz.mssecapp` (`docs/hardware.md`, TPM) |
 | 7.3.5 revision 3 | 2026-11-23 | `kernel-7.3.5-300.fc45` | The TPM registered from a work item: the kernel's start does not wait for the TPM's first self test |
+| 7.3.5 revision 4 | 2026-11-24 | `kernel-7.3.5-300.fc45` | The LCD model's device tree (PWM backlight, the X1P64100's ten cores, video codec) and `scmi-cpufreq`'s all-boost frequency tables, from the fork's pull request 1; the OLED trees keep their content |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
 Every revision but 2, 6 and 9 to 12 passed its device round the day it was built, 7.3.3 revision 4 the morning

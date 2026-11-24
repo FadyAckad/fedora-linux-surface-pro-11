@@ -288,7 +288,14 @@ bash -c '. scripts/lib.sh; kernel_rev_sha256'
 A worktree's `build/`, from the main checkout's (hard links, so nothing is downloaded or copied twice):
 
 ```bash
-MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/build; mkdir -p build/cache build/rpms build/work/iso build/logs; find "$MAIN/cache" -maxdepth 1 -type f -exec ln -f {} build/cache/ \; ; cp -al "$MAIN/cache/sp11-audio-v19c" "$MAIN/cache/wifi" "$MAIN/cache/rpm-deps" build/cache/; cp -a "$MAIN/cache/iptsd" "$MAIN/cache/oe" "$MAIN/cache/libssc" build/cache/; ln -f "$MAIN"/rpms/sp11-surface-support-*.rpm build/rpms/
+MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/build; mkdir -p build/cache build/rpms build/work/iso build/logs; find "$MAIN/cache" -maxdepth 1 -type f -exec ln -f {} build/cache/ \; ; cp -al "$MAIN/cache/sp11-audio-v19c" "$MAIN/cache/wifi" "$MAIN/cache/rpm-deps" build/cache/; cp -a "$MAIN/cache/iptsd" "$MAIN/cache/oe" "$MAIN/cache/libssc" build/cache/; ln -f "$MAIN"/rpms/sp11-surface-support-*.rpm build/rpms/; ln -f "$MAIN/hardware.env" build/
+```
+
+On a host with the Secure Boot signing key, the stub of the main checkout as well, so that step 25 packs the
+image with the stub the installed images have instead of building one:
+
+```bash
+mkdir -p build/secureboot && ln -f "$MAIN"/secureboot/sp11-secureboot-stub-*.rpm build/secureboot/
 ```
 
 ```bash
@@ -331,10 +338,33 @@ Step 36 as an installed system with the current support RPM sees it: that RPM re
 SUPPORT_PREVIOUS_RPM=$(ls -t "$PWD"/build/rpms/sp11-surface-support-*.rpm | head -1) scripts/36-verify-kernel-install.sh > "build/logs/step36-$NEW-rev$REV.log" 2>&1; echo "step 36 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-$NEW-rev$REV.log" | grep -cE '^\[sp11\] +ok:'; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step36-$NEW-rev$REV.log" | grep -E 'FAIL|ERROR|/boot use|verified on an installed system'
 ```
 
-Expected: `step 36 rc=0`; 42 checks (7.3.5 revision 1); the `/boot` use of the new kernel (212M on 7.3, 195M on
-7.2) and `kernel packages verified on an installed system next to <previous kernel-core>`; no `FAIL` or `ERROR`
-line. The one `WARNING`, `kernel-install add returned non-zero for the previous kernel`, belongs to the chroot
+Expected: `step 36 rc=0`; 40 checks (7.3.5 revision 4; 42 up to support 3.17, when the entry was also checked
+for the two live-only arguments); the `/boot` use of the new kernel (212M on 7.3, 195M on 7.2) and `kernel
+packages verified on an installed system next to <previous kernel-core>`; no `FAIL` or `ERROR` line. The one
+`WARNING`, `kernel-install add returned non-zero for the previous kernel`, belongs to the chroot
 (`docs/pipeline.md`, Step 36).
+
+The signed image, on a host with the signing key: the maintainer runs step 25 in a terminal, where it asks for
+the key's passphrase. In a worktree the key directory is the main checkout's; without the variable the step
+logs `no Secure Boot key in <worktree>/sp11-secureboot ...: no signed boot image is built` and ends with status
+0:
+
+```bash
+SECUREBOOT_KEY_DIR=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/sp11-secureboot scripts/25-build-secureboot-rpms.sh
+```
+
+Expected: `stub already built: sp11-secureboot-stub-<version>.aarch64.rpm` (the stub linked in section 4), the
+passphrase prompt, `add-on RPM: sp11-kernel-secureboot-<abi>-1-1.fc<n>.aarch64.rpm (17M); image <n> bytes,
+sections: ... signed` and `next: scripts/26-verify-secureboot-rpms.sh ...`. A second run signs nothing and says
+`add-on already built`. Then step 26, which the session runs:
+
+```bash
+scripts/26-verify-secureboot-rpms.sh > "build/logs/step26-$NEW-rev$REV.log" 2>&1; echo "step 26 rc=$?"; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step26-$NEW-rev$REV.log" | grep -cE '^\[sp11\] +ok:'; sed 's/\x1b\[[0-9;]*m//g' "build/logs/step26-$NEW-rev$REV.log" | grep -E 'FAIL|ERROR|add-on verified'
+```
+
+Expected: `step 26 rc=0`; 72 checks (7.3.5 revisions 3 and 4); `Secure Boot add-on verified with
+sp11-surface-support-<version> on an installed system: sp11-kernel-secureboot-<abi>-1-1...`; no `FAIL` or
+`ERROR` line.
 
 Beyond step 20 (`ABI` is the new uname):
 
@@ -399,10 +429,11 @@ series (the maintainer's own new patches gain a `Signed-off-by` line, nothing el
 BASE=$(sed -n 's/^KERNEL_PATCH_BASE_COMMIT="\([0-9a-f]*\)".*/\1/p' sp11.conf); git -C linux-sp11 log --format=%G? "$BASE..HEAD" | sort | uniq -c; diff <(git -C linux-sp11 log --reverse --format='%an <%ae>|%ad|%s%n%b' --date=raw "$BASE..HEAD") <(git -C "$R/linux" log --reverse --format='%an <%ae>|%ad|%s%n%b' --date=raw "v$NEW..HEAD")
 ```
 
-Expected: `<n> G`; only `Signed-off-by` lines in the diff. Then remove the rehearsal's series from
-`build/cache/kernel-patches/` (every directory but the pinned commit's). Before handing over the commit message,
-check that the change set applies onto the main checkout as it is now (it may have moved since the worktree was
-made; the new skill or other untracked files come on top):
+Expected: `<n> G` (on `sp11/7.3.5` also 4 `N`: revision 4's commits, merged from a pull request on GitHub); only
+`Signed-off-by` lines in the diff. Then remove the rehearsal's series from `build/cache/kernel-patches/` (every
+directory but the pinned commit's). Before handing over the commit message, check that the change set applies
+onto the main checkout as it is now (it may have moved since the worktree was made; the new skill or other
+untracked files come on top):
 
 ```bash
 MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)"); git diff > "$R/change-set.patch"; git -C "$MAIN" apply --check "$PWD/$R/change-set.patch" && echo "applies onto $(git -C "$MAIN" log --oneline -1)"

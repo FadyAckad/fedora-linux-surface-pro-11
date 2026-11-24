@@ -404,6 +404,36 @@ after their trailers that names the source and the change.
   forward by revisions 2 and 3's three commits (head `d18c8996`, tree `c9b5b03f`, the tree the kernel was built
   from), signed in the scratch clone.
 
+### 7.3.5 revision 4: the LCD model's device tree and its clusters' frequency scaling
+
+- Four commits from the fork's pull request 1, for the X1P64100 LCD model, of which this project has no unit:
+  0118 to 0120 are commits of dwhinham/linux-sp11 under their authors' names, 0121 is the pull request's own.
+- 0118 (Dale Whinham): a `pwm-backlight` for the LCD tree on the PMK8550 PWM (channel 0, 5 ms), its supply a
+  fixed regulator on `pmc8380_3` GPIO 10, its enable line `pmc8380_3` GPIO 4. That line is the OLED panel's
+  enable, so the panel's compatible, `enable-gpios` and pin state move from the common file into the two board
+  files.
+- 0119 (Dale Whinham): `x1p64100.dtsi`, `hamoa.dtsi` without `cpu7`, `cpu11`, their idle power domains and their
+  `cpu-map` entries; the LCD tree includes it.
+- 0120 (Friedrich Schrödter): `scmi-cpufreq` clears the boost flag of a frequency table whose every entry carries
+  it and logs `all OPPs flagged as turbo by firmware, using them as regular OPPs`.
+- 0121 (Openanonwriter): the LCD tree enables the video codec with `qcvss8380.mbn`, so it requests six Denali
+  firmware files, as the OLED tree does.
+- Why, as two owners of LCD units reported it in the pull request: the LCD panel does not follow the AUX backlight
+  the kernel registers, PSCI refuses CPUs 7 and 11, and the firmware's sustained frequency of 0 for performance
+  domains 1 and 2 marks all their OPPs as turbo, which left six of the ten cores without a cpufreq policy.
+- For the tested unit: the OLED and 5G trees keep revision 3's content, with two phandle numbers swapped (the
+  board file now names the panel's enable line); 0120 acts only on a table without a regular frequency, and the
+  unit has its three policies (`policy0`, `policy4`, `policy8`, 2026-11-23).
+- No change to `kernel-local`. The built configuration is revision 3's but for the build salt, and the four module
+  packages hold the same 5723 modules. Of the 410 device trees only the five Denali ones differ from revision
+  3's: the three OLED trees by those two phandle numbers, the two LCD trees as the patches intend.
+- Passed its device round on 2026-11-24, the day it was built, with support 3.22 and Secure Boot on: the
+  standard checks, the brightness keys, the three cpufreq policies without a line of 0120, and the root opened
+  by the TPM under the new signed image (`docs/verified.md`).
+- Pushed on 2026-11-24 by the pull request's rebase merge on GitHub: `sp11/7.3.5` moved forward by the four
+  commits (head `67d93d33`, tree `973aab98`, the tree the kernel was built from). The merge gave them new ids and
+  no signature; their authors, dates, messages and changes are the tested ones.
+
 ## Contents
 
 The patches by number, with their origin and what each is needed for.
@@ -470,6 +500,10 @@ The patches by number, with their origin and what each is needed for.
 | 0115 | QSEECOM: a client device for the TrustZone application `qcom.tz.mssecapp` | this repository | 0116 |
 | 0116 | TPM: `tpm_qcom_mssecapp`, the TPM 2.0 behind `qcom.tz.mssecapp` (ACPI start method 14's CRB) | this repository | the TPM under Linux (`docs/hardware.md`, TPM) |
 | 0117 | TPM: `tpm_qcom_mssecapp` registers the chip from a work item | this repository | a kernel start that does not wait for the TPM's first self test |
+| 0118 | LCD device tree: a `pwm-backlight` on the PMK8550 PWM with its supply and enable lines; the panel's compatible and enable line move from the common file into the two board files | Dale Whinham (dwhinham/linux-sp11) | the LCD model's brightness (reported by owners of LCD units, not tested here) |
+| 0119 | `x1p64100.dtsi`: `hamoa.dtsi` without the two cores the X1P64100 lacks, for the LCD tree | Dale Whinham (dwhinham/linux-sp11) | the LCD model's ten cores without PSCI's refusal of CPUs 7 and 11 (reported) |
+| 0120 | scmi-cpufreq: a frequency table made only of boost entries is used as regular frequencies | Friedrich Schrödter (dwhinham/linux-sp11) | frequency scaling on the LCD model's clusters 1 and 2 (reported) |
+| 0121 | LCD device tree: the video codec enabled with `qcvss8380.mbn`, as in the OLED tree | Openanonwriter (the fork's pull request 1) | hardware video on the LCD model (reported) |
 
 ## Left out of v23.2
 

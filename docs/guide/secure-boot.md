@@ -65,7 +65,7 @@ scripts/26-verify-secureboot-rpms.sh
 Copy the support RPM (3.12 or later) and the image's RPM to Fedora and install them, with Secure Boot still off:
 
 ```bash
-sudo dnf install ./sp11-surface-support-3.19-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64-1-1.fc45.aarch64.rpm
+sudo dnf install ./sp11-surface-support-3.19-1.fc45.aarch64.rpm ./sp11-kernel-secureboot-7.3.5-300.sp11.4.fc45.aarch64-1-1.fc45.aarch64.rpm
 ```
 
 ```bash
@@ -139,7 +139,8 @@ sudo dracut -f
 sudo /usr/libexec/sp11/sp11-secureboot sync
 ```
 
-The next start opens the root without a prompt (1.3 s on the tested unit). The passphrase opens it instead when
+The next start opens the root without a prompt (1.3 s on the tested unit), and so does the start of a newer
+kernel whose image is signed with the same key. The passphrase opens it instead when
 PCR 7 differs, with Secure Boot off or after its keys changed (a Windows update of the revocation list among
 them), and after the TPM was cleared in Windows. After a key change or a cleared TPM, enroll the key anew in a
 start through the signed entry; the same command removes the old one:
@@ -188,7 +189,7 @@ starts after it. To take a signed image off as well, remove its package; its cop
 entry go with it:
 
 ```bash
-sudo dnf remove sp11-kernel-secureboot-7.3.5-300.sp11.3.fc45.aarch64
+sudo dnf remove sp11-kernel-secureboot-7.3.5-300.sp11.4.fc45.aarch64
 ```
 
 The enrolled key stays in shim's list.

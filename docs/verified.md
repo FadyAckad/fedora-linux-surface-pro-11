@@ -627,3 +627,19 @@ One entry per round; the facts each established live in the topic notes.
   two minutes into a start the TPM answered as before it (PCR 0, TPM2_Startup, the self test, a measurement), and
   the poweroff after it went through without a restart.
 - By hand (owner): poweroffs stayed off, with 3.21 without a sleep and with 3.22 after the sleep.
+
+## Kernel 7.3.5 revision 4: the LCD model's patches on the tested unit (2026-11-24)
+
+- Installed: the kernel RPMs `7.3.5-300.sp11.4.fc45` (revision 3 plus patches 0118 to 0121) and
+  `sp11-kernel-secureboot-7.3.5-300.sp11.4.fc45.aarch64` 1-1 in one `dnf install` next to revision 3, with
+  support 3.22 and Secure Boot on. Both boots came through revision 4's signed entry (`ACTIVE`).
+- Confirmed: the standard checks, but for the crypto node; the bound devices are revision 3's (458), and the
+  journal has no kernel warning that the rounds of revisions 2 and 3 did not have.
+- The TPM opened the encrypted root under the new signed image, 1.35 s after `systemd-cryptsetup` started: the
+  first kernel change since the key was sealed.
+- The three cpufreq policies (`policy0`, `policy4`, `policy8`, all `scmi`) and no line of patch 0120 in the
+  kernel log.
+- The start was one with the ADSP up early (4.84 s): the CDSP's IPCRTR open failed with `-121` at 10.2 s and the
+  touch controller came at 12.8 s, as in such starts of revisions 2 and 3.
+- By hand (owner): the round's by-hand checks passed (the brightness keys, both cameras, touch and pen, the
+  Bluetooth keyboard, rotation, charging).

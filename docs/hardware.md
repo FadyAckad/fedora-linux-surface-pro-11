@@ -340,7 +340,8 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   the initramfs about 2 s after the passphrase. Its second key slot holds a key sealed in the TPM and bound to
   PCR 7 (`systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7`, enrolled in a start through the signed entry):
   with `tpm2-device=auto` in `crypttab` the next start opened the root in 1.3 s without a prompt, and
-  `systemd-tpm2-setup` found the TPM's storage root key unchanged (2026-11-23).
+  `systemd-tpm2-setup` found the TPM's storage root key unchanged (2026-11-23). A kernel change left it alone:
+  under revision 4's image, signed with the same key, the root opened in 1.35 s (2026-11-24).
 - systemd 262 tries the TPM token only when `crypttab` names `tpm2-device=`. A TPM that is not there yet is
   waited for, up to `token-timeout` (30 s), only when the firmware or the boot loader reports one: the signed
   image's stub sets `LoaderTpm2ActivePcrBanks`, while the device-tree start has no ACPI `TPM2` table. A policy that
