@@ -122,26 +122,27 @@ The 13-inch LCD model uses the smaller X1P64100 and shares the non-5G OLED SKU s
 (`Surface_Pro_11th_Edition_2076`), so the build tells them apart by the SoC and the panel: X1P64100 with an LG
 Display (`LGD`) panel takes `qcom/x1p64100-microsoft-denali.dtb`. On the unit of
 [issue #2](https://github.com/FadyAckad/fedora-linux-surface-pro-11/issues/2) (2026-11-20), Fedora boots with
-display and backlight, speakers, sensors, Wi-Fi/Bluetooth and battery; with the 8380 GPU zap shader Mesa uses the
+display, speakers, sensors, Wi-Fi/Bluetooth and battery; with the 8380 GPU zap shader Mesa uses the
 Adreno (`glxinfo -B`: `freedreno`, `Accelerated: yes`) and gnome-shell idles at a few percent CPU instead of driving
 2880x1920 with llvmpipe. Checked on 2026-11-20 with the shader repair:
 
 | Feature | X1P64100 LCD | X1E80100 OLED |
 |---|:-:|:-:|
-| Boot, display + GPU, backlight, HDR | ✅ | ✅ |
+| Boot, display + GPU, HDR | ✅ | ✅ |
 | Touch/pen, keyboard/touchpad, tablet mode, rotation | ✅ | ✅ |
 | Speakers, microphone, cameras (front/rear/IR stream) | ✅ | ✅ |
-| Sensors, auto-brightness | ✅ | ✅ |
+| Sensors | ✅ | ✅ |
+| Backlight slider and auto-brightness | Needs PWM fix | ✅ |
 | Wi-Fi, Bluetooth, battery, suspend, power profiles | ✅ | ✅ |
 | USB-C charging and data | ✅ | ✅ |
 | Hardware video decode | ❌ | ✅ |
 | IR face login (Windows Hello), NPU | ❌ | ❌ |
 | 5G / GPS | N/A (no modem) | ✅ on the 5G SKU |
 
-The one LCD-specific gap is hardware video decode, which the LCD device tree does not enable
-([`docs/verified.md`](docs/verified.md)). IR face login and NPU are Linux-wide gaps, the same as on the X1E. The
-public tree's pinned kernel already requests the 8380 shader; the branch adds the LCD detection and the firmware
-fallback the build needs.
+A [second LCD report](https://github.com/FadyAckad/fedora-linux-surface-pro-11/pull/4#issuecomment-7121238139)
+confirmed that the reported brightness can change without the panel dimming, and that only the first CPU cluster
+scales. Local fixes restored backlight control and scaling on all three clusters, and enabled hardware H.264/H.265
+encode and decode. Those fixes are not yet in this branch ([`docs/verified.md`](docs/verified.md)).
 
 ## Status and scope
 

@@ -1,7 +1,7 @@
 # Support RPM history
 
 What each version of `sp11-surface-support` changed (`VERSION=` in `scripts/30-build-support-rpm.sh`). Versions 1.1
-to 2.1, 2.5, 2.6 and 3.0 to 3.11 were confirmed on the tested unit; 2.2 to 2.4 and 2.7 were verified in the chroot
+to 2.1, 2.5, 2.6 and 3.0 to 3.22 were confirmed on the tested unit; 2.2 to 2.4 and 2.7 were verified in the chroot
 only, and their changes reached the device with the next version installed there. 3.23 adds the X1P64100 LCD
 support. The device results by date are in [`docs/verified.md`](../verified.md).
 
