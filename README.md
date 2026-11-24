@@ -17,7 +17,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Component | Version |
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
-| Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 3 (`7.3.5-300.sp11.3.fc45.aarch64`) |
+| Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 4 (`7.3.5-300.sp11.4.fc45.aarch64`) |
 | Support RPM (`sp11-surface-support`) | 3.22 |
 | Signed boot image for Secure Boot (`sp11-kernel-secureboot-<kernel>`, optional, built with your own key) | 1-1, with the boot stub `262.1-sp11.1` |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
@@ -40,10 +40,12 @@ through a sleep and with mobile data. Revision 2 (2026-11-22) passed the standar
 by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-23). The same day a fresh
 installation from the ISO built with revision 3 and support 3.18, its root encrypted, passed its round's checks by
 hand, with Secure Boot on. With support 3.19 a key sealed in the TPM then opened that root without a prompt.
+Revision 4 (2026-11-24) passed the standard checks and its round's checks by hand, with Secure Boot on and the
+root opened by the TPM.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
-| Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.3) |
+| Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.4) |
 |---|:-:|
 | Boot from the internal NVMe drive | ✅ |
 | Encrypted root (LUKS2), the passphrase typed on the Type Cover at the start | ✅ |
@@ -157,8 +159,8 @@ FEDORA_EDITION=KDE-Desktop scripts/build-all.sh
 ```
 
 The ISO lands in `build/out/`, for example
-`Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.3.fc45.aarch64.iso` or
-`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.5-300.sp11.3.fc45.aarch64.iso`, with a `.sha256` beside it. Then
+`Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.4.fc45.aarch64.iso` or
+`Fedora-KDE-Desktop-Live-45-1.4-SP11-7.3.5-300.sp11.4.fc45.aarch64.iso`, with a `.sha256` beside it. Then
 write it to a USB stick and install: [`docs/guide/install.md`](docs/guide/install.md).
 
 ## Reporting results

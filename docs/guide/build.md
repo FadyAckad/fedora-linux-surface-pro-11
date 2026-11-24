@@ -93,7 +93,7 @@ release.
     build of the same packages, installs the support, iptsd and sensors RPMs, builds the live initramfs, adds the
     device tree, the kernel arguments and the console font to Fedora's own live GRUB menu, then assembles the ISO
     and implants the media-check checksum. The result is, for example,
-    `build/out/Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.3.fc45.aarch64.iso`, plus `.sha256`.
+    `build/out/Fedora-Workstation-Live-45-1.4-SP11-7.3.5-300.sp11.4.fc45.aarch64.iso`, plus `.sha256`.
 
 ## Checks
 

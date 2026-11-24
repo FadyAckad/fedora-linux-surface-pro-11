@@ -91,9 +91,10 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
    rehearsal head for now: fetched from the scratch clone with `--depth=<commits + 1>`, checked out, staged with
    `git add linux-sp11`, and `branch = sp11/<new>` in `.gitmodules`. Then `KERNEL_SP11_REV_SHA256` as
    `kernel_rev_sha256` prints it.
-2. In a worktree `build/` starts empty: hard-link the main checkout's caches, copy its git pins, link the support
-   RPM and hard-link its live root (`sudo cp -al`) for step 36. The kernel's mock root is shared by all checkouts:
-   no other kernel build may run.
+2. In a worktree `build/` starts empty: hard-link the main checkout's caches and `hardware.env` (steps 36, 25
+   and 26 read it), copy its git pins, link the support RPM and, with a signing key, the Secure Boot stub, and
+   hard-link its live root (`sudo cp -al`) for step 36. The kernel's mock root is shared by all checkouts: no
+   other kernel build may run.
 
 ## 5. Build and verify
 
@@ -111,8 +112,10 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 5. On a host with the Secure Boot signing key (`docs/secure-boot.md`): step 25 builds the signed boot image's
    package for the new uname, and step 26 checks it with the support RPM. The key is encrypted and step 25 asks
    for its passphrase on a terminal, which the session has not: ask the maintainer to run
-   `scripts/25-build-secureboot-rpms.sh` in WSL, then run step 26. A unit that runs with Secure Boot on starts the
-   previous kernel until the new one's image is installed.
+   `scripts/25-build-secureboot-rpms.sh` in WSL, then run step 26. In a worktree the key is the main
+   checkout's: without `SECUREBOOT_KEY_DIR` step 25 finds none, builds nothing and ends with status 0
+   (reference.md, section 5). A unit that runs with Secure Boot on starts the previous kernel until the new
+   one's image is installed.
 
 ## 6. Documents now
 
@@ -139,6 +142,9 @@ device steps, the fork steps, the series as a tarball,
 
 1. The maintainer pushes `sp11/<new>` and sends its head; its tree must be the tested one, every commit signed, and
    authors, dates and messages those of the tested series (the maintainer's own patches plus a sign-off).
+   A contributor's pull request on the fork can instead be merged on GitHub, with "Rebase and merge" only (7.3.5
+   revision 4): its commits get new ids and stay unsigned, so the head is fetched and pinned anew. A merge commit
+   stops step 10, which wants one patch per commit.
 2. Pin that head: when the maintainer signed in place in this checkout's submodule, its HEAD already is the head
    (`git add linux-sp11`); otherwise fetch it from GitHub (`--depth=<commits + 1>`) and check it out first. Set
    `KERNEL_SP11_REV_SHA256` to the value `kernel_rev_sha256` prints and keep the revision number; step 10 and
