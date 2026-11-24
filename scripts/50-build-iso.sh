@@ -4,7 +4,7 @@
 #     (scripts/20), install sp11-surface-support, sp11-iptsd and the sensors stack (hexagonrpc, libssc,
 #     iio-sensor-proxy, sp11-sensors; inert on the live media, see below)
 #   - generate a dracut-live initramfs for the SP11 kernel
-#   - repack the root as LZMA EROFS with SELinux labels; Fedora's own live GRUB menu gains the Denali OLED DTB, the
+#   - repack the root as LZMA EROFS with SELinux labels; Fedora's own live GRUB menu gains the unit's Denali DTB, the
 #     kernel arguments and the large console font
 #   - replay the source ISO's hybrid GPT/El Torito boot layout with xorriso and implant the media-check checksum
 # Needs sudo (ownership/xattrs in the extracted root, chroot for dracut).
@@ -261,7 +261,7 @@ cleanup_mounts; trap - EXIT
 [ -z "$(mounts_under "$ROOTFS")" ] || die "mounts still active under $ROOTFS (they would be packed into the image): $(mounts_under "$ROOTFS" | tr '\n' ' ')"
 as_root install -m 0644 -o "$(id -u)" -g "$(id -g)" "$ROOTFS/boot/vmlinuz-$KERNEL_ABI" "$W/vmlinuz"
 as_root rm -rf "$W/dtb"; as_root install -D -m 0644 -o "$(id -u)" -g "$(id -g)" "$ROOTFS/usr/lib/modules/$KERNEL_ABI/dtb/$SP11_DTB" "$W/dtb/$SP11_DTB"
-[[ $(fdtget -t s "$W/dtb/$SP11_DTB" / compatible) == *microsoft,denali-oled* ]] || die "DTB compatible check failed"
+[[ $(fdtget -t s "$W/dtb/$SP11_DTB" / compatible) == *microsoft,denali* ]] || die "DTB compatible check failed"
 log "live initramfs: $(du -h "$W/initrd" | cut -f1), kernel: $(du -h "$W/vmlinuz" | cut -f1)"
 
 ## 7. Repack the live root as LZMA EROFS with SELinux labels from the root's own file_contexts.
@@ -285,12 +285,12 @@ erofs_mtime() { dump.erofs --path=/usr/lib/os-release "$1" 2>/dev/null | sed -n 
 log "remastered root: $(du -h "$W/remastered.erofs" | cut -f1)"
 
 ## 8. GRUB menu: Fedora's own live menu from the source ISO, plus what the Surface Pro 11 needs in every entry (the
-##    Denali OLED device tree, the kernel arguments) and GRUB at the panel's native mode with the large console font.
+##    Denali device tree, the kernel arguments) and GRUB at the panel's native mode with the large console font.
 ##    Entries, labels, timeout and default stay Fedora's; a layout this transformation does not recognise stops the
 ##    build instead of producing a menu without the device tree.
 SNIPPET="$W/grub-sp11.cfg"
 {
-  printf '%s\n' '# Surface Pro 11 (added by the SP11 build): the Denali OLED device tree and the kernel arguments for every' \
+  printf '%s\n' '# Surface Pro 11 (added by the SP11 build): the Denali device tree and the kernel arguments for every' \
     "# entry, and GRUB at the panel's native mode with a large console font (Fedora's font at a low mode as fallback)."
   printf 'set sp11_dtb="($root)%s"\n' "$DTB_ISO"
   printf 'set sp11_args="%s %s"\n' "$SP11_ARGS_INSTALLED" "$SP11_ARGS_LIVE_ONLY"

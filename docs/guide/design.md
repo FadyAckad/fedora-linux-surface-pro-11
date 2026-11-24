@@ -27,7 +27,9 @@ bullet is in the working note it names.
   version, replaces Fedora's build in place, and any later Fedora build replaces it in turn.
   [`docs/display.md`](../display.md).
 - Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb` from the kernel package, on the 5G SKU
-  `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree with the modem on PCIe 5 (chosen by the unit's SKU).
+  `qcom/x1e80100-microsoft-denali-oled-5g.dtb` (the same tree with the modem on PCIe 5), and on the X1P64100 LCD
+  `qcom/x1p64100-microsoft-denali.dtb`. The non-5G OLED and the LCD share the SKU string, so the build chooses by
+  the SoC and the panel vendor (`dtb_for_hardware`); only the 5G SKU takes the modem.
   It is loaded explicitly everywhere: GRUB `devicetree` on the live media, `GRUB_DEVICETREE` in every boot entry
   through the kernel-install plugin `15-sp11-surface.install`, because Fedora's automatic selection
   (`kernel-uki-dtbloader`) matches none of this SKU's SMBIOS hardware IDs. [`docs/hardware.md`](../hardware.md),
@@ -77,8 +79,10 @@ bullet is in the working note it names.
   stock ones (`kernel`, `kernel-core`, `kernel-modules*`, `kernel-uki-*`) in every configured repository, while
   SP11 kernel RPMs install from local files as they are ([`docs/guide/update.md`](update.md)).
   [`docs/fedora-media.md`](../fedora-media.md).
-- Firmware: only the six files the Denali device tree requests (ADSP and CDSP images with their device-tree
-  blobs, GPU zap shader, video codec), under the names it requests them by. [`docs/hardware.md`](../hardware.md).
+- Firmware: only the files the unit's Denali device tree requests (ADSP and CDSP images with their device-tree
+  blobs and the GPU zap shader; on the OLED also the video codec), under the names it requests them by. The LCD
+  tree does not enable the codec, and its 8380 zap shader falls back to Fedora's `qcom-firmware` when Windows
+  ships only the rejected purwa shader. [`docs/hardware.md`](../hardware.md).
 - Initramfs: the ADSP/CDSP firmware (about 24 MiB) and the Adreno microcode go into every initramfs, the live
   one included, so that the DSP starts before the root is looked for. No rescue image: Fedora's rescue entry would
   name a device-tree directory that does not exist. [`docs/fedora-media.md`](../fedora-media.md).

@@ -627,3 +627,33 @@ One entry per round; the facts each established live in the topic notes.
   two minutes into a start the TPM answered as before it (PCR 0, TPM2_Startup, the self test, a measurement), and
   the poweroff after it went through without a restart.
 - By hand (owner): poweroffs stayed off, with 3.21 without a sleep and with 3.22 after the sleep.
+
+## X1P64100 LCD: the GPU zap shader (2026-11-16 to 11-20)
+
+- Unit: `Microsoft Surface Pro, 11th Edition`, SKU `Surface_Pro_11th_Edition_2076` (the non-5G OLED's string),
+  X1P64100, LG Display `LGD LP129WT342166`; a local development image (kernel
+  `7.3.3-300.sp11.5.fc45`, support 3.11), not a published image.
+- Found (2026-11-16, issue #2): the installed LCD DTB requested `qcdxkmsucpurwa.mbn`; `qcom_scm_pas_init_image()`
+  returned `-EINVAL`, the GPU did not initialize, and Mesa used `llvmpipe` (`glxinfo -B`: `Accelerated: no`).
+  The 8380 shader from Fedora's `qcom-firmware` (Dell XPS 13 9345, sha256 `585f6749…`, 12088 bytes), installed
+  next to the Denali firmware and selected by the boot DTB's `zap-shader/firmware-name`, initialized the Adreno:
+  `freedreno`, `Adreno X1-85`, `Accelerated: yes`; no `zap_shader` or `hw init failed` line in the kernel log;
+  gnome-shell about 2 % CPU on an idle desktop. Other confirmed rows: display, speakers, sensors,
+  Wi-Fi/Bluetooth, battery.
+- Checked on 2026-11-20 with the shader repair: HDR (Mutter color mode 2, restored), tablet mode
+  (`PanelOrientationManaged` true while the keyboard was folded/detached and false after), auto-rotation
+  (orientation followed the tablet), auto-brightness (light 2–10 lux, backlight 0–5; `ambient-enabled` restored),
+  microphone (peak about -21 dBFS), front, rear and IR camera streams, four deep-sleep cycles, USB-C charging,
+  and USB-C data (a USB 3 NVMe adapter enumerated over UAS as `sda`). The brightness readings did not establish
+  that the panel physically dimmed. The LCD device tree does not enable `&iris`; the RPM ships no `qcvss8380.mbn`.
+- The build from this branch selects `qcom/x1p64100-microsoft-denali.dtb` by SoC and panel, takes the 8380
+  shader from Fedora's `qcom-firmware` when Windows ships only purwa, and ships no video codec firmware for the
+  LCD.
+
+## Second X1P64100 LCD: backlight, CPU scaling and video (PR #4)
+
+- A second owner built and booted the pre-rebase branch. On that panel, writes to `dp_aux_backlight` changed
+  the reported brightness but not the screen. With a PWM backlight the slider, keys and auto-brightness worked.
+- Only `policy0` existed before the fixes. With the CPU topology and SCMI frequency-table fixes, all three
+  clusters scaled. With Iris enabled and `qcvss8380.mbn` installed, H.264 and H.265 hardware encode and decode
+  passed a 300-frame round trip. These results are from the owner's locally patched install.
