@@ -12,10 +12,8 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   device tree); the kernel runs in lockdown `integrity`. On the device with shim-aa64 16.1-7, grub2-efi-aa64
   2.12-83 and kernel 7.3.5 revision 1: a test image on 2026-11-20, the packages on 2026-11-21.
 - Fedora's own entries start no kernel with Secure Boot on. GRUB's `linux` command hands the image to shim's
-  loader, and shim 16.1-7's `LoadImage()` does not return on this firmware once it has verified the image: with
-  shim's log on, the last lines are the image's hash for the measurement, and the allocation's line never comes
-  (2026-11-20). The screen stays as it is. The firmware call between the two is the image's measurement into the
-  TPM; which of the two hangs is not separated.
+  loader, and shim 16.1-7's `LoadImage()` does not return on this firmware (shim's loader). The screen stays as
+  it is.
 - `chainloader` is built into Fedora's arm64 GRUB (2.12-81, 2.12-83). With Secure Boot on GRUB loads the image
   itself: it has shim verify the file, copies it and jumps into it. shim reports no memory attribute protocol
   and an executable heap on this firmware, and the jump works. With Secure Boot off the same command uses the
@@ -25,6 +23,36 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   for a key (QEMU).
 - The kernel's command line is the `chainloader` line's arguments, and the initramfs is a file on the ESP.
   Neither is signed, as in Fedora's own Secure Boot setup.
+
+## shim's loader
+
+- shim 16.1 answers `LoadImage()` itself. For an image in memory it registers its record of the image with the
+  firmware (`InstallMultipleProtocolInterfaces`) and then checks, hashes and measures the image.
+- Inside that call the firmware writes the address of code of its own core into one word of shim's record: the
+  loaded image's `FilePath`, at offset 0x20. It does so when the word at 0x18, `DeviceHandle`, is zero, which it
+  is whenever the caller's device path leads to no device: GRUB's memory-mapped path, or none. No other word
+  changes (device, 2026-11-25).
+- For the measurement shim's `tpm_log_pe()` calls `DevicePathSize()` on that field. The walk takes the core's
+  code for path nodes and reaches one of length 0 after 70429 bytes, where it never advances: no firmware call
+  and no error, while timers keep running. The interrupted program counter lay in that loop at 6 s and at 14 s
+  (device, 2026-11-25).
+- A test program that wrote shim's own value back after the registration call made the same `LoadImage()` call
+  return `Success`, without a path and with GRUB's memory-mapped path; without the write GRUB's form stopped in
+  the same start (device, 2026-11-25).
+- From inside the call the firmware reports failed checks of its core, as hardware error records its variable
+  service refuses: the DXE core's module GUID, the status code for an illegal software state, and the place
+  `Image`, line 972. In the public DXE core the record of an image has a started flag at 0x18 and the entry
+  point at 0x20, and its lookup yields a foreign pointer unchanged when the signature check fails without
+  halting. On shim's record those two are `DeviceHandle` and `FilePath`. The vendor's routine is not public.
+- shim's unload frees its record and leaves the protocols on the handle. The firmware wrote the same word into
+  such a freed block at the next registration (device, 2026-11-25).
+- A call whose device path names the file keeps the field, `DeviceHandle` being set: shim reads the file itself
+  and returns. GRUB's `chainloader` and the patched stub do not call `LoadImage()` at all: a program started
+  through `chainloader` runs on GRUB's own image handle (device, 2026-11-25).
+- The firmware update of 2026-11-25 changed none of it: the same test gave the same result.
+- No local fix (owner, 2026-11-25): Secure Boot works through the route above. A shim of our own as a second
+  stage would only spare the stub its loader; Fedora's own entries would still lack the device tree, because
+  GRUB's `devicetree` is a lockdown command.
 
 ## The stub
 
@@ -226,3 +254,5 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   the device the same day.
 - 2026-11-23: a GRUB password under Secure Boot, the Windows entry `--unrestricted` (support 3.19), and the
   encrypted root opened by a key sealed in the TPM against PCR 7; confirmed on the device.
+- 2026-11-25: the cause of shim's loader not returning (shim's loader), from five trace rounds on the device;
+  the same after a firmware update; left without a local fix.
