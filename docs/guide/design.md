@@ -53,11 +53,12 @@ bullet is in the working note it names.
   `grub2-efi-aa64-modules` to `/boot/grub2/arm64-efi/`, loadable while Secure Boot is off.
   [`docs/hardware.md`](../hardware.md).
 - Secure Boot, optional: Fedora's own boot entries start no kernel on this firmware while Secure Boot is on,
-  because shim's loader does not return. GRUB's `chainloader` does start an image, so each kernel gets one file
-  signed with the owner's key (a boot stub, the kernel and the device tree), built by step 25 and packaged
-  beside the kernel. The support RPM's `sp11-secureboot` copies it and the initramfs to the ESP and writes GRUB
-  entries that the menu reads only while Secure Boot is on. The key never enters the repository or a package.
-  [`docs/secure-boot.md`](../secure-boot.md).
+  because shim's loader does not return: the firmware overwrites a field of shim's record of the image, and
+  shim's measurement of the image then never ends. GRUB's `chainloader` does start an image, so each kernel
+  gets one file signed with the owner's key (a boot stub, the kernel and the device tree), built by step 25 and
+  packaged beside the kernel. The support RPM's `sp11-secureboot` copies it and the initramfs to the ESP and
+  writes GRUB entries that the menu reads only while Secure Boot is on. The key never enters the repository or a
+  package. [`docs/secure-boot.md`](../secure-boot.md), shim's loader.
 - SELinux, sandboxes and CPU frequency: the kernel uses Fedora's configuration, so SELinux runs enforcing with
   Fedora's targeted policy and unprivileged user namespaces (Flatpak's bwrap, browser sandboxes) work as on any
   Fedora. Fedora builds `scmi-cpufreq` as a module that does not load on its own on these laptops; the support RPM

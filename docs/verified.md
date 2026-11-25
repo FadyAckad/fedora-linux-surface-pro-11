@@ -643,3 +643,14 @@ One entry per round; the facts each established live in the topic notes.
   touch controller came at 12.8 s, as in such starts of revisions 2 and 3.
 - By hand (owner): the round's by-hand checks passed (the brightness keys, both cameras, touch and pen, the
   Bluetooth keyboard, rotation, charging).
+
+## A firmware update through Windows (2026-11-25)
+
+- Changed: the Surface's firmware, through Windows; no package. Windows had listed that update as installed
+  since the end of October, while its firmware device showed status 0xC0000058 and the old version kept running.
+- Confirmed in the first starts on it, with kernel 7.3.5 revision 4 and support 3.22: through the signed entry
+  (`ACTIVE`), the root opened by the TPM 1.4 s after `systemd-cryptsetup` started, `Enforcing`, no provider
+  waiting for `sync_state`, the bound devices revision 4's (458), the five sensors' readings, a deep sleep and
+  resume. The kernel's messages are kinds earlier rounds had, the QRTR pair at the resume among them.
+- shim's loader stops as before (`docs/secure-boot.md`, shim's loader).
+- By hand (owner): no passphrase prompt at the first start, mobile data came up, the lid woke the Surface.
