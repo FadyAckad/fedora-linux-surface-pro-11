@@ -20,7 +20,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 | Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 4 (`7.3.5-300.sp11.4.fc45.aarch64`) |
 | Support RPM (`sp11-surface-support`) | 3.22 |
 | Signed boot image for Secure Boot (`sp11-kernel-secureboot-<kernel>`, optional, built with your own key) | 1-1, with the boot stub `262.1-sp11.1` |
-| Pen daemon (`sp11-iptsd`) | 3.1.0-4.sp11 |
+| Pen daemon (`sp11-iptsd`) | 3.1.0-5.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
 | HDR library (`libdisplay-info`, Fedora's with upstream's DisplayID 2.0 support) | 0.3.0-2.sp11.1 |
 

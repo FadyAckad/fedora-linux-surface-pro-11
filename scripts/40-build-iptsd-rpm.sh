@@ -42,6 +42,13 @@ install -m 0755 "$PAYLOAD_DIR/iptsd/sp11-iptsd-sleep" "$SRC/sp11-iptsd-sleep"
 for f in config/surface-pro-11-0c80.conf config/surface-pro-11-0c83.conf; do
   [ -f "$OEI/$f" ] || die "missing $OEI/$f"; install -m 0644 "$OEI/$f" "$SRC/$(basename "$f")"
 done
+# libwacom cannot match the bus of iptsd's uinput stylus; the rule gives it the override libwacom reads and the
+# tablet file describes the device under that override (docs/hardware.md, Pen).
+install -m 0644 "$PAYLOAD_DIR/iptsd/71-sp11-pen-libwacom.rules" "$PAYLOAD_DIR/iptsd/sp11-surface-pro-11.tablet" "$SRC/"
+for id in 0C80 0C83; do
+  grep -q "serial|0000|0000|IPTSD Virtual Stylus 045E:$id" "$SRC/sp11-surface-pro-11.tablet" \
+    || die "the libwacom tablet file does not match the stylus of 045E:$id"
+done
 grep -q 'KERNELS=="001C:045E:0C83' "$SRC/70-sp11-iptsd.rules" || die "udev rule does not match the OLED digitizer 045E:0C83"
 bash -n "$SRC/sp11-iptsd-sleep" || die "the sleep hook has a syntax error"
 if [ "$BUILD_MODE" = host ]; then
@@ -54,6 +61,8 @@ else
 fi
 rpm -qpl "$RPM" | grep -x /usr/libexec/sp11-iptsd >/dev/null || die "RPM lacks /usr/libexec/sp11-iptsd"
 rpm -qpl "$RPM" | grep -x /usr/lib/systemd/system-sleep/sp11-iptsd-sleep >/dev/null || die "RPM lacks the sleep hook sp11-iptsd-sleep"
+rpm -qpl "$RPM" | grep -x /usr/lib/udev/rules.d/71-sp11-pen-libwacom.rules >/dev/null || die "RPM lacks the libwacom udev rule"
+rpm -qpl "$RPM" | grep -x /usr/share/libwacom/sp11-surface-pro-11.tablet >/dev/null || die "RPM lacks the libwacom tablet file"
 
 # The point of the mock route is the linkage, so assert it: a cross-release build must not have picked up
 # the host's sonames. Comparing against what the host's own fmt/spdlog provide keeps this release-agnostic.

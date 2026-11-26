@@ -20,7 +20,8 @@ What each file and directory of the repository is. The build tree's caches and o
   Surface Aggregator's cover and posture state. `payload/camera/` holds `sp11-camera-probe`, an unpackaged
   measurement of the cameras' raw output. `payload/display/` holds the upstream patches of `libdisplay-info` and
   `sp11-display-probe`, an unpackaged, read-only report of the display path. `payload/iptsd/` holds the pen
-  daemon's sleep hook. `payload/secureboot/` holds the patch of the Secure Boot stub;
+  daemon's sleep hook and the udev rule and tablet file by which libwacom identifies the pen.
+  `payload/secureboot/` holds the patch of the Secure Boot stub;
   `sp11-secureboot-theme` draws the menu shown while Secure Boot is on.
 - `images/`: the README's screenshot.
 - `LICENSE`: GPL-3.0-or-later for the repository's content (see [`docs/guide/credits.md`](credits.md)).

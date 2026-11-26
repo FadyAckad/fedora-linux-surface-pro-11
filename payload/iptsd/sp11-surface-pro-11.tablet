@@ -1,0 +1,17 @@
+# Microsoft Surface Pro 11 (X1E80100): the pen digitizer of the built-in display.
+#
+# The pen reaches user space through iptsd's uinput device, whose bus (BUS_VIRTUAL) libwacom cannot match.
+# 71-sp11-pen-libwacom.rules marks that device UINPUT_SUBSYSTEM=serial, and libwacom then looks it up as
+# serial|0000|0000 plus the device name, which carries the digitizer's product ID (045E:0C80 or 045E:0C83).
+
+[Device]
+Name=Microsoft Surface Pro 11
+Class=ISDV4
+DeviceMatch=serial|0000|0000|IPTSD Virtual Stylus 045E:0C80;serial|0000|0000|IPTSD Virtual Stylus 045E:0C83
+Width=274
+Height=184
+IntegratedIn=Display;System;
+
+[Features]
+Stylus=true
+Touch=true

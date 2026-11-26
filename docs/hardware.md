@@ -171,6 +171,20 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - The sleep hook (`payload/iptsd/sp11-iptsd-sleep`, from 3.1.0-4) stops the running instances before a sleep;
   after the wake the hidraw add event starts the daemon again. ooaklee's hook, used up to 3.1.0-3, also restarted
   it after the wake and waited, which held every wake for 1.2 to 1.5 s (`docs/sleep.md`, Wake).
+- libwacom (from 3.1.0-5): the desktop's tablet settings list only devices libwacom identifies, and libwacom
+  2.19.0 rejects iptsd's "IPTSD Virtual Stylus" as "a tablet but not supported". It reads the bus from the input
+  device's `PRODUCT` and knows usb, bluetooth and i2c there; the stylus is on `BUS_VIRTUAL` (0006), and a
+  `DeviceMatch` takes no `virtual` or `spi` bus either.
+- The way in is libwacom's bus override for uinput devices, the udev properties `UINPUT_DEVICE` and
+  `UINPUT_SUBSYSTEM`: `serial` is the one value it accepts on that path, and it then looks the device up as
+  `serial|0000|0000|<name>`. `payload/iptsd/71-sp11-pen-libwacom.rules` sets the two properties on the stylus of
+  both digitizers, and `payload/iptsd/sp11-surface-pro-11.tablet` (installed under `/usr/share/libwacom`) matches
+  both names as a 274 x 184 mm tablet built into the display.
+- Checked on 2026-11-26 on a unit with the `045E:0C80` digitizer (kernel 7.3.5 revision 1, GNOME 51, libwacom
+  2.19.0), with 3.1.0-5 upgraded over 3.1.0-4: `libwacom-list-local-devices` lists "Microsoft Surface Pro 11" on
+  the stylus's event node with the general pen and its eraser, also on the device the upgrade's restart of the
+  daemon created. By hand (that unit's owner), after a new login: GNOME Settings lists the pen under Wacom
+  Tablet. Not checked: the `045E:0C83` name.
 - Known issue, recovering by itself: about 10 s into a boot the touch driver can log `invalid HID-SPI
   header=09 00 00 05 ready=1` and `host HID-SPI fault #1 ret=-71; scheduling cold recovery`. Those four bytes are
   the acknowledgement of the driver's own `SET_FEATURE` 0x05, which its initialization had read 0.4 ms earlier:

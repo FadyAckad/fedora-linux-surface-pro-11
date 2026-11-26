@@ -1,0 +1,10 @@
+# Surface Pro 11: let libwacom, and with it the desktop's tablet settings, identify the pen.
+#
+# iptsd publishes the pen as a uinput device on BUS_VIRTUAL (0006). libwacom (2.19.0) identifies a device by
+# the bus of its PRODUCT property and knows usb, bluetooth and i2c there, so it rejects this one as
+# unsupported. For uinput devices it reads a bus override from UINPUT_DEVICE and UINPUT_SUBSYSTEM; "serial" is
+# the one value it accepts on that path, and it then looks the device up as serial|0000|0000|<name>, the
+# match of sp11-surface-pro-11.tablet.
+SUBSYSTEM=="input", ATTRS{id/bustype}=="0006", ATTRS{id/vendor}=="045e", \
+  ATTRS{id/product}=="0c80|0c83", ATTRS{name}=="IPTSD Virtual Stylus 045E:0C8?", \
+  ENV{UINPUT_DEVICE}="1", ENV{UINPUT_SUBSYSTEM}="serial"
