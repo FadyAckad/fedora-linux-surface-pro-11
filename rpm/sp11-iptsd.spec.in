@@ -14,6 +14,8 @@ Source2:        sp11-iptsd@.service
 Source3:        sp11-iptsd-sleep
 Source4:        surface-pro-11-0c80.conf
 Source5:        surface-pro-11-0c83.conf
+Source6:        71-sp11-pen-libwacom.rules
+Source7:        sp11-surface-pro-11.tablet
 ExclusiveArch:  aarch64
 
 BuildRequires:  gcc-c++
@@ -57,6 +59,8 @@ install -D -m 0755 %{_vpath_builddir}/src/iptsd-check-device %{buildroot}%{_libe
 install -D -m 0644 %{SOURCE4} %{buildroot}%{_datadir}/iptsd/surface-pro-11-0c80.conf
 install -D -m 0644 %{SOURCE5} %{buildroot}%{_datadir}/iptsd/surface-pro-11-0c83.conf
 install -D -m 0644 %{SOURCE1} %{buildroot}%{_udevrulesdir}/70-sp11-iptsd.rules
+install -D -m 0644 %{SOURCE6} %{buildroot}%{_udevrulesdir}/71-sp11-pen-libwacom.rules
+install -D -m 0644 %{SOURCE7} %{buildroot}%{_datadir}/libwacom/sp11-surface-pro-11.tablet
 install -D -m 0644 %{SOURCE2} %{buildroot}%{_unitdir}/sp11-iptsd@.service
 install -D -m 0755 %{SOURCE3} %{buildroot}%{_prefix}/lib/systemd/system-sleep/sp11-iptsd-sleep
 install -D -m 0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE.iptsd
@@ -94,10 +98,18 @@ fi
 %{_datadir}/iptsd/surface-pro-11-0c83.conf
 %{_unitdir}/sp11-iptsd@.service
 %{_udevrulesdir}/70-sp11-iptsd.rules
+%{_udevrulesdir}/71-sp11-pen-libwacom.rules
+# libwacom-data owns the directory; without libwacom the file is inert.
+%{_datadir}/libwacom/sp11-surface-pro-11.tablet
 %{_prefix}/lib/systemd/system-sleep/sp11-iptsd-sleep
 
 %changelog
-* Mon Nov 02 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+* Thu Nov 26 2026 SP11 build <sp11@localhost> - @VERSION@-@RPMREL@
+- Let libwacom identify the pen: 71-sp11-pen-libwacom.rules marks iptsd's uinput stylus with the bus override
+  libwacom reads (UINPUT_SUBSYSTEM=serial), and sp11-surface-pro-11.tablet describes it as a tablet built into
+  the display, so the desktop's tablet settings list it
+
+* Mon Nov 02 2026 SP11 build <sp11@localhost> - 3.1.0-4.sp11
 - Sleep hook sp11-iptsd-sleep: stop the daemon before a sleep as before, do nothing after the wake (the hidraw
   add event starts it); ooaklee's sp11-iptsd-restart restarted it and waited, holding every wake for 1.2 to 1.5 s
 
