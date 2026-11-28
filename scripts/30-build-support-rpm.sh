@@ -10,7 +10,7 @@ load_hardware
 # Bump with every change to the payload: the files this script installs from payload/, the spec template and the
 # sp11.conf values rendered into sp11.env. `dnf upgrade` acts on the version alone, so the guard below refuses to
 # rebuild the same version from other inputs.
-VERSION="3.22"
+VERSION="3.23"
 
 # What the payload is built from, apart from this unit's firmware and identity (device-bound by design): every
 # file directly under payload/ except the ISO templates and the kernel config fragment, the spec, the font's cell
@@ -212,9 +212,9 @@ done
 ## 7. The 5G SKU's modem (docs/modem.md): ModemManager kept off its QMI port, which never answers (a request queued
 ##    there blocks suspend; ModemManager's probe of it costs 45 s at start and at shutdown), and the GNSS feed for
 ##    GeoClue: the service, its socket (started by the rule when the modem appears), the sleep hook, GeoClue's
-##    drop-in and the policy module that lets GeoClue connect; and ModemManager's quick suspend/resume, which
-##    keeps the modem across a sleep (the kernel keeps it powered from 7.2.11 revision 9). Only for the 5G SKU
-##    (the 5G device tree).
+##    drop-in and the policy module that runs the feed in its own domain and lets GeoClue connect to it; and
+##    ModemManager's quick suspend/resume, which keeps the modem across a sleep (the kernel keeps it powered from
+##    7.2.11 revision 9). Only for the 5G SKU (the 5G device tree).
 MODEM=0
 if [ "$SP11_DTB" = "$SP11_DTB_5G" ]; then
   MODEM=1

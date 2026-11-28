@@ -179,6 +179,19 @@ assert_payload() {
   check as_root chroot "$M" /usr/bin/python3 -I -c 'import ast; ast.parse(open("/usr/libexec/sp11/sp11-gnss").read())'
   check as_root sh -c "chroot '$M' /usr/sbin/semodule -l | grep -qx sp11-gnss"
   check as_root grep -q 'sp11_gnss_var_run_t' "$M/etc/selinux/targeted/contexts/files/file_contexts"
+  # 3.23: the feed in its own domain (its file context from the module), GeoClue's connect rule naming that domain
+  # and no unconfined one, sd_notify to systemd's kernel_t socket, the feed relabelled after an upgrade or a
+  # downgrade; the feed starts from the standard library alone (-IS) and refuses a start without its socket.
+  check as_root grep -qE '^/usr/libexec/sp11/sp11-gnss[[:space:]]+--[[:space:]]+[a-z_:]+:sp11_gnss_exec_t:s0$' \
+    "$M/etc/selinux/targeted/contexts/files/file_contexts"
+  check as_root grep -qxF '(allow geoclue_t sp11_gnss_t (unix_stream_socket (connectto)))' \
+    "$M/usr/share/selinux/packages/sp11-gnss.cil"
+  check as_root sh -c "! grep -q unconfined '$M/usr/share/selinux/packages/sp11-gnss.cil'"
+  check as_root grep -qxF '(allow sp11_gnss_t kernel_t (unix_dgram_socket (sendto)))' \
+    "$M/usr/share/selinux/packages/sp11-gnss.cil"
+  check as_root sh -c "chroot '$M' /usr/bin/rpm -q --qf '%{POSTUN}' sp11-surface-support \
+    | grep -q 'restorecon /usr/libexec/sp11/sp11-gnss'"
+  check as_root sh -c "chroot '$M' /usr/libexec/sp11/sp11-gnss 2>&1 | grep -qx 'start through sp11-gnss.socket'"
   # 3.6: across system sleep the hook pauses the feed, which keeps GeoClue's connection, instead of stopping it.
   check as_root grep -qx 'Type=notify' "$M/usr/lib/systemd/system/sp11-gnss.service"
   check as_root grep -qF 'systemctl kill -s USR1 sp11-gnss.service' "$M/usr/lib/systemd/system-sleep/sp11-gnss"

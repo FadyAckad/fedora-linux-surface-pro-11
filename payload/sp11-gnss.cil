@@ -1,12 +1,70 @@
-;; Surface Pro 11 5G: GeoClue reads the modem's GNSS positions from sp11-gnss over the Unix socket that systemd
-;; creates for sp11-gnss.socket. systemd labels that socket for the service it starts, which runs unconfined
-;; (unconfined_service_t), and Fedora's geoclue_t may neither connect to it nor write a socket file under /run.
-;; The socket's directory gets its own type. Installed by sp11-surface-support (semodule -i); removed with it.
+;; Surface Pro 11 5G: the GNSS feed (sp11-gnss) in a domain of its own, and GeoClue's access to the feed's socket.
+;; systemd labels a socket unit's listening socket with the domain its service runs in, so GeoClue's one connect
+;; rule names the feed alone. The blocks follow Fedora's interfaces (named in each comment) with what the feed uses:
+;; Python from the standard library, QMI over QRTR, the socket systemd passes in, sd_notify. Installed by
+;; sp11-surface-support (semodule -i); removed with it.
+
+;; init_daemon_domain, init_nnp_daemon_domain: systemd starts the feed in sp11_gnss_t (the unit sets
+;; NoNewPrivileges=).
+(type sp11_gnss_t)
+(roletype system_r sp11_gnss_t)
+(typeattributeset domain (sp11_gnss_t))
+(typeattributeset daemon (sp11_gnss_t))
+(typeattributeset corenet_unlabeled_type (sp11_gnss_t))
+(type sp11_gnss_exec_t)
+(roletype object_r sp11_gnss_exec_t)
+(typeattributeset file_type (sp11_gnss_exec_t))
+(typeattributeset non_security_file_type (sp11_gnss_exec_t))
+(typeattributeset non_auth_file_type (sp11_gnss_exec_t))
+(typeattributeset exec_type (sp11_gnss_exec_t))
+(typeattributeset entry_type (sp11_gnss_exec_t))
+(typeattributeset direct_init_entry (sp11_gnss_exec_t))
+(filecon "/usr/libexec/sp11/sp11-gnss" file (system_u object_r sp11_gnss_exec_t ((s0) (s0))))
+(typetransition initrc_domain sp11_gnss_exec_t process sp11_gnss_t)
+(allow sp11_gnss_t sp11_gnss_exec_t (file (entrypoint execute getattr ioctl lock map open read)))
+(allow init_t sp11_gnss_t (process2 (nnp_transition nosuid_transition)))
+
+;; files_pid_file: the socket's directory, which systemd creates.
 (type sp11_gnss_var_run_t)
 (roletype object_r sp11_gnss_var_run_t)
 (typeattributeset file_type (sp11_gnss_var_run_t))
+(typeattributeset non_security_file_type (sp11_gnss_var_run_t))
+(typeattributeset non_auth_file_type (sp11_gnss_var_run_t))
 (typeattributeset pidfile (sp11_gnss_var_run_t))
 (filecon "/run/sp11-gnss(/.*)?" any (system_u object_r sp11_gnss_var_run_t ((s0) (s0))))
+
+;; corecmd_exec_bin (python3), files_read_usr_files, libs_use_ld_so, libs_use_shared_libs (without text
+;; relocations), miscfiles_read_localization (locale, /etc/localtime), kernel_read_vm_overcommit_sysctls (Python
+;; reads /proc/sys/vm/overcommit_memory at start).
+(allow sp11_gnss_t bin_t (dir (getattr open read search)))
+(allow sp11_gnss_t bin_t (lnk_file (getattr read)))
+(allow sp11_gnss_t bin_t (file (execute getattr ioctl lock map open read)))
+(allow sp11_gnss_t usr_t (dir (getattr open read search)))
+(allow sp11_gnss_t usr_t (lnk_file (getattr read)))
+(allow sp11_gnss_t usr_t (file (getattr ioctl lock open read)))
+(allow sp11_gnss_t etc_t (dir (getattr open read search)))
+(allow sp11_gnss_t etc_t (lnk_file (getattr read)))
+(allow sp11_gnss_t lib_t (dir (getattr open read search)))
+(allow sp11_gnss_t lib_t (lnk_file (getattr read)))
+(allow sp11_gnss_t lib_t (file (execute getattr ioctl map open read)))
+(allow sp11_gnss_t ld_so_t (lnk_file (getattr read)))
+(allow sp11_gnss_t ld_so_t (file (execute getattr ioctl map open read)))
+(allow sp11_gnss_t ld_so_cache_t (file (getattr ioctl lock map open read)))
+(allow sp11_gnss_t locale_t (dir (getattr open read search)))
+(allow sp11_gnss_t locale_t (lnk_file (getattr read)))
+(allow sp11_gnss_t locale_t (file (getattr ioctl lock map open read)))
+(allow sp11_gnss_t sysctl_vm_overcommit_t (file (getattr ioctl lock open read)))
+
+;; The location service over QRTR; the listening socket systemd passes in and GeoClue's connections (both carry
+;; the feed's label); the pipe its signal handlers write to; kernel_dgram_send: sd_notify, since systemd's notify
+;; socket carries kernel_t.
+(allow sp11_gnss_t self (qipcrtr_socket (create getattr read write)))
+(allow sp11_gnss_t self (unix_stream_socket (accept getattr getopt read write)))
+(allow sp11_gnss_t self (fifo_file (getattr read write)))
+(allow sp11_gnss_t self (unix_dgram_socket (create write)))
+(allow sp11_gnss_t kernel_t (unix_dgram_socket (sendto)))
+
+;; GeoClue connects to the feed's socket.
 (allow geoclue_t sp11_gnss_var_run_t (dir (getattr open search)))
-(allow geoclue_t sp11_gnss_var_run_t (sock_file (getattr open write append)))
-(allow geoclue_t unconfined_service_t (unix_stream_socket (connectto)))
+(allow geoclue_t sp11_gnss_var_run_t (sock_file (append getattr open write)))
+(allow geoclue_t sp11_gnss_t (unix_stream_socket (connectto)))

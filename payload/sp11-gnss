@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python3 -IS
 # Surface Pro 11 5G: the modem's GNSS positions for GeoClue. GeoClue's nmea-socket source
 # (/etc/geoclue/conf.d/90-sp11-gnss.conf) connects to the socket systemd passes in (sp11-gnss.socket, which udev
 # starts when the modem appears); while a client is connected this runs a fix session on the modem's location
@@ -11,6 +11,8 @@
 # The location service refuses an event registration without client type and client string: a client without type is
 # a non-framework one, which must name itself. This registers as an application-framework client, as Qualcomm's own
 # LOC client does. Message layouts: location_service_v02.h/.c (Qualcomm's LOC IDL, revision 2.177).
+# It runs in its own SELinux domain (sp11-gnss.cil). -IS: the standard library only; Python's site module would look
+# up the service's dynamic user, which the domain does not allow.
 # Logs no position.
 import os
 import select
@@ -27,14 +29,13 @@ LOC_SERVICE = 16
 QMI_REQUEST, QMI_RESPONSE, QMI_INDICATION = 0x00, 0x02, 0x04
 REG_EVENTS, START, STOP, IND_POSITION = 0x21, 0x22, 0x23, 0x24
 EVENT_POSITION_REPORT = 0x01
-CLIENT_AFW, CLIENT_NFW = 1, 2
+CLIENT_AFW = 1
 CLIENT_ID = b'sp11'                                  # QMI_LOC_MAX_CLIENT_ID_STRING_LENGTH_V02: 4
 SESSION_ID = 0
 NODE = int(os.environ.get('SP11_GNSS_NODE', '3'))    # the modem's QRTR node; the tests use the local one
 IDLE_EXIT = int(os.environ.get('SP11_GNSS_IDLE_EXIT', '60'))
 TIMEOUT = 10                                         # seconds per QMI request
 RETRY = 10                                           # seconds between session attempts
-SILENCE = 120                                        # seconds without a report before the session is restarted
 MAX_UNCERTAINTY = 500.0                              # metres; fixes less certain than this are not passed on
 KNOT = 1852 / 3600                                   # m/s
 
@@ -124,16 +125,8 @@ class Session:
 
     def start(self):
         self.lookup()
-        mask = tlv(0x01, struct.pack('<Q', EVENT_POSITION_REPORT))
-        for ctype in (CLIENT_AFW, CLIENT_NFW):
-            try:
-                self.request(REG_EVENTS, [mask, tlv(0x10, CLIENT_ID), tlv(0x11, struct.pack('<I', ctype)),
-                                          tlv(0x12, b'\0')])
-                break
-            except QmiError as err:
-                log(f'event registration as client type {ctype} refused: {err}')
-        else:
-            raise QmiError('no event registration accepted')
+        self.request(REG_EVENTS, [tlv(0x01, struct.pack('<Q', EVENT_POSITION_REPORT)), tlv(0x10, CLIENT_ID),
+                                  tlv(0x11, struct.pack('<I', CLIENT_AFW)), tlv(0x12, b'\0')])
         self.request(START, [tlv(0x01, struct.pack('<B', SESSION_ID)), tlv(0x10, struct.pack('<I', 1)),
                              tlv(0x12, struct.pack('<I', 1)), tlv(0x13, struct.pack('<I', 1000))])
 
@@ -265,7 +258,7 @@ def main():
         listen = listening_socket()
         notify('READY=1')
         next_try = 0.0
-        idle_since = last_report = time.monotonic()
+        idle_since = time.monotonic()
         while True:
             now = time.monotonic()
             while sleep_requests:
@@ -283,7 +276,7 @@ def main():
                 session = Session()
                 try:
                     session.start()
-                    last_report, fixes = now, 0
+                    fixes = 0
                     log(f'fix session started ({len(clients)} client{"s" if len(clients) > 1 else ""})')
                 except (QmiError, OSError) as err:
                     log(f'no fix session: {err}; next attempt in {RETRY} s')
@@ -293,10 +286,6 @@ def main():
                 session.close(True)
                 session, idle_since = None, now
                 log(f'fix session stopped: no client ({fixes} fixes)')
-            if session and now - last_report > SILENCE:
-                log(f'no report for {SILENCE} s; restarting the fix session')
-                session.close(True)
-                session, next_try = None, now
             if not clients and session is None and now - idle_since >= IDLE_EXIT:
                 log(f'no client for {IDLE_EXIT} s; exiting')
                 return
@@ -319,8 +308,7 @@ def main():
                     if item:
                         reports.append((IND_POSITION, item[1]))
                     for msg_id, tlvs in reports:
-                        last_report = time.monotonic()
-                        data = nmea(tlvs) if msg_id == IND_POSITION else None
+                        data =nmea(tlvs) if msg_id == IND_POSITION else None
                         if data is None:
                             continue
                         fixes += 1

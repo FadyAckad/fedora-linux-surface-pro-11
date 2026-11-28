@@ -55,7 +55,9 @@ never touches the host.
 - Both paths check the 3.x payload (dnf override, `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover); from
   3.5 the modem's files and the GNSS feed's policy module on a 5G unit (loaded by hand on the live path, as step
   50 does) and their absence on the others; from 3.6 the sleep hook's pause instead of a stop; from 3.7
-  `sp11-diag`'s denial search of the whole journal.
+  `sp11-diag`'s denial search of the whole journal; from 3.23 the feed's own domain (the script's file context,
+  GeoClue's connect rule naming it and no unconfined one, its notify rule, the relabel after a downgrade, a start
+  from the standard library alone).
 
 ### Step 36: the kernel install
 

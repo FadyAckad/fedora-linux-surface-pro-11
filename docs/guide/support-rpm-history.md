@@ -98,3 +98,7 @@ in [`docs/verified.md`](../verified.md).
   measurement (a drop-in for `systemd-pcrphase.service`).
 - 3.22: the same for the `final` measurement (`systemd-pcrphase-sysinit.service`), which with 3.21 alone still
   turned a poweroff into a restart after the TPM had failed ([`docs/hardware.md`](../hardware.md), TPM).
+- 3.23: on the 5G SKU the GNSS feed runs in an SELinux domain of its own, and GeoClue may connect to that domain
+  alone instead of to any unconfined service ([`docs/gnss.md`](../gnss.md)). A first build of 3.23 lacked the
+  rule for systemd's notify socket, so the feed's start timed out; the second build was confirmed, and the third,
+  which only corrects a comment in its uninstall script, is the one released.
