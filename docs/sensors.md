@@ -23,8 +23,8 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   when the channel probes (`qcom_scm_assign_mem()` for the node's two `qcom,vmids`; `9e47ad9c562e`), and a
   refusal fails the probe, leaving no `/dev/fastrpc-adsp`. It passes on this firmware: 7.3.5 revision 1 has the
   device and the five sensors' readings (2026-11-19).
-- Installed system: the live media up to 2026-11-23 blacklisted the ADSP; newer media start it in the live session
-  (`docs/hardware.md`, The DSP on the live media), where the stack is untested.
+- The live media start the ADSP in the live session (`docs/hardware.md`, The DSP on the live media), where the stack
+  is untested.
 
 ## Stack
 
@@ -37,18 +37,16 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   The proxy's udev rule enables `ssc-light ssc-compass` on `fastrpc-adsp*`, `ssc-accel` is the opt-in, and its
   unit allows `AF_QIPCRTR`.
 - SELinux: Fedora's `iiosensorproxy_t` has no `qipcrtr_socket` rule, so `sp11-sensors` loads a CIL module, which
-  also carries the logind rules of the sleep pause and, since 1.13, the D-Bus rules of GeoClue's compass source
-  (Compass).
-- GIO: up to 1.14 the proxy was refused, at every start, a read of `/etc/passwd` and twice `dac_read_search` and
-  `dac_override` (five `AVC` lines; the sensors worked regardless). The chain (`strace -k`, 2026-10-24): libqmi's
-  device property calls `g_file_new_for_uri`, GIO loads its modules, gvfs's client module asks for the user
-  runtime directory, GLib looks root up in `/etc/passwd` and tries `/root/.cache`, behind the unit's
-  `ProtectHome`. Since 1.15 a drop-in (`iio-sensor-proxy.service.d/10-sp11.conf`) sets
-  `GIO_MODULE_DIR=/usr/share/empty`: no GIO module loads and GIO keeps its built-in local VFS (`GIO_USE_VFS=local`
-  would still load the modules).
-- `sp11-sensors-check` and `sp11-diag` search the whole journal for denials since sp11-sensors 1.14 and support
-  3.7. Before, they searched only the kernel's messages (`journalctl -k`), where audit's denials never appear, so
-  an earlier "no AVC" was not a finding.
+  also carries the logind rules of the sleep pause and the D-Bus rules of GeoClue's compass source (Compass).
+- GIO: left alone, the proxy is refused, at every start, a read of `/etc/passwd` and twice `dac_read_search` and
+  `dac_override` (five `AVC` lines; the sensors work regardless). The chain (`strace -k`, 2026-10-24): libqmi's
+  device property calls `g_file_new_for_uri`, GIO loads its modules, gvfs's client module asks for the user runtime
+  directory, GLib looks root up in `/etc/passwd` and tries `/root/.cache`, behind the unit's `ProtectHome`. A
+  drop-in (`iio-sensor-proxy.service.d/10-sp11.conf`, 1.15) sets `GIO_MODULE_DIR=/usr/share/empty`: no GIO module
+  loads and GIO keeps its built-in local VFS (`GIO_USE_VFS=local` would still load the modules).
+- `sp11-sensors-check` and `sp11-diag` search the whole journal for denials. Audit's denials never appear in the
+  kernel's messages (`journalctl -k`), which they searched up to sp11-sensors 1.13 and support 3.6, so a "no AVC" of
+  those versions is not a finding.
 
 ## Inputs from Windows
 
@@ -155,10 +153,10 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   `RestartPreventExitStatus=` covers the main process only and an `ExecStartPre` exit 3 is restarted until the
   start limit, while an `ExecCondition` exit 1-254 skips the unit without a failure. Step 46 asserts the drop-in
   has neither setting.
-- Since 1.12 the re-attach after a wake does not count: `sp11-sensors-resume.service` leaves
-  `/run/sp11-sensors/resume`, and the guard removes it and counts that start in `resume-attaches` instead. Such a
-  start is still refused after an ADSP crash or once the cap is exceeded; a daemon that fails after a wake is
-  still stopped by the start limit, and its restarts count.
+- The re-attach after a wake does not count: `sp11-sensors-resume.service` leaves `/run/sp11-sensors/resume`, and
+  the guard removes it and counts that start in `resume-attaches` instead. Such a start is still refused after an
+  ADSP crash or once the cap is exceeded; a daemon that fails after a wake is still stopped by the start limit, and
+  its restarts count.
 - The daemon serves `/var/lib/sp11/hexagonrpc` (tmpfiles): links to the package's `sensors/config`,
   `sensors/sns_reg.conf` and `socinfo`, and a `fastrpc`-owned `sensors/persist/` (the DSP's
   `/persist/sensors/registry`) with a `C`-copy (mtimes kept) of the registry in `persist/registry/` and of the two
@@ -169,9 +167,9 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   1.3/1.4 copy at `sensors/registry`, and a `%triggerpostun -- sp11-sensors < 1.3` regenerates the running kernel's
   initramfs when a 1.1/1.2 package is upgraded away (hence `Requires: dracut`).
 - `sp11-sensors-resume.service` restarts the daemon `After=suspend.target`: the stock unit's
-  `Conflicts=suspend.target` stops it, nothing restarts a conflict-stopped unit, and `sleep.target` is active
-  before the suspend. Since 1.12 it runs `systemctl reset-failed` on the daemon first, which also resets its start
-  limit: a wake is not a restart loop, and five wakes in five minutes had hit the limit.
+  `Conflicts=suspend.target` stops it, nothing restarts a conflict-stopped unit, and `sleep.target` is active before
+  the suspend. It runs `systemctl reset-failed` on the daemon first, which also resets its start limit: a wake is
+  not a restart loop, and five wakes in five minutes had hit the limit.
 - `sp11-sensors-wait` (the online unit, `TimeoutStartSec=5min`) waits for a light reading, then hands
   iio-sensor-proxy what its own probe missed, without restarting it (Compass).
 - The sleep pause: iio-sensor-proxy stops every sensor when logind sends `PrepareForSleep(true)` and starts the
@@ -198,10 +196,9 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   `systemd-tmpfiles --create sp11-sensors.conf`. It asserts the user, the module, the fastrpc-owned registry copy
   and a live initramfs without the stack, puts the RPMs under `/sp11/rpms` and installs missing runtime
   dependencies from `build/cache/rpm-deps` (`protobuf3-c` provides `protobuf-c`).
-- Without the ADSP (live media up to 2026-11-23) nothing starts hexagonrpcd or the online unit; Anaconda's rsync
-  carries the policy store, `/etc/passwd` with `fastrpc` and the registry copy, so the installed system runs the
-  stack from its first boot. Step 46 installs the RPMs with `--replacepkgs` and the previous release with
-  `--oldpackage`; step 60 checks them in the ISO.
+- Anaconda's rsync carries the policy store, `/etc/passwd` with `fastrpc` and the registry copy, so the installed
+  system runs the stack from its first boot. Step 46 installs the RPMs with `--replacepkgs` and the previous release
+  with `--oldpackage`; step 60 checks them in the ISO.
 
 ## ADSP safety
 
@@ -212,10 +209,10 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
 
 ## sp11-sensors-check
 
-- `sp11-sensors-check` (also run by `sp11-diag`) reports the stack from boot to desktop: the daemon, the guard's
-  two counters, the DSP's file requests measured against `/run/sp11-sensors/attaches` (the last counted attach; a
-  re-attach after a wake leaves it alone since 1.12), one `ssccli` reading per sensor, iio-sensor-proxy, sleep,
-  SELinux and tablet mode.
+- `sp11-sensors-check` (also run by `sp11-diag`) reports the stack from boot to desktop: the daemon, the guard's two
+  counters, the DSP's file requests measured against `/run/sp11-sensors/attaches` (the last counted attach; a
+  re-attach after a wake leaves it alone), one `ssccli` reading per sensor, iio-sensor-proxy, sleep, SELinux and
+  tablet mode.
 - Its sleep section lists the inhibitor locks, the proxy's pause and resume lines, and one line per sleep of the
   boot with its length and the `Handover signaled` lines logged during it (0 for a sleep without a stream open).
 - `PanelOrientationManaged` is asked on the logged-in user's session bus with `runuser`/`gdbus`, so run the check
@@ -231,21 +228,21 @@ the dated history is at the end. Tablet mode and auto-rotation: `docs/tablet-mod
   the physical sensors, while the proxy probes the SSC sensors once, on the udev "add" of the node, 0.6 to 0.7 s
   after the attach: the compass was missing from that probe on three of six boots. A proxy restart brings it back
   but drops every client's claim and once made the CDSP assert.
-- Since 1.9 the online helper sends the proxy a synthetic uevent instead,
+- The online helper sends the proxy a synthetic uevent instead,
   `udevadm trigger --action=add --settle /sys/class/misc/fastrpc-adsp`, until the proxy reports `HasAccelerometer`,
   `HasAmbientLight` and `HasCompass`: it polls for 3 s after each event and waits 2, 4, 8, then 16 s between them,
-  within 120 s. The proxy answers an `add` by probing only the sensor types it lacks and leaves existing sensors
-  and their clients alone. A synthetic `add` starts the node's `SYSTEMD_WANTS` units again, and an event from
-  inside the online oneshot merges with its own job, so the helper sends it only while hexagonrpcd and the proxy
-  are active, and starts a stopped proxy instead of restarting one; step 46 asserts that it restarts or stops no
-  unit. Not yet exercised on the device.
+  within 120 s. The proxy answers an `add` by probing only the sensor types it lacks and leaves existing sensors and
+  their clients alone. A synthetic `add` starts the node's `SYSTEMD_WANTS` units again, and an event from inside the
+  online oneshot merges with its own job, so the helper sends it only while hexagonrpcd and the proxy are active,
+  and starts a stopped proxy instead of restarting one; step 46 asserts that it restarts or stops no unit. Not yet
+  exercised on the device.
 - GeoClue's compass source (heading for every location source) asks the proxy over D-Bus. Fedora 45's policy lets
-  neither `geoclue_t` send D-Bus messages to `iiosensorproxy_t` nor the reverse (two `USER_AVC ... denied
-  { send_msg }` lines at every GeoClue start), and behind that `ClaimCompass` needs polkit's
+  neither `geoclue_t` send D-Bus messages to `iiosensorproxy_t` nor the reverse (two
+  `USER_AVC ... denied { send_msg }` lines at every GeoClue start), and behind that `ClaimCompass` needs polkit's
   `net.hadess.SensorProxy.claim-sensor`, granted to active sessions only, while GeoClue runs as user `geoclue`
-  without one. 1.13 allows both D-Bus directions in the CIL module and adds `80-sp11-sensors-geoclue.rules`,
-  which grants the claim to user `geoclue` (still refused for another system user). On the device: 229 of 230
-  GeoClue locations in 60 s carried a heading, changing as the tablet turned; no denial, no CDSP crash.
+  without one. The CIL module allows both D-Bus directions, and `80-sp11-sensors-geoclue.rules` grants the claim to
+  user `geoclue` (1.13; still refused for another system user). On the device: 229 of 230 GeoClue locations in 60 s
+  carried a heading, changing as the tablet turned; no denial, no CDSP crash.
 
 ## Known issues
 

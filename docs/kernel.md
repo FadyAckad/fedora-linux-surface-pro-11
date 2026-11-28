@@ -11,11 +11,9 @@ removal, SELinux.
 - The result: Fedora's package family with the same names, provides and scriptlets (`kernel`, `kernel-core`,
   `kernel-modules{,-core,-extra,-internal}`, `kernel-uki-dtbloader`, `kernel-devel`, ...), uname
   `<version>-<release>.sp11.<rev>.fc<n>.aarch64`.
-- The tarball `linux-<version>.tar.xz` is the stable tag's tree (7.2.5, 7.2.7, 7.2.8, 7.2.9, 7.2.11, 7.2.14,
-  7.2.15, 7.3.3 and 7.3.5 checked). Fedora's own `patch-<x.y>-redhat.patch` (61 files in 7.2.5, 63 in 7.2.7,
-  62 in 7.2.8, 63 in 7.2.9, 91 in 7.2.11, 95 in 7.2.14, 94 in 7.2.15, 79 in 7.3.3, 86 in 7.3.5) is applied
-  before the series and shares only `MAINTAINERS` with it since 7.3.3 (up to 7.2.15 also the media `Kconfig`
-  and `Makefile`, for the IMX471 driver that 7.3 has).
+- The tarball `linux-<version>.tar.xz` is the stable tag's tree (checked for every version built, 7.2.5 to 7.3.5).
+  Fedora's own `patch-<x.y>-redhat.patch` (86 files in 7.3.5) is applied before the series and shares only
+  `MAINTAINERS` with it.
 
 ### The builds, by revision
 
@@ -59,14 +57,9 @@ removal, SELinux.
 | 7.3.5 revision 4 | 2026-11-24 | `kernel-7.3.5-300.fc45` | The LCD model's device tree (PWM backlight, the X1P64100's ten cores, video codec) and `scmi-cpufreq`'s all-boost frequency tables, from the fork's pull request 1; the OLED trees keep their content |
 
 Revisions 1 to 11 are one count over 7.2.5 to 7.2.9; from 7.2.11 on a revision is named with its kernel version.
-Every revision but 2, 6 and 9 to 12 passed its device round the day it was built, 7.3.3 revision 4 the morning
-after (`docs/verified.md`; revisions 9 to 12 passed but for the country re-send, which the sleep's 11d result
-defeated until revision 13; 7.3.3 revision 1 but for a suspend started with the cover open, which revision 2
-holds; 7.3.3 revision 5 passed the standard checks in boots that did not call for its second probe, which
-first ran on 2026-11-19; 7.3.5 revisions 2 and 3 with the hardware up about 3 s later, the TPM's first self
-test); the fork branch head and tree of each is in `docs/kernel-patches.md`. Before
-2026-09-23 the project built ooaklee's v23 kernel as `kernel-sp11` (`7.2.5-jg-0sp11v23.2-qcom-x1e`), with
-revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode switch).
+Every revision but 2, 6 and 9 to 12 passed its device round (`docs/verified.md`); the fork branch head of each is
+in `docs/kernel-patches.md`. Before 2026-09-23 the project built ooaklee's v23 kernel as `kernel-sp11`
+(`7.2.5-jg-0sp11v23.2-qcom-x1e`), with revision 1 (Fedora's LSM stack) and 2 (the POS tablet-mode switch).
 
 ## kernel.spec slots and the build
 
@@ -151,72 +144,61 @@ No listed feature uses the CDSP, but its fault showed that the boot votes were n
   devices they wait for. Whether a DSP is awake: a QMI ping over QRTR (the kernel-update skill's
   `sp11-dsp-ping.py`; CDSP node 10, ADSP node 5). Forcing the sync: write `1` without a newline to `state_synced`;
   the stuck CDSP answers at once.
-- The fix: `kernel-local` enables the video clock controller's driver. Up to 7.2.15 it enabled the crypto engine's
-  too, limited to its hashes (`CRYPTO_DEV_QCE_ENABLE_SHA`: its AES XTS and CTR fail the kernel's self-tests, and
-  dm-crypt never used the engine). 7.3 marks that driver `BROKEN` (`df373d39c6f0`: the engine is shared with the
-  secure world and the driver races with it), so from 7.3.3 revision 1 patch 0086 disables the crypto node in the
-  Denali tree: a disabled node is no user of the interconnect, and the engine casts no vote at all (`docs/sleep.md`
-  has its 394 MB/s vote of 7.2.11). The CDSP's `sleep_stats` assert around sensor stream changes is a known,
-  separate issue (`docs/sensors.md`, Known issues).
+- The fix: `kernel-local` enables the video clock controller's driver, and patch 0086 disables the crypto engine's
+  node in the Denali tree, since 7.3 marks its driver `BROKEN` (`df373d39c6f0`: the engine is shared with the secure
+  world and the driver races with it). A disabled node is no user of the interconnect and casts no vote; on 7.2 the
+  driver, limited to its hashes because its AES XTS and CTR failed the kernel's self-tests, voted 394 MB/s from its
+  probe on (`docs/sleep.md`).
+- The CDSP's `sleep_stats` assert around sensor stream changes is a known, separate issue
+  (`docs/sensors.md`, Known issues).
+- In most boots the CDSP announces its IPCRTR channel early and never acknowledges the open: QRTR's open times out
+  after 5 s in the initramfs (`failed to create endpoint`, `rpmsg_dev_probe: failed: -121`), so the initqueue ends
+  at about 7 s rather than 2.8 s. Left as is; nothing uses the CDSP's QRTR.
+- Up to 7.2.15 revision 1 a QRTR broadcast inside that window deadlocked with the probe, which held its send lock
+  into a failed open's unregistration: the name server, holding `qrtr_node_lock` and the node's `ep_lock`, waited
+  for the send lock, the probe for `ep_lock`, every QRTR user behind them. Three boots of 2026-11-05/06 sat 212 s in
+  dracut-initqueue, udevd unkillable, and ran without battery, Wi-Fi and sensors until a long power press. Patch
+  0085 releases the lock before the unregistration: a blocked sender drops its packet and the probe fails as in the
+  other boots. The name server's blocking send under `qrtr_node_lock` is left as is.
 
 ## Rebase to a new Fedora kernel
 
 Every command with its expected output: `.claude/skills/sp11-kernel-update/`. Rebase straight from the pinned base
 onto the new stable tag, whatever lies between (a stable tag contains every earlier one). What each rebase met:
 
-- 7.2.5 to 7.2.7 (revision 5): every stable change to a file of the patch set came with 7.2.6; three patches
-  adapted, three dropped, one added (`docs/kernel-patches.md`).
-- 7.2.7 to 7.2.8 (revision 10) and 7.2.8 to 7.2.9 (revision 11): the 74 commits rebased unchanged, without a
-  conflict; the stable commits that touch files of the series touch none of its code. At 7.2.9 `i2c-qcom-geni`
-  selects the serial engine's clock-table entry for 32 or 19.2 MHz (it wrote index 0) and refuses to probe without
-  one; X1E's QUP tables carry both, and its four buses carry the two PS8830 USB-C retimers.
-- 7.2.9 to 7.2.11 (7.2.11 revision 1, straight past 7.2.10): the 74 commits rebased unchanged. Four 7.2.11
-  commits touch files of the series, none its code: `lpass-wsa-macro.c` writes the digital volume again once its
-  clock runs (`docs/hardware.md`, Audio), UCSI matches connectors by `reg` (Denali lists 0 and 1 in order),
-  ath12k's panic handler is reverted, dwc3's gadget clears an invalid event count. Fedora's configuration adds the
-  Cortex-A725 erratum 3821522, the Raspberry Pi 5 IOMMU and PWM drivers and `CC_OPT_INLINE_MEMSET`.
-- 7.2.11 to 7.2.14 (7.2.14 revision 1, straight past 7.2.12 and 7.2.13): the 92 commits rebased unchanged; one
-  7.2.13 commit touches a file of the series (`pci_dev_wait()` in `drivers/pci/pci.c`), none its code. 7.2.13
-  changes four drivers this machine uses: the WCN7850 power sequencer drives the Wi-Fi enable line low at its
-  probe (`docs/hardware.md`, Wi-Fi); the GENI I2C driver keeps a 19.2 MHz source clock unless 32 MHz is already
-  selected (the retimers' buses); a PMIC GPIO direction change clears the opposite buffer (the volume keys, the
-  left retimer's reset and supplies, the panel's enable); the CCI accumulates its halt-acknowledge resets (the
-  cameras' buses). Fedora's configuration enables `EROFS_FS_PAGE_CACHE_SHARE`.
-- 7.2.14 to 7.2.15 (7.2.15 revision 1): the 94 commits rebased unchanged, with 0095 added on top. None of the 12
-  stable commits touches a file of the series (a Bluetooth address fix, io_uring races at exec and fork, an
-  skbuff change Fedora's 7.2.14 patch already carried, the HID ambient-light sensor, SMB direct, kbuild). Fedora's
-  configuration changes only its toolchain values.
-- 7.2.15 to 7.3.3 (7.3.3 revision 1, the first new kernel version): 434 stable commits touch files of the series.
-  Nine patches are upstream and dropped, three adapted, one added (`docs/kernel-patches.md`). Two adaptations
-  undo artefacts of the extraction: the QSPI touch patch had deleted 7.2's SPI tracepoints and defined register
-  offsets 7.3's `geni-se.h` names (`SE_DMA_TX_IRQ_EN_SET`, not `_EN`); the audio patch had reverted the WSA
-  macro's PM-clock conversion, so every tested kernel ran that macro on the old clock handling, and its functional
-  change now sits on upstream's PM-clock driver. One semantic clash: 7.3's Denali tree asks for a 2.4 MHz DMIC
-  rate (`35ce3c571297`) where the audio patch doubled the VA macro's base rate for the same /4 divider, and both
-  together gave /8; the doubling is dropped. Fedora's configuration: `CRYPTO_DEV_QCE` is gone (the driver is
-  `BROKEN`, Sync state and the CDSP), `QCOM_PAS` and `QCOM_PAS_TEE` split the PAS firmware authentication,
-  `HW_RANDOM_QCOM` replaces `CRYPTO_DEV_QCOM_RNG`, modules are signed with `MODULE_SIG_KEY_TYPE_MLDSA_87`. To
-  watch on the device: the deepest CPU idle state and `rpmhpd` skipping retention (sleep power), ath12k's 64
-  commits (Wi-Fi), `qca_set_bdaddr()` waiting for the right event (the Bluetooth address), fastrpc's polling mode
-  (the sensors), `q6apm`'s graph start count and the SoundWire port exhaustion check (audio). 7.3 renames the
-  `pci@` nodes to `pcie@` (labels unchanged); step 20's PCIe 5 check reads either name since this update.
-- 7.3.3 to 7.3.5 (7.3.5 revision 1, straight past 7.3.4): 15 stable commits touch files of the series, 14 of
-  them from 7.3.4. Two patches are upstream and dropped, one adapted (`docs/kernel-patches.md`): 7.3.4 fixes the
-  buffer unmap and the queue mode's position in code the audio patch replaces with its own, and the patch takes
-  both fixes in its form. The other stable changes to the series' files meet none of its code: the WSA884x
-  accepts temperatures from -10 to 150 degrees (its hwmon reading only), the WSA macro writes Compander1's two
-  bits at their v2.5 addresses (the speaker mode it sets is those registers' default), UCSI asks for the
-  alternate mode only of a partner that has one, ath12k checks the firmware's PHY count, and the PCIe controller
-  collects PERST# lines from bridge nodes only (the Denali trees name theirs in the root ports).
-- The same update, Fedora's side: its 7.3.5 patch reverts `910b828b22b7` ("phy: qcom: qmp-pcie: Skip PHY reset
-  if already up", new in 7.3; upstream's revert `9a07dfa7f6fe` is queued), so a PCIe PHY the firmware left
-  running is reset at its first start again, as on 7.2 (`docs/modem.md`, The link at boot). The configuration
-  gains `HAVE_EXIT_THREAD` and loses `INTEL_SSEI` and `SATA_INIC162X`. On the device (2026-11-19,
-  `docs/verified.md`): FastRPC's assignment of the ADSP's remote heap at its channel's probe, new with
-  `9e47ad9c562e`, passes (a refusal would leave no `/dev/fastrpc-adsp`, the sensors' path); the three PCIe links
-  come up at the first probe under the restored PHY reset and the iATU's DMA bypass bit (`efadda401c5c`); the
-  QRTR lines at a wake are still logged with `743b5c86276b`, which announces the services again and leaves the
-  lines.
+- 7.2.5 to 7.2.11 (revisions 5, 10 and 11, 7.2.11 revision 1): 7.2.6 brought every stable change to the series'
+  files (Procedure, step 3); the later rebases met none of its code. Drivers this machine uses changed under it:
+  from 7.2.9 `i2c-qcom-geni` selects the serial engine's clock-table entry for 32 or 19.2 MHz and refuses to probe
+  without one (X1E's QUP tables carry both; the PS8830 retimers' buses), 7.2.11's WSA macro writes the digital
+  volume once its clock runs (`docs/hardware.md`, Audio), and UCSI matches connectors by `reg` (Denali lists 0 and 1
+  in order).
+- 7.2.11 to 7.2.15 (7.2.14 revision 1, 7.2.15 revision 1): the series unchanged. 7.2.13 changes four drivers this
+  machine uses: the WCN7850 power sequencer drives the Wi-Fi enable line low at its probe (`docs/hardware.md`,
+  Wi-Fi); the GENI I2C driver keeps a 19.2 MHz source clock unless 32 MHz is already selected (the retimers' buses);
+  a PMIC GPIO direction change clears the opposite buffer (the volume keys, the left retimer's reset and supplies,
+  the panel's enable); the CCI accumulates its halt-acknowledge resets (the cameras' buses).
+- 7.2.15 to 7.3.3 (7.3.3 revision 1): 434 stable commits touch files of the series; nine patches dropped as
+  upstream, three adapted, one added (`docs/kernel-patches.md`). Two adaptations undo artefacts of the extraction:
+  the QSPI touch patch had deleted 7.2's SPI tracepoints and defined register offsets 7.3's `geni-se.h` names
+  (`SE_DMA_TX_IRQ_EN_SET`, not `_EN`); the audio patch had reverted the WSA macro's PM-clock conversion, so the 7.2
+  kernels ran that macro on the old clock handling, and its functional change now sits on upstream's PM-clock
+  driver. One semantic clash: 7.3's Denali tree asks for a 2.4 MHz DMIC rate (`35ce3c571297`) where the audio patch
+  doubled the VA macro's base rate for the same /4 divider, and both together gave /8; the doubling is dropped.
+  Fedora's configuration: `CRYPTO_DEV_QCE` gone (Sync state and the CDSP), `QCOM_PAS` and `QCOM_PAS_TEE` split the
+  PAS firmware authentication, `HW_RANDOM_QCOM` replaces `CRYPTO_DEV_QCOM_RNG`, modules signed with
+  `MODULE_SIG_KEY_TYPE_MLDSA_87`. 7.3 renames the `pci@` nodes to `pcie@` (labels unchanged); step 20's PCIe 5 check
+  reads either name.
+- 7.3.3 to 7.3.5 (7.3.5 revision 1, straight past 7.3.4): 15 stable commits touch files of the series; two patches
+  dropped as upstream, one adapted: 7.3.4 fixes the buffer unmap and the queue mode's position in code the audio
+  patch replaces with its own, and the patch takes both fixes in its form. The other changes meet none of the
+  series' code (the WSA884x's hwmon range, Compander1's v2.5 addresses, UCSI's alternate-mode check, ath12k's PHY
+  count, PERST# lines collected from bridge nodes only, which the Denali trees name in the root ports).
+- Fedora's side of 7.3.5: its patch reverts `910b828b22b7` ("phy: qcom: qmp-pcie: Skip PHY reset if already up", new
+  in 7.3; upstream's revert `9a07dfa7f6fe` is queued), so a PCIe PHY the firmware left running is reset at its first
+  start again (`docs/modem.md`, The link at boot). On the device (2026-11-19): FastRPC's assignment of the ADSP's
+  remote heap at its channel's probe (`9e47ad9c562e`) passes (`docs/sensors.md`, Kernel); the three PCIe links come
+  up at the first probe under the restored PHY reset and the iATU's DMA bypass bit (`efadda401c5c`); the QRTR lines
+  at a wake stay with `743b5c86276b`, which announces the services again.
 
 ### Procedure
 

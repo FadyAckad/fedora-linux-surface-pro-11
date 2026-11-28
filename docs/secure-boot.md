@@ -67,8 +67,6 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
 - A missing initramfs ends in two error lines for ten seconds and the return to GRUB; the kernel is not started
   (QEMU, 2026-11-21). `sp11_stub=debug` shows the stub's progress and pauses; `sp11_stub=shim-loader` takes
   systemd's own path.
-- With the two test patches of the device rounds the same recipe gave the stub the Surface ran on 2026-11-20,
-  byte for byte except the PE time stamp.
 
 ## The signed image and its package
 
@@ -81,13 +79,12 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   kernel's checksum, the device tree, the stub, the certificate's checksum). It requires `kernel-core` of that
   version; `kernel-core-uname-r` would also be met by `kernel-uki-dtbloader`.
 - The key directory (`SECUREBOOT_KEY_DIR`, default `sp11-secureboot/` of the checkout: `sp11-mok.key`,
-  `sp11-mok.crt`) is kept out of git by `.gitignore`, which also ignores `sp11-mok.key` anywhere in the tree (since
-  2026-11-22; before, `~/.config/sp11-secureboot`). Only `sbsign` in step 25 reads the private key: it enters no
-  mock root, no RPM and no file under `build/`. Without the directory step 25 builds nothing and step 26 has
-  nothing to check.
-- The private key is kept encrypted with its owner's passphrase (PKCS#8, scrypt; since 2026-11-22). `sbsign`
-  asks for the passphrase on the terminal; step 25 stops with a message when it has to sign without one, so a
-  session without a terminal hands that step to the owner.
+  `sp11-mok.crt`) is kept out of git by `.gitignore`, which also ignores `sp11-mok.key` anywhere in the tree. Only
+  `sbsign` in step 25 reads the private key: it enters no mock root, no RPM and no file under `build/`. Without the
+  directory step 25 builds nothing and step 26 has nothing to check.
+- The private key is kept encrypted with its owner's passphrase (PKCS#8, scrypt). `sbsign` asks for the passphrase
+  on the terminal; step 25 stops with a message when it has to sign without one, so a session without a terminal
+  hands that step to the owner.
 - A search for a leaked key must look for the private numbers: the modulus is in every signature and
   certificate.
 
@@ -113,25 +110,22 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   (`/etc/grub.d/09_sp11_secureboot`, before Fedora's `10_linux`; 08 is Fedora's `08_fallback_counting`). With
   Secure Boot off the menu and its default are Fedora's.
 - `status` ends in one `RESULT:` line (`NOT SET UP`, `NOT READY`, `READY`, `ACTIVE`) and names every installed
-  kernel without a signed image. `remove` deletes the copies, the entries and the menu. Up to support 3.15
-  `sp11-secureboot try` asked GRUB for one start through a signed entry with Secure Boot off (`TRIED`).
+  kernel without a signed image. `remove` deletes the copies, the entries and the menu.
 - The copies take the image's 17.9 MB and the initramfs, 79 MB on the tested unit, per kernel; its ESP had
   1864 MiB free with one kernel's copies (2026-11-21).
 
 ## GRUB under Secure Boot
 
 - GRUB refuses a font file from the disk (`prohibited by secure boot policy`, one error line before the menu)
-  and draws the menu with its built-in font: small at the panel's native mode, the frame as question marks (QEMU,
-  and the device with support 3.12 on 2026-11-21). The font inside Fedora's GRUB image, Unifont Regular 16, is as
-  small.
-- From support 3.13 the entries file moves the menu to the firmware's console (`terminal_output console`) while
-  GRUB is locked down. The menu then has a drawn frame, in the firmware console's font, which is as small on
-  this panel (QEMU, and the device on 2026-11-21).
+  and draws the menu with its built-in font: small at the panel's native mode, the frame as question marks (QEMU and
+  the device). The font inside Fedora's GRUB image, Unifont Regular 16, is as small.
+- The entries file moves the text menu to the firmware's console (`terminal_output console`) while GRUB is locked
+  down: it then has a drawn frame, in the firmware console's font, which is as small on this panel.
 - Fedora's GRUB image has the theme engine and its PNG and JPEG readers built in, and a theme and its images
   load under Secure Boot; `videoinfo` is not built in. The PNG reader knows transparency only as an alpha
   channel.
-- From support 3.14 a graphical menu stands in front of that text menu, from 3.15 in the usual menu's look.
-  `sync` writes `/boot/grub2/sp11-secureboot-menu.cfg`: the signed entries, then the Windows entry and the
+- A graphical menu in the usual menu's look stands in front of that text menu. `sync` writes
+  `/boot/grub2/sp11-secureboot-menu.cfg`: the signed entries, then the Windows entry and the
   firmware entry as `grub.cfg` holds them, each with a class `sp11-menu-N` before its own. It then has
   `sp11-secureboot-theme` draw the theme under `/boot/grub2/themes/sp11-secureboot`.
 - The theme tool (Python's standard library) draws with the glyphs of the console font's PF2 file, which
@@ -146,11 +140,10 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   the frame, the highlighted entry's bar and the text lie on the same pixels in both menus (2026-11-22).
 - The countdown is a progress bar tied to GRUB's timeout whose box carries the sentence as its left parts. It
   goes with the first key, as the text menu's line does.
-- GRUB clears its terminal before it starts an entry. Under a theme the terminal is a window, by default 70 % of
-  the screen in its middle: only that turned black with support 3.14, and Windows' boot manager left the rest
-  of the menu on the screen (the device, 2026-11-22). The theme of 3.15 makes the window the whole screen
-  (`terminal-left`, `terminal-top`, `terminal-width`, `terminal-height`, `terminal-border`): no pixel of the
-  menu is left once an entry is chosen (QEMU).
+- GRUB clears its terminal before it starts an entry. Under a theme the terminal is a window, by default 70 % of the
+  screen in its middle, and only that turns black: Windows' boot manager left the rest of the menu on the screen
+  (the device, 2026-11-22). The theme makes the window the whole screen (`terminal-left`, `terminal-top`,
+  `terminal-width`, `terminal-height`, `terminal-border`), so no pixel of the menu is left once an entry is chosen.
 - While GRUB is locked down the entries file loads `unicode`, sets the theme and reads the menu's file with
   `configfile`, as a menu of its own; `default`, `timeout` and `timeout_style` are exported for it. Without the
   file or the theme, or once that menu is left with Escape, the text menu on the firmware's console follows
@@ -174,9 +167,9 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
 - A GRUB password works under Secure Boot: Fedora's signed image (2.12-81) has `password_pbkdf2` built in, and
   with `/boot/grub2/user.cfg` from `grub2-setpassword` Fedora's `01_users` block sets the superuser `root`. Pressing
   `e` then asked for `root` and the password (2026-11-23). Entries marked `--unrestricted` start without it: the
-  signed entries, Fedora's own (`grub_arg --unrestricted` from `20-grub.install`) and, from support 3.19, the SP11
-  Windows entry, which started Windows without the password. UEFI Firmware Settings carries no `--unrestricted`
-  and needs it, as did os-prober's Windows entry until support 3.20 switched os-prober off.
+  signed entries, Fedora's own (`grub_arg --unrestricted` from `20-grub.install`) and the SP11 Windows entry
+  (support 3.19), which started Windows without the password. UEFI Firmware Settings carries no `--unrestricted` and
+  needs it; so did os-prober's Windows entry until support 3.20 switched os-prober off (`docs/fedora-media.md`).
 - With the password, Escape from the graphical menu asks for `root` and the password, then the text menu follows
   (2026-11-23): GRUB 2.12 lets only an authenticated superuser leave a menu (`grub_show_menu` in
   `normal/menu.c`). A password it refuses brings the same menu back after a second, without a message (Fedora's
@@ -197,29 +190,6 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
   initramfs copy on the ESP remains open to someone with the tablet.
 - Whoever holds the signing key can sign an image the Surface accepts.
 
-## What the device showed
-
-- 2026-11-20, a test image through a hand-written entry: the login screen with Secure Boot on, 221 modules
-  loaded and none refused, no failed unit, mobile data connected by itself.
-- 2026-11-21, support 3.12 and the add-on of 7.3.5 revision 1: `status` `READY` after the install; one start
-  through the signed entry with Secure Boot off after `try` (`TRIED`, the request cleared); with Secure Boot on
-  two starts without a choice in the menu (`ACTIVE`, lockdown `integrity`); a deep sleep of 68 s and its wake;
-  mobile data connected 46 s after the start; the unit's sync lines at the start and at the shutdown; no module
-  refused; the journal's errors those of a boot with Secure Boot off.
-- 2026-11-21, support 3.13 by `dnf upgrade` with Secure Boot on: the entries file has the console rule, and the
-  next start came up by itself (`ACTIVE`); the menu had its frame, its text still small (owner).
-- 2026-11-22, support 3.14 by `dnf upgrade`: the graphical menu showed at 2880x1920 with its three entries,
-  Fedora came up by itself through the signed entry (`ACTIVE`), and Windows started from the menu with Secure
-  Boot on. The entries' names stood three times as large as the usual menu's text beside titles of 16 pixels,
-  and the cleared terminal window lay over the menu's middle while Windows started (owner, photographs).
-- 2026-11-22, support 3.15 by `dnf upgrade` with Secure Boot on: `sync` drew the theme on the device (`status`:
-  `graphical`), the menu's file carries the image class of its three entries, and the restart came up by itself
-  through the signed entry (`ACTIVE`). The menu looked as QEMU drew it at 2880x1920, Escape led to the text
-  menu, and Windows started from the menu (owner).
-- 2026-11-22, support 3.16 by `dnf upgrade` with Secure Boot on: `ACTIVE` before and after a restart that came up
-  by itself, GRUB's default falling back to the first signed entry; Fedora and Windows started from the menu,
-  Escape led to the text menu (owner).
-
 ## Known issues
 
 - The live medium needs Secure Boot off: its kernel goes through GRUB's `linux` command.
@@ -228,12 +198,10 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
 - A module the kernel's build did not sign is refused while Secure Boot is on.
 - The route rests on Fedora's GRUB loading a `chainloader` image itself under Secure Boot and on this firmware
   letting that image run. If an update of shim or GRUB ends either, Fedora starts again with Secure Boot off.
-- With Secure Boot on no font file can be loaded: the text menu behind the graphical one is small (GRUB's
-  built-in font up to support 3.12, the firmware console's from 3.13), and so are GRUB's editor and command
-  line, which `e` and `c` open from the graphical menu in Unifont 16 across the whole screen (QEMU,
-  2026-11-22).
+- With Secure Boot on no font file can be loaded: the text menu behind the graphical one is small (the firmware
+  console's font), and so are GRUB's editor and command line, which `e` and `c` open from the graphical menu in
+  Unifont 16 across the whole screen (QEMU, 2026-11-22).
 - A title longer than the menu's line is cut, as the text menu cuts it.
-- Not yet seen on the device: a kernel update with its add-on.
 - QEMU cannot run the route to its end with Fedora's GRUB: its firmware with Secure Boot forbids executing the
   memory GRUB's loader uses. The host's checks to the kernel use a GRUB with one changed instruction. Its virtio
   display, which gives the panel's size, shows no firmware console: the text menu behind the graphical one shows
@@ -243,15 +211,11 @@ GRUB's behaviour under Secure Boot, what it protects, known issues. The build st
 
 - 2026-11-20: six device rounds. shim's loader does not return on this firmware; the route through GRUB's
   `chainloader` and the patched stub starts Fedora with Secure Boot on.
-- 2026-11-21: the route as packages (the stub build, the signed image's add-on, support 3.12 with
-  `sp11-secureboot`), confirmed on the device. Support 3.13 moves the menu to the firmware's console: the frame
-  is drawn again, the text stays small.
-- 2026-11-22: support 3.14 with the graphical menu for Secure Boot, confirmed on the device, Windows from it
-  too. Support 3.15 draws that menu on the device, in the usual menu's font and places, and has GRUB clear the
-  whole screen before an entry starts; confirmed on the device the same day. Support 3.16 is the same route with
-  less code: no `try`, no rules for GRUB's default (its fallback to the first entry does the same), no checks
-  for cases this unit does not have, and no sandbox tests (step 26 checks the installed packages); confirmed on
-  the device the same day.
+- 2026-11-21: the route as packages (the stub, the signed image's add-on, support 3.12 with `sp11-secureboot`) and
+  3.13's menu on the firmware's console, confirmed on the device.
+- 2026-11-22: support 3.14 to 3.16, confirmed on the device: the graphical menu, drawn on the device in the usual
+  menu's font and places, the whole screen cleared before an entry starts, and the route with less code (no `try`,
+  no rules for GRUB's default, no sandbox tests; step 26 checks the installed packages).
 - 2026-11-23: a GRUB password under Secure Boot, the Windows entry `--unrestricted` (support 3.19), and the
   encrypted root opened by a key sealed in the TPM against PCR 7; confirmed on the device.
 - 2026-11-25: the cause of shim's loader not returning (shim's loader), from five trace rounds on the device;

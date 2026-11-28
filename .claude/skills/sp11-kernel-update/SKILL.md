@@ -121,8 +121,9 @@ objects. No error, no warning; about two minutes on the 12-core WSL host.
 
 - `docs/kernel.md`: a row in the revision table, the tarball fact and the size of Fedora's own patch for the
   version in Sources and packages, what this rebase met in the rebase section.
-- `docs/kernel-patches.md`: a subsection for the revision (dropped, adapted and new patches, old-to-new numbers)
-  and the renumbered Contents table. Patch numbers are cited in the other notes as well (`docs/kernel.md`,
+- `docs/kernel-patches.md`: a row for the revision in the table of Where they come from (dropped, adapted and new
+  patches; the fork head once pushed), the old-to-new map when the rebase renumbers, and the renumbered Contents
+  table. Patch numbers are cited in the other notes as well (`docs/kernel.md`,
   `docs/hardware.md`, `docs/sleep.md`, `docs/sensors.md`, `docs/tablet-mode.md`, `docs/modem.md`,
   `docs/camera.md`).
 - `docs/guide/new-release.md`: the default revision.
@@ -149,7 +150,8 @@ device steps, the fork steps, the series as a tarball,
    (`git add linux-sp11`); otherwise fetch it from GitHub (`--depth=<commits + 1>`) and check it out first. Set
    `KERNEL_SP11_REV_SHA256` to the value `kernel_rev_sha256` prints and keep the revision number; step 10 and
    step 20 (accepts the cached packages, reruns its checks).
-3. `README.md`, `docs/guide/design.md`, `docs/guide/build.md` and `docs/verified.md` from the device results.
+3. `README.md`, `docs/guide/design.md`, `docs/guide/build.md` and `docs/verified.md` from the device results; the
+   pushed head in the revision's row of `docs/kernel-patches.md`.
 4. Ask whether the ISO should get the new kernel.
 5. One commit message for the maintainer: an imperative subject of at most about 65 characters, one to three
    sentences; first check that the change set still applies onto the main checkout, which may have moved.

@@ -27,8 +27,8 @@ Read the note named below before working on its area.
   `KERNEL_SP11_REV`, the configuration, sync state and the CDSP, the rebase procedure, install and removal,
   SELinux. Read before touching steps 10 and 20, `payload/kernel-local`, the kernel pins (the base commit in
   `sp11.conf`, the `linux-sp11` gitlink) or SELinux.
-- `docs/kernel-patches.md`: the patch manifest: each revision's provenance, every patch with its origin and
-  purpose, what was left out of v23.2, the planned patch for the power key's waking press.
+- `docs/kernel-patches.md`: the patch manifest: each revision's fork head and patches, every patch with its origin
+  and purpose, what was left out of v23.2. Read before adding, dropping or adapting a patch.
 - `docs/fedora-media.md`: the live media, GRUB, Anaconda and the installer's viewer, kernel-install and BLS
   entries, the live initramfs and root, the Fedora 45 differences. Read before touching steps 50 and 60, GRUB, the
   installer path or a Fedora release switch.

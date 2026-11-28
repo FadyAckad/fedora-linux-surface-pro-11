@@ -26,25 +26,11 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 
 ## What works
 
-Tested on the 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`). Every row was confirmed on 2026-11-02 on a Fedora
-45 Workstation installation running kernel 7.2.15 and the other versions above; on 2026-11-03 a fresh installation
-from the ISO built that day from the 45 release media 1.4 confirmed the rows from boot to suspend again, Flatpak,
-the Windows entry and USB-C aside. Kernel 7.3.3 (revisions 1 and 2, 2026-11-08 and 09) confirmed every row in
-use again, with the standard checks, the microphone, GPS, mobile data and a night's sleep. Revision 3
-(2026-11-12) confirmed the rows in use once more, with the standard checks and an 8-hour sleep, and added HDR.
-Revision 5 (2026-11-16) passed the standard checks and its round's checks by hand; its second probe of the 5G
-modem's PCIe controller brought the modem up in the one boot whose link was not up at first (2026-11-19). Kernel
-7.3.5 revision 1 (2026-11-19) passed the standard checks and its round's checks by hand, and opening the cover
-wakes the tablet again. With support 3.12 and a signed boot image (2026-11-21) Fedora started with Secure Boot on,
-through a sleep and with mobile data. Revision 2 (2026-11-22) passed the standard checks and its round's checks
-by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-23). The same day a fresh
-installation from the ISO built with revision 3 and support 3.18, its root encrypted, passed its round's checks by
-hand, with Secure Boot on. With support 3.19 a key sealed in the TPM then opened that root without a prompt.
-Revision 4 (2026-11-24) passed the standard checks and its round's checks by hand, with Secure Boot on and the
-root opened by the TPM. Support 3.23 (2026-11-27) confirmed GPS with the GNSS feed in its own SELinux domain, and
-pen daemon 3.1.0-5 (2026-11-28) passed its round's checks by hand.
-The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
-revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
+The ✅ rows were confirmed under Workstation on the tested 5G SKU (`Surface_Pro_with_5G_11th_Edition_2077`); the
+current versions last passed their device rounds on 2026-11-24 (kernel 7.3.5 revision 4, with Secure Boot on and
+the root opened by the TPM), 2026-11-27 (support 3.23) and 2026-11-28 (pen daemon 3.1.0-5). The KDE Plasma
+Desktop edition builds from the same RPMs, its rows last confirmed on 2026-10-08 with kernel revision 11 (7.2.9);
+the results by date are in [`docs/verified.md`](docs/verified.md).
 
 | Feature | Fedora 45 Workstation, Fedora's 7.3.5-300 (sp11.4) |
 |---|:-:|
@@ -83,14 +69,13 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
 ✅: confirmed on the tested unit. ❌: not covered by this project. Notes:
 
 - Secure Boot can be switched on for the installed system with a signing key of your own: Fedora then starts
-  through a signed boot image and the kernel runs locked down (2026-11-21, kernel 7.3.5 revision 1), and Windows
-  starts from GRUB's menu (2026-11-22). The installer needs it off, and so does a kernel without a signed image
+  through a signed boot image, the kernel runs locked down, and Windows starts from GRUB's menu. The installer
+  needs it off, and so does a kernel without a signed image
   ([`docs/guide/secure-boot.md`](docs/guide/secure-boot.md), [`docs/secure-boot.md`](docs/secure-boot.md)).
-- Fedora has the tablet's TPM (Microsoft Pluton) from kernel 7.3.5 revision 2: `/dev/tpm0` and `/dev/tpmrm0`,
-  the firmware's boot measurements, and Windows uses the TPM as before (2026-11-22). With Secure Boot on, a key
-  sealed in it opens an encrypted root at the start (2026-11-23,
-  [`docs/guide/secure-boot.md`](docs/guide/secure-boot.md)). The start takes about 3 s longer with the TPM
-  ([`docs/hardware.md`](docs/hardware.md), TPM).
+- Fedora has the tablet's TPM (Microsoft Pluton): `/dev/tpm0` and `/dev/tpmrm0`, the firmware's boot
+  measurements, and Windows uses the TPM as before. With Secure Boot on, a key sealed in it opens an encrypted
+  root at the start ([`docs/guide/secure-boot.md`](docs/guide/secure-boot.md)). The start takes about 3 s longer
+  with the TPM ([`docs/hardware.md`](docs/hardware.md), TPM).
 - GPS needs no SIM; near a window the first position came within about a minute, away from windows none in two
   minutes ([`docs/gnss.md`](docs/gnss.md)).
 - HDR takes two parts: the kernel's DisplayPort HDR commits and a rebuild of Fedora's `libdisplay-info` that
@@ -98,28 +83,16 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
   the tablet switches HDR off again, and a Fedora update of `libdisplay-info` takes the switch away until the
   RPM is rebuilt ([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md),
   [`docs/display.md`](docs/display.md)).
-- Asleep, the tablet drew 0.33 W over 8 hours with kernel revision 5 or later, against 0.85 W before. From
-  revision 9 the modem keeps its power through the sleep at no measurable cost (0.32 W), and with support 3.9
-  mobile data is back within 2 s of a wake; from revision 13 Wi-Fi is back about 13 s after a wake instead of
-  21 s
-  ([`docs/sleep.md`](docs/sleep.md), [`docs/modem.md`](docs/modem.md), [`docs/hardware.md`](docs/hardware.md),
-  Wi-Fi).
-- The screen comes back about 2.5 s sooner after a wake since pen daemon 3.1.0-4 and kernel 7.2.14 revision 2:
-  the pen daemon's sleep hook no longer holds the wake for 1.3 s, and the kernel's resume takes 1.4 s instead of
-  2.6 s, since it no longer powers the touch controller twice nor brings the three PCIe links up one after the
-  other ([`docs/sleep.md`](docs/sleep.md), Wake).
-- Since pen daemon 3.1.0-5 GNOME's Settings show the pen in their Graphics Tablets panel: the pressure feel of
-  tip and eraser, the button actions, the monitor it maps to and a calibration (2026-11-28,
-  [`docs/hardware.md`](docs/hardware.md), Pen).
-- Hardware video decoding works from kernel revision 7: a 720p VP9 clip decoded frame for frame in GStreamer, and
-  H.264 and H.265 clips once their colorimetry was relabelled ([`docs/hardware.md`](docs/hardware.md), Video
-  codec).
-- USB-C data works with the plug either way round since kernel 7.2.15 revision 1: a USB 3 stick runs at
-  5000 Mb/s on both ports, turned over as well. Before, it was not found turned over, because the retimer got its
-  mode before it was told of the connection ([`docs/hardware.md`](docs/hardware.md), USB-C data).
-- Under KDE Plasma, auto-rotation could stop until iio-sensor-proxy was restarted, and with automatic brightness on
-  the tablet did not stay asleep; the sensors RPMs fix both since libssc 0.4.4-3 (2026-10-07) and iio-sensor-proxy
-  3.9-3.sp11.2 (2026-10-08) ([`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)).
+- Asleep, the tablet drew 0.25 to 0.32 W through a night with the modem powered, and after a wake mobile data is
+  back within 2 s, Wi-Fi in about 13 s, the screen about 1.4 s after the kernel resumes
+  ([`docs/sleep.md`](docs/sleep.md), Wake; [`docs/modem.md`](docs/modem.md);
+  [`docs/hardware.md`](docs/hardware.md), Wi-Fi).
+- GNOME's Settings show the pen in their Graphics Tablets panel: the pressure feel of tip and eraser, the button
+  actions, the monitor it maps to and a calibration ([`docs/hardware.md`](docs/hardware.md), Pen).
+- Hardware video decoding works: a 720p VP9 clip decoded frame for frame in GStreamer, and H.264 and H.265 clips
+  once their colorimetry was relabelled ([`docs/hardware.md`](docs/hardware.md), Video codec).
+- USB-C data works with the plug either way round: a USB 3 stick runs at 5000 Mb/s on both ports, turned over as
+  well ([`docs/hardware.md`](docs/hardware.md), USB-C data).
 
 ## Status and scope
 

@@ -8,7 +8,7 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - Product `Microsoft Surface Pro with 5G, 11th Edition`, SKU `Surface_Pro_with_5G_11th_Edition_2077`, X1E80100,
   Samsung (SDC) OLED 2880x1920. The Bluetooth and Wi-Fi addresses are per unit: step 05 writes the Bluetooth
   address to `build/hardware.env`, the support RPM to `/etc/sp11/bluetooth-address`.
-- Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb`; from 7.2.11 revision 3 the 5G SKU boots
+- Device tree: `qcom/x1e80100-microsoft-denali-oled.dtb`; the 5G SKU boots
   `qcom/x1e80100-microsoft-denali-oled-5g.dtb`, the same tree plus its modem. `dtb_for_sku` in `scripts/lib.sh`
   picks the tree by SKU (`SP11_SKU_5G_REGEX`); the SKUs without a modem keep the OLED tree. The X1P LCD variant
   (`x1p64100-microsoft-denali.dtb`) is a different machine.
@@ -28,11 +28,10 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - The ADSP, CDSP and GPU blobs come from Windows' DriverStore (`surfacepro_ext_adsp8380*`,
   `qcnspmcdm_ext_cdsp8380*`, `qcdx8380*`); Fedora's `qcom-firmware` has no Denali directory. The Denali tree
   requests `qcadsp8380.mbn`, `adsp_dtb.mbn`, `qccdsp8380.mbn`, `cdsp_dtb.mbn`, the zap shader `qcdxkmsuc8380.mbn`
-  and, from 7.2.11 revision 6, the video codec's `qcvss8380.mbn` (in `qcdx8380*`, shipped since support 3.8);
-  Windows' `adsp_dtbs.elf` and `cdsp_dtbs.elf` get the DT names.
-- Not shipped since support 2.3: the `*_dtbs.elf` copies; `*.jsn` (the in-kernel pd-mapper,
-  `CONFIG_QCOM_PD_MAPPER=m`, needs none); `qcdxkmsucpurwa.mbn` (the X1P zap shader); `qcvss8380_pa.mbn` (the X1P
-  video firmware).
+  and the video codec's `qcvss8380.mbn` (in `qcdx8380*`); Windows' `adsp_dtbs.elf` and `cdsp_dtbs.elf` get the DT
+  names.
+- Not shipped: the `*_dtbs.elf` copies; `*.jsn` (the in-kernel pd-mapper, `CONFIG_QCOM_PD_MAPPER=m`, needs none);
+  `qcdxkmsucpurwa.mbn` (the X1P zap shader); `qcvss8380_pa.mbn` (the X1P video firmware).
 
 ## Audio
 
@@ -40,35 +39,32 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   (`UCM_SP11_REGEX`) and the microphone gain v19c leaves at 0 dB inserted into the UCM Mic device (`UCM_MIC_GAIN`,
   +16 dB). The support RPM replaces `alsa-ucm`'s `conf.d/x1e80100/x1e80100.conf` symlink and re-applies on an
   `alsa-ucm` trigger.
-- The UCM sets `WSA_RX0/RX1 Digital Volume` 81 (-3 dB, also the machine driver's cap) while the path is idle.
-  Since 7.2.11 `lpass-wsa-macro.c` writes the interpolator's digital volume again once its clock runs (upstream
-  `b2047b8cadad`), so the value applies at playback start; on the device both read 81 and the speakers' level and
-  balance passed.
+- The UCM sets `WSA_RX0/RX1 Digital Volume` 81 (-3 dB, also the machine driver's cap) while the path is idle;
+  `lpass-wsa-macro.c` writes the interpolator's digital volume again once its clock runs (upstream `b2047b8cadad`,
+  in 7.2.11), so the value applies at playback start (both read 81 on the device).
 - After the last sound (the sources of 7.3.3 revision 4, not timed on the device): WirePlumber closes the
   playback device after 5 s, its default, and 3 s later the two WSA8845 amplifiers and their SoundWire controller
   `6b10000.soundwire` suspend at run time, which stops the bus clock. The next device open starts it again. The
   SP11 profile of `wsa884x.c` programs an amplifier once per boot and expects it to report detached and attached
   around a clock stop: it switches the register cache to cache-only at the detach and syncs it at the attach
   (`wsa884x_update_status()`).
-- The amplifier's resume and a detach, reported from the controller's interrupt thread, are not ordered (the
-  7.2.15 and 7.3.3 trees compared on 2026-11-14). A detach reported before the resume leaves the register map
-  in direct mode while the amplifier is off the bus, the state caught on 2026-11-15 (below). One reported between
-  the resume's `regcache_cache_only(false)` and its `regcache_sync()` fails the resume since 7.3 (the sync
-  refuses a cache-only map with `-EINVAL`) and with it the device open; no boot has shown that. The controller's
-  driver gets no status back for a register write (`qcom_swrm_cmd_fifo_wr_cmd()`).
-- 7.3.3 against 7.2.15, the WSA macro's clocks: on upstream's PM-clock code since 7.3.3 revision 1
-  (`docs/kernel.md`, Rebase) the macro releases all four of its clocks 100 ms after the controller's suspend. The
-  7.2 kernels held its two LPASS core votes (`macro`, `dcodec`) from the probe on, sleeps included, and suspended
-  `mclk` and `fsgen` after 3 s.
-- Since 7.3.3 the kernel log holds lines of the bus's restarts that no log of 7.2 has. In the journal's 38 boots
-  of 2026-11-10 to 2026-11-14 (revisions 2 to 4, 39 playbacks): `SWR bus clsh detected` once in 7 boots,
-  `Parity error detected` for both amplifiers in 3, the controller's failed enumeration
-  (`SWR unknown interrupt value: 2048`) in 2.
-- A patch posted upstream on 2026-10-07 and unmerged on 2026-11-14, "soundwire: qcom: wait for the interrupt
-  thread before gating the clock", names these lines: the controller's suspend gates the bus clock while its
-  interrupt thread still runs, and the next restart ends in a clash, parity errors or a failed enumeration that
-  leaves an amplifier off the bus until a reboot. The controller's suspend, resume and interrupt handler are the
-  same in 7.2.15 and 7.3.3.
+- The amplifier's resume and a detach, reported from the controller's interrupt thread, are not ordered (the 7.2.15
+  and 7.3.3 trees). A detach reported before the resume leaves the register map in direct mode while the amplifier
+  is off the bus, the state caught on 2026-11-15 (below). One reported between the resume's
+  `regcache_cache_only(false)` and its `regcache_sync()` fails the resume since 7.3 (the sync refuses a cache-only
+  map with `-EINVAL`) and with it the device open; no boot has shown that. The controller's driver gets no status
+  back for a register write (`qcom_swrm_cmd_fifo_wr_cmd()`).
+- The WSA macro's clocks: on upstream's PM-clock code (since 7.3.3 revision 1, `docs/kernel.md`, Rebase) the macro
+  releases all four of its clocks 100 ms after the controller's suspend; the 7.2 kernels held its two LPASS core
+  votes (`macro`, `dcodec`) from the probe on, sleeps included.
+- Since 7.3.3 the kernel log holds lines of the bus's restarts that no log of 7.2 has; in 38 boots of 2026-11-10 to
+  14 (revisions 2 to 4, 39 playbacks): `SWR bus clsh detected` in 7, `Parity error detected` for both amplifiers in
+  3, the controller's failed enumeration (`SWR unknown interrupt value: 2048`) in 2.
+- A patch posted upstream on 2026-10-07, unmerged on 2026-11-14, "soundwire: qcom: wait for the interrupt thread
+  before gating the clock", names these lines: the controller's suspend gates the bus clock while its interrupt
+  thread still runs, and the next restart ends in a clash, parity errors or a failed enumeration that leaves an
+  amplifier off the bus until a reboot. The controller's suspend, resume and interrupt handler are the same in
+  7.2.15 and 7.3.3.
 - The LPASS pin controller (`6e80000.pinctrl`; its gpio12 is the amplifiers' shutdown line) takes the same two
   votes, on both series only around its register accesses: its run-time callbacks are `pm_clk_suspend` and
   `pm_clk_resume` over its clocks `core` and `audio` (`pinctrl-sm8550-lpass-lpi.c`). `on` in its `power/control`
@@ -76,80 +72,67 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 
 ### Speakers silent after a quiet period (support 3.11)
 
-- Reported on 2026-11-14 for 7.3.3, on the device since 2026-11-08, and not seen on 7.2: after a time without
-  sound the speakers are silent, and a reboot brings them back.
-- Caught on 2026-11-15 (revision 4). A restart of the stopped bus logged `SWR bus clsh detected`, and both
-  amplifiers stayed off the bus (`status` UNATTACHED) while awake, for the two minutes the stream ran. The stream
-  itself ran: PipeWire sent it to the built-in sink and the DSP took its data. The next restart failed the same
-  way; the one after it logged the two parity lines and brought the amplifiers back, without a reboot.
-- An amplifier that is off the bus answers every read with `0x21`, and the controller reports no failed write.
-  The driver had the register map in direct mode, wrote into nothing and read the power stage's status as a
-  fault: `PA fault: sta0=0x21 sta1=0x21 err0=0x21 err1=0x21` and `PA recovery failed ... amplifier left disabled`
-  mark an amplifier that does not answer. One more of the 38 boots has them (2026-11-12, revision 3, no clash
-  line).
+- Seen with 7.3.3 from 2026-11-08 on, not on 7.2: after a time without sound the speakers stayed silent while the
+  stream ran (PipeWire sent it to the built-in sink and the DSP took its data); a reboot brought them back.
+- Caught on 2026-11-15 (revision 4): a restart of the stopped bus logged `SWR bus clsh detected`, and both
+  amplifiers stayed off the bus (`status` UNATTACHED) while awake; a later restart logged the two parity lines and
+  brought them back.
+- An amplifier that is off the bus answers every read with `0x21`, and the controller reports no failed write: the
+  driver, its register map in direct mode, wrote into nothing and read the power stage's status as a fault.
+  `PA fault: sta0=0x21 sta1=0x21 err0=0x21 err1=0x21` and `PA recovery failed ... amplifier left disabled` mark an
+  amplifier that does not answer.
 - While it sleeps on the stopped bus an amplifier reads `Attached`. Reading its bus registers in debugfs restarts
-  the bus as a playback does: on 2026-11-14 both amplifiers were off the bus 1.6 s after such a read, with no
+  the bus as a playback does: on 2026-11-14 both amplifiers were off the bus 1.6 s after such a read, without a
   kernel line.
-- The restart test of 2026-11-15 (revision 4) restarted the stopped bus 112 times with the kernel's clock
-  handling and 112 times with the pin controller held awake, by turns, watching both amplifiers every 2 ms. With
-  the kernel's handling the amplifiers left the bus for 2 to 4 ms at 7 restarts, one of them with the clash line
-  and one with the parity lines; with the votes held at none, and without a line. No restart stayed failed.
-- Support 3.11 holds the two votes: `78-sp11-speakers.rules` sets the pin controller's `power/control` to `on`
-  when the device appears. On the device since 2026-11-15: `on` and `active` after a boot; the six boots after
-  it (63 playbacks, 80 device opens, four sleeps) without one of the lines; a night at 0.26 W, within the 7.3.3
-  nights (`docs/sleep.md`); no silence in two days of use (owner). Without the rule the fault came once more,
-  minutes after the restart test.
-- The check kits: `build/handoff/sp11-speakers-2026-11-14` (the journal of every boot, the state while the sound
-  is missing) and `build/handoff/sp11-speakers-2026-11-15` (the restart test).
+- The restart test of 2026-11-15 (revision 4): 112 restarts of the stopped bus with the kernel's clock handling and
+  112 with the pin controller held awake, by turns, both amplifiers watched every 2 ms. With the kernel's handling
+  the amplifiers left the bus for 2 to 4 ms at 7 restarts, one of them with the clash line and one with the parity
+  lines; with the votes held, at none.
+- Support 3.11 holds the two votes: `78-sp11-speakers.rules` sets the pin controller's `power/control` to `on` when
+  the device appears. Since then: six boots, 63 playbacks, 80 device opens and four sleeps without one of the lines,
+  a night at 0.26 W (`docs/sleep.md`), no silence in two days of use (owner). Without the rule the fault came once
+  more, minutes after the restart test.
 
 ### A crackle at the first sound after a night's sleep (open)
 
-- 2026-11-16, revision 4 with support 3.11: the first stream after 11.8 hours asleep, 15 s after the wake,
-  restarted 44 times within 5 s while PipeWire recovered from underruns
-  (`snd_pcm_avail after recover: Broken pipe`), heard as a low crackle; then it played, and so did every later
-  stream. Not after the three short sleeps of the same days.
-- Not new with support 3.11: the owner recalls the same crackle after wakes before it. No earlier log holds a
-  sound within seconds of a night's wake. The history of the speaker check kit lists such a burst as `pw-xrun`.
+- 2026-11-16, revision 4 with support 3.11: the first stream after 11.8 hours asleep, 15 s after the wake, restarted
+  44 times within 5 s while PipeWire recovered from underruns (`snd_pcm_avail after recover: Broken pipe`), heard as
+  a low crackle; every later stream played. Not after the short sleeps of the same days; the owner recalls the same
+  crackle after earlier wakes, and the speaker check kit's history lists such a burst as `pw-xrun`.
 
 ## Wi-Fi
 
 - WCN7850, PCI 17cb:1107, `qmi-board-id=255`; `disable-rfkill` is in the Denali DTS. Fedora's `board-2.bin` has
   no exact entry, so the 17cb:3378 entry is extracted with `ath12k-bdencoder` as `board.bin`.
-- After a boot or a wake (every deep sleep restarts the firmware) the firmware starts in world roaming, and
-  NetworkManager's first scan takes 16 s, because the firmware's own country scan (802.11d) sets `DE` about 7 s
-  into it. With the country known a full scan of the 102 channels (none limited to passive scanning) takes 8.5 s,
-  association 0.3 s and DHCP 3 s: online 21 s after a wake, 27 s after the kernel's start (7.2.11 revision 8,
-  2026-10-29). A country from user space (`iw reg set`) reaches ath12k only with
-  `ATH_REG_DYNAMIC_USER_REG_HINTS`, which needs `CFG80211_CERTIFICATION_ONUS`; Fedora sets neither. The driver
-  keeps the country its 11d scan found (`ar->alpha2`) across the firmware's restart but re-sent it only after a
-  crash recovery. 7.2.11 revision 9 (patch 0081) sent it when the radio started, and the first scan after a wake
-  still ran over the world list (15 s, `DE` by the chip's own scan 7 s in; 2026-10-31): `ath12k_regd_update` applies
-  one answer per `regd_updated` cycle, and the interfaces added right after the start re-apply the rules last
-  received, so the firmware's answer loses the race unless it is in first (the night's wake: an 8.4 s scan, online
-  after 13.1 s). Revision 10 waited for any regulatory event and lost the same race once in two wakes (the
-  firmware's own first event completes the wait); revision 11 waited for the answer that carries the country and
-  still saw the world rules at both wakes. Revision 12's log found the cause at the sleep, not the wake: the
-  scan NetworkManager starts as it disconnects is aborted by the link going down, the chip's 11d scan stops and
-  reports no country (`00`), and the driver takes that over as the known country and sends it to the firmware,
-  so nothing is left to restore. Revision 13 keeps a known country when the 11d scan reports none and restores
-  it as the radio starts: sent, answered by the firmware within a few milliseconds, applied before the interfaces
-  exist; the first scan after a wake then takes 8.5 s and the station is online after 13.2 to 13.5 s, with `DE`
-  and the 160 MHz link (2026-11-01, both wakes of the round). A boot has no country to restore: 27 s as before.
-- Wi-Fi at boot: up to 7.2.12 the WCN7850's power sequencer kept the Wi-Fi enable line (TLMM 117) as the firmware
-  left it, high at its probe, so the chip was never reset before the link trained. One boot in twelve on 7.2.11
-  revision 1 (a reboot, 2026-10-20) lost Wi-Fi: the link came up and the chip answered its first read, then
-  `link down error during global reset` and `failed to power up :-34`; the next reboot had Wi-Fi. 7.2.13 drives
-  the line low at the probe, and the PCIe host's pwrctrl powers the chip up right before link training (upstream
-  `dbd674ccf30f`, from a Surface Pro 11 whose boots never enumerated the chip); in the SP11 kernel from 7.2.14
-  revision 1 on (its round's two boots, one a reboot, had Wi-Fi; 2026-11-02).
-- PCIe L1.2 (7.2.11 revision 5, 2026-10-28): the Wi-Fi (`0004:01:00.0`) and NVMe (`0006:01:00.0`) functions
-  report snoop and no-snoop latencies of 0 ns (nothing programs them on Qualcomm hosts), below the links'
+- After a boot or a wake (every deep sleep restarts the firmware) the firmware starts in world roaming. Without a
+  known country NetworkManager's first scan takes 16 s, because the firmware's own country scan (802.11d) sets `DE`
+  about 7 s into it; with the country known a full scan of the 102 channels (none limited to passive scanning) takes
+  8.5 s, association 0.3 s and DHCP 3 s (7.2.11 revision 8, 2026-10-29). A country from user space (`iw reg set`)
+  reaches ath12k only with `ATH_REG_DYNAMIC_USER_REG_HINTS`, which needs `CFG80211_CERTIFICATION_ONUS`; Fedora sets
+  neither.
+- The driver keeps the country its 11d scan found (`ar->alpha2`) across the firmware's restart, but re-sent it only
+  after a crash recovery. And at a sleep the scan NetworkManager starts as it disconnects is aborted by the link
+  going down: the chip's 11d scan stops and reports no country (`00`), which the driver took over as the known
+  country.
+- Patch 0081 (7.2.11 revision 13): `ath12k_reg_11d_new_cc_event` keeps a known country when the 11d scan reports
+  `00`, and `ath12k_mac_start` sends the known country, waits up to 500 ms for the firmware's answer that carries
+  it, clears the `regd_updated` gate and applies it before the interfaces exist; without an answer the start goes on
+  with a warning. Without the wait and the gate's release the answer is lost: `ath12k_regd_update` applies one
+  answer per `regd_updated` cycle, and the interfaces added right after the start re-apply the rules last received.
+- With 0081 the first scan after a wake takes 8.5 s and the station is online after 13.2 to 13.5 s, with `DE` and
+  the 160 MHz link (2026-11-01; 21 s before). A boot has no country to restore and is online after about 27 s.
+- Wi-Fi at boot: since 7.2.13 the WCN7850's power sequencer drives the Wi-Fi enable line (TLMM 117) low at its
+  probe, and the PCIe host's pwrctrl powers the chip up right before link training (upstream `dbd674ccf30f`, from a
+  Surface Pro 11 whose boots never enumerated the chip; in the SP11 kernel from 7.2.14 revision 1). Before, the line
+  stayed as the firmware left it, high, and one boot in twelve on 7.2.11 lost Wi-Fi: the link came up and the chip
+  answered its first read, then `link down error during global reset` and `failed to power up :-34`.
+- PCIe L1.2 (7.2.11 revision 5, 2026-10-28): the Wi-Fi (`0004:01:00.0`) and NVMe (`0006:01:00.0`) functions report
+  snoop and no-snoop latencies of 0 ns (nothing programs them on Qualcomm hosts), below the links'
   `LTR1.2_Threshold` (76800 ns Wi-Fi, 136192 ns NVMe), so the links enter L1.1 and almost never L1.2
-  (`/sys/kernel/debug/pci@1c08000/link_transition_count`, `pcie@1c08000` since 7.3: 42408 against 49 entries since
-  boot). Clearing `LTR_EN` on the Wi-Fi function (a proposed quirk) or setting the threshold to 0 on both ends (as
-  Windows does) turned every L1.1 entry into L1.2 (about 11000 per 2 minutes; the NVMe link 3 to 6) with no warning
-  and no lost connection,
-  but the draw with the screen on stayed within 15 mW (6.95 to 6.97 W per 2-minute window). Neither is carried.
+  (`/sys/kernel/debug/pcie@1c08000/link_transition_count`: 42408 against 49 entries since boot). Clearing `LTR_EN`
+  on the Wi-Fi function (a proposed quirk) or setting the threshold to 0 on both ends (as Windows does) turned every
+  L1.1 entry into L1.2 with no warning and no lost connection, but the draw with the screen on stayed within 15 mW
+  (6.95 to 6.97 W per 2-minute window). Neither is carried.
 
 ## Bluetooth address
 
@@ -158,9 +141,8 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   in printed order, so step 30 patches `out[i]` to `out[5 - i]`; `sp11-bt-apply` only maps the unit instance
   `hciN` to `N`.
 - `sp11-bluetooth-address@hci0.service` logs at a boot: `short write 0/12` twice, `hci0 ready at T+1s`,
-  `set-public-address  status 0x00 (success)`, `Success: public address set` (2026-11-10, alike from the helper
-  compiled on Fedora 44 and on Fedora 45). `bluetoothctl show` then names the controller with the address of
-  `/etc/sp11/bluetooth-address`.
+  `set-public-address  status 0x00 (success)`, `Success: public address set` (2026-11-10). `bluetoothctl show` then
+  names the controller with the address of `/etc/sp11/bluetooth-address`.
 
 ## Pen
 
@@ -168,9 +150,9 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   find Microsoft.GSL. It runs on the HIDRAW bridge of `mshw0485_touch` (patch 0043), `hidraw` parent
   `001C:045E:0C83.*`, as `sp11-iptsd@dev-hidrawN.service` started by udev; the kernel's "Microsoft Surface G6 Pen"
   input device is silent by design.
-- The sleep hook (`payload/iptsd/sp11-iptsd-sleep`, from 3.1.0-4) stops the running instances before a sleep;
-  after the wake the hidraw add event starts the daemon again. ooaklee's hook, used up to 3.1.0-3, also restarted
-  it after the wake and waited, which held every wake for 1.2 to 1.5 s (`docs/sleep.md`, Wake).
+- The sleep hook (`payload/iptsd/sp11-iptsd-sleep`) stops the running instances before a sleep; after the wake the
+  hidraw add event starts the daemon again. A hook that also restarts it after the wake and waits, as ooaklee's did
+  up to 3.1.0-3, holds every wake for 1.2 to 1.5 s (`docs/sleep.md`, Wake).
 - libwacom (from 3.1.0-5): the desktop's tablet settings list only devices libwacom identifies, and libwacom
   2.19.0 rejects iptsd's "IPTSD Virtual Stylus" as "a tablet but not supported". It reads the bus from the input
   device's `PRODUCT` and knows usb, bluetooth and i2c there; the stylus is on `BUS_VIRTUAL` (0006), and a
@@ -182,14 +164,13 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - `payload/iptsd/sp11-surface-pro-11.tablet` (installed under `/usr/share/libwacom`) matches both names as a
   274 x 184 mm tablet built into the display. Without it the override alone gets libwacom's stock
   `serial|0000|0000` entry, "Wacom Serial Tablet WACf004" (libwacom 2.19.0 on the host, 2026-11-27).
-- On the tested unit (2026-11-28, 3.1.0-5 upgraded over 3.1.0-4, libwacom 2.19.0, GNOME 51):
-  `libwacom-list-local-devices` lists "Microsoft Surface Pro 11", bus `serial`, on the stylus's event node with
-  the general pen and its eraser, also after the upgrade's restart and a wake created the device anew. The
-  kernel's G6 Pen node stays "a tablet but not supported by libwacom".
-- GNOME Settings shows the tablet in its Graphics Tablets panel ("Tablet mounted on laptop panel": tablet mode,
-  monitor mapping, calibration) without a new login, and the General Pen's settings (tip and eraser pressure,
-  two buttons, though the Slim Pen 2 has one) once the pen has been used. libinput's `Left-handed` for the
-  stylus went from `disabled` to `n/a`, as for any tablet libwacom knows and does not list as reversible.
+- On the tested unit (2026-11-28, libwacom 2.19.0, GNOME 51): `libwacom-list-local-devices` lists "Microsoft Surface
+  Pro 11", bus `serial`, on the stylus's event node with the general pen and its eraser, also after a wake created
+  the device anew; the kernel's G6 Pen node stays unsupported. GNOME Settings shows the tablet in its Graphics
+  Tablets panel ("Tablet mounted on laptop panel": tablet mode, monitor mapping, calibration) without a new login,
+  and the General Pen's settings (tip and eraser pressure, two buttons, though the Slim Pen 2 has one) once the pen
+  has been used. libinput's `Left-handed` for the stylus is `n/a`, as for any tablet libwacom knows and does not
+  list as reversible.
 - The `045E:0C80` name was checked by the pull request's author on that model (2026-11-26), not on the tested
   unit.
 - Known issue, recovering by itself: about 10 s into a boot the touch driver can log `invalid HID-SPI
@@ -204,21 +185,20 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - Supplies (`sp11-diag`): `ADP1` (Mains, the Surface Aggregator's `surface_charger`), `qcom-battmgr-ac`, `-bat`,
   `-usb` and `-wls` (pmic_glink's battery manager) and per USB-C connector `ucsi-source-psy-pmic_glink.ucsi.0N`
   (USB); `surface_battery` loads but patch 0048 keeps it from binding.
-- Since 7.2.11 revision 2 (patches 0068 and 0069; the third fix is upstream's own from 7.3.4 on) the battery has
-  `capacity` and UPower takes its percentage from it; a full battery on external power reads `Full`; unplugging
-  or plugging in a USB-C charger sends a `change` uevent for `qcom-battmgr-usb`, and UPower's `on-battery`
-  follows at once.
-- Before revision 2: UPower computed the percentage, 100 % on the charger read `Not charging` (shown as
-  `fully-charged`), and the Surface charger (`qcom-battmgr-ac` online, the `ucsi` supplies offline) sent no uevent
-  of its own on unplugging, so UPower kept `on-battery: no` until the next resume. The Surface charger and a full
-  battery were not checked again on revision 2.
+- Patches 0068 and 0069 (the third fix of 7.2.11 revision 2 is upstream's own from 7.3.4 on): the battery has
+  `capacity` and UPower takes its percentage from it; a full battery on external power reads `Full`; unplugging or
+  plugging in a USB-C charger sends a `change` uevent for `qcom-battmgr-usb`, and UPower's `on-battery` follows at
+  once.
+- Not checked on the device since those patches: a full battery, and the Surface charger (`qcom-battmgr-ac` online,
+  the `ucsi` supplies offline), which before them sent no uevent of its own on unplugging, so UPower kept
+  `on-battery: no` until the next resume.
 
 ## Video codec
 
-- Iris (7.2.11 revision 7, patch 0078): `qcom-iris-decoder` and `qcom-iris-encoder` appear as V4L2 devices, and
-  GStreamer 1.28.7 registers `v4l2vp9dec`, `v4l2h264dec`, `v4l2h265dec`, `v4l2av1dec`, `v4l2h264enc` and
-  `v4l2h265enc`. A 720p VP9 clip (profile 0) decoded in hardware to the same 120 frames as libvpx in 0.44 s; a
-  VP9 clip without an explicit format comes out as 12-bit 4:4:4 (profile 3).
+- Iris (patch 0078): `qcom-iris-decoder` and `qcom-iris-encoder` appear as V4L2 devices, and GStreamer 1.28.7
+  registers `v4l2vp9dec`, `v4l2h264dec`, `v4l2h265dec`, `v4l2av1dec`, `v4l2h264enc` and `v4l2h265enc`. A 720p VP9
+  clip (profile 0) decoded in hardware to the same 120 frames as libvpx in 0.44 s; a VP9 clip without an explicit
+  format comes out as 12-bit 4:4:4 (profile 3).
 - Clips made by the hardware H.264 and H.265 encoders carry colorimetry `2:4:5:4` (the H.264 one also level 1 at
   720p), which is not in the list GStreamer probes for the decoder, so `v4l2h264dec` and `v4l2h265dec` refuse them
   (`not-negotiated`). Relabelled `bt601` (`capssetter`), the H.264 clip decoded to 120 frames in 0.43 s, among
@@ -226,43 +206,33 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 
 ## USB-C data
 
-- Plugged one way (`normal` in `/sys/class/typec/portN/orientation`) a USB 3 stick (SanDisk 3.2Gen1) runs at
-  5000 Mb/s on both ports. Turned over (`reverse`) the stick was found on neither port up to 7.2.14 revision 2,
-  while the Type-C class saw the partner and its orientation and Windows ran it at USB 3 both ways: the PS8830
-  retimer must be told of the connection before its mode (below; patch 0084 from 7.2.15 revision 1).
+- A USB 3 stick (SanDisk 3.2Gen1) runs at 5000 Mb/s on both ports, plugged either way (`normal` or `reverse` in
+  `/sys/class/typec/portN/orientation`), since 7.2.15 revision 1 (patch 0084, 2026-11-03).
 - Port 0 is `a600000.usb` behind the PS8830 retimer on `i2c@b8c000`, port 1 `a800000.usb` behind the one on
-  `i2c@b9c000` (both at address 0x08). Reversed, the orientation reaches the retimer (its register 0x00 reads
-  0x23: connected, reversed, USB 3) and the QMP PHY (port select 3, its tables rewritten); the USB 3 root port
-  then sits in `Polling` and the USB 2 port stays unconnected: both ends present termination and nothing crosses
-  the retimer's second lane, so the link never trains.
-- Ruled out on the device (2026-11-03, one boot with `iomem=relaxed` and a tool writing the PHY, the controller
-  and the retimer through `/dev/mem` and I2C; `docs/verified.md`): the PHY left on its normal lane (the stick
-  falls back to USB 2), the PHY's port select written after the retimer as Windows does, Windows' PHY receiver and
-  transmitter values, a full PHY restart after the retimer, forcing USB 3 Gen 1, Windows' controller settings; with
-  its orientation bit cleared the retimer finds no pair (`RxDetect`), so it binds its lanes by that bit alone.
-- The cause: the kernel wrote the retimer's final configuration (0x23) as its first word after the reset, while
-  Windows writes 0x01 (connection present) first and the mode 30 ms later. Replaying the two writes on the live
-  retimer of a stuck port brought the link to `U0` and the stick to 5000 Mb/s within a second, on both ports, with
-  the PHY and the port untouched; the usual plug afterwards ran at 5000 Mb/s as before. Patch 0084 makes `ps883x`
-  write the two steps whenever the retimer comes out of reset (`docs/kernel-patches.md`). On 7.2.15 revision 1
-  the stick runs at 5000 Mb/s turned over and the usual way on both ports, after a wake and in a second boot
-  (2026-11-03).
+  `i2c@b9c000` (both at address 0x08). The retimer binds its lanes by its orientation bit alone: with the bit
+  cleared it finds no pair (`RxDetect`).
+- The retimer must be told of the connection before its mode. The kernel wrote its final configuration (0x23:
+  connected, reversed, USB 3) as its first word after the reset, while Windows writes 0x01 (connection present)
+  first and the mode 30 ms later. Given the final word at once, the retimer passed the orientation on to the QMP
+  PHY, but with the plug reversed no USB 3 link trained: the root port sat in `Polling` and the USB 2 port stayed
+  unconnected. Replaying Windows' two writes on the live retimer of a stuck port brought the link to `U0` within a
+  second. Patch 0084 makes `ps883x` write the two steps whenever the retimer comes out of reset; a mode change on an
+  existing connection is written at once (`docs/kernel-patches.md`).
 - On 7.3.5 revision 3 USB-C carries no data until the ADSP driver runs (2026-11-23): started with
   `module_blacklist=qcom_q6v5_pas`, both xHCI controllers came up but the stick enumerated on neither port, either
-  way round, not even at USB 2; in the usual start it ran at 5000 Mb/s. The live media of 7.2.15 revision 1 had
-  booted from USB with the ADSP blacklisted (2026-11-03) on the same UEFI version, so the dependency came with a
-  kernel change between the two; its cause is not found. The retimer driver holds the retimer in reset from its
-  probe until a Type-C notification, which comes from `pmic_glink` on the ADSP, in both kernels.
+  way round, not even at USB 2. The live media of 7.2.15 revision 1 had booted from USB with the ADSP blacklisted
+  (2026-11-03) on the same UEFI version, so the dependency came with a kernel change between the two; its cause is
+  not found. The retimer driver holds the retimer in reset from its probe until a Type-C notification, which comes
+  from `pmic_glink` on the ADSP, in both kernels.
 
 ## TPM
 
-- Microsoft Pluton (`tpmtool getdeviceinformation` under Windows: manufacturer `MSFT`, vendor `Pluton.TPM.Q`), a
-  TPM 2.0 with PCRs in the SHA-256 bank only. Linux reaches it through the TrustZone application
-  `qcom.tz.mssecapp`. From kernel 7.3.5 revision 2 a driver for that path, `tpm_qcom_mssecapp` (patches 0115 and
-  0116, `docs/kernel-patches.md`), gives Fedora `/dev/tpm0` and `/dev/tpmrm0` (the device, 2026-11-22).
-- Up to 7.3.5 revision 1 Linux has no TPM, and every Linux start ends without the TPM's orderly shutdown; from
-  revision 2 the TPM core sends `TPM2_Shutdown` at every restart and poweroff, which this TPM refuses (Under
-  Linux, below). The kernel arguments still carry `systemd.tpm2_wait=0`.
+- Microsoft Pluton (`tpmtool getdeviceinformation` under Windows: manufacturer `MSFT`, vendor `Pluton.TPM.Q`), a TPM
+  2.0 with PCRs in the SHA-256 bank only. Linux reaches it through the TrustZone application `qcom.tz.mssecapp`: the
+  driver for that path, `tpm_qcom_mssecapp` (patches 0115 to 0117, from 7.3.5 revision 2), gives Fedora `/dev/tpm0`
+  and `/dev/tpmrm0`.
+- The TPM core sends `TPM2_Shutdown` at every restart and poweroff, which this TPM refuses (Under Linux, below). The
+  kernel arguments still carry `systemd.tpm2_wait=0`.
 - The ACPI `TPM2` table (OEM `QCOM`) names start method 14 and a CRB control area at `0x81f10000`, without
   parameters, and the DSDT has no TPM device. The TCG ACPI specification 1.5 lists 14 as "Reserved for future
   Memory Mapped I/O Interface"; Linux's `include/acpi/actbl3.h` defines 13 (Pluton's CRB on other PCs) and 15
@@ -291,9 +261,8 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - 2026-11-22, 7.3.5 revision 1 with Secure Boot off, a read-only probe module: version 1.0; the CRB at the ACPI
   table's `0x81f10000`, size `0x3000`, outside System RAM; the 48-byte control area, the command buffer right after
   it and the response buffer after that, `0x1000` each.
-- Up to 7.2.15 the device tree reserved 64 KiB there (`tpm-control@81f10000`, `no-map`); 7.3's `hamoa.dtsi` has
-  no such node. The range is outside System RAM all the same on 7.3.5, which the probe and the driver check before
-  they map it.
+- 7.3's `hamoa.dtsi` reserves nothing there (7.2's tree had `tpm-control@81f10000`, `no-map`); the range is outside
+  System RAM all the same, which the driver checks before it maps it.
 - The first command took 41 ms, the next ones 7 to 9 ms, and the start register was already clear when `0x4003`
   returned: the request returns when the command is done.
 - TPM2_GetCapability and TPM2_PCR_Read answered with response code 0 and as under Windows: the manufacturer and
@@ -304,39 +273,43 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 
 ### Under Linux
 
-- On the device on 2026-11-22, Secure Boot on: `systemd-analyze has-tpm2` answers `yes`; PCRs 0, 7 and 9 read
-  through the driver (`/sys/class/tpm/tpm0/pcr-sha256/`) equal the replay of the kernel's event log
+- On the device (2026-11-22, Secure Boot on): `systemd-analyze has-tpm2` answers `yes`; PCRs 0, 7 and 9 read through
+  the driver (`/sys/class/tpm/tpm0/pcr-sha256/`) equal the replay of the kernel's event log
   (`binary_bios_measurements`, 22936 bytes), PCR 0 as in Windows' logs. PCR 0 read the same after a deep sleep and
   after a restart; neither the driver nor the TPM core logged a line.
 - The TPM kept the four persistent keys Windows keeps and no other, and Windows afterwards found it ready, not
   locked out, with Windows Hello as before.
-- The driver binds while the SCM device probes, from the deferred probes that `deferred_probe_initcall` waits
-  for, and its probe registers the TPM there: the kernel's start is 3.0 s slower than with revision 1 (`Run
-  /init` at 3.72 s, the qseecom clients at 0.54 s).
-- Traced at boot (function_graph, 2026-11-23): the probe takes 3.09 s, of which 2.87 s are the first
-  `TPM2_SelfTest` after the firmware; the other commands 8 to 40 ms each, the null-hierarchy key of Fedora's
-  `CONFIG_TCG_TPM2_HMAC=y` 0.15 s with its context save and flush. At runtime the self test takes 0.03 s.
+- The driver is built in (`CONFIG_TCG_QCOM_MSSECAPP=y`), so the TPM is there for the initramfs. It registers a
+  synchronous chip: `send()` copies the command in, sets the start register, sends `0x4003` and reads the response
+  once the start register is clear. It has no power management callbacks, as `tpm_ftpm_tee` and `tpm_svsm` (the TPM
+  core then sends nothing at a suspend), and sends no `0x4005`.
+- It binds while the SCM device probes, from the deferred probes that `deferred_probe_initcall` waits for. Traced at
+  boot (function_graph, 2026-11-23): of the probe's 3.09 s the first `TPM2_SelfTest` after the firmware takes 2.87
+  s, the other commands 8 to 40 ms each, the null-hierarchy key of Fedora's `CONFIG_TCG_TPM2_HMAC=y` 0.15 s with its
+  context save and flush; at runtime the self test takes 0.03 s. Registered in the probe (revision 2), the TPM held
+  init back 3 s (`Run /init` at 3.72 s).
+- From revision 3 (0117) the probe queues the registration on `system_dfl_long_wq` and returns: the kernel runs init
+  at 0.63 s and the TPM arrives at about 4.3 s, in the initramfs (2026-11-23). An asynchronous probe would not help:
+  `kernel_init()` waits for all async work (`async_synchronize_full()`) before it runs init. The initramfs's PCR 11
+  measurement still runs with the TPM: PCR 11 is the stub's value extended with `enter-initrd`, `leave-initrd`,
+  `sysinit` and `ready`.
 - Windows sends no `TPM2_SelfTest`: `tpm.sys` holds no such command, and `TpmTransport::DispatchCommand` waits and
   sends a command again when the TPM answers `TPM_RC_TESTING`, so Pluton tests an algorithm when a command first
   needs it (read from `tpm.sys`, 2026-11-23). Linux's TPM core sends `TPM2_SelfTest` at every registration
   (`tpm2_auto_startup()`).
-- From revision 3 the probe queues the registration on a work item and returns: the kernel runs init at 0.63 s
-  and the TPM arrives at about 4.3 s, in the initramfs (2026-11-23). The initramfs's PCR 11 measurement still ran
-  with the TPM: PCR 11 is the stub's value extended with `enter-initrd`, `leave-initrd`, `sysinit` and `ready`.
-- The hardware still comes up about 3 s late with revision 3 (the touch controller's SPI at 4.36 s, 1.44 s with
-  revision 1). `qcom_scm` runs every QSEECOM call under one mutex (`qcom_scm_qseecom_call_lock`), the self test
-  is one such call, and the EFI variables go through QSEECOM too (`qcom.tz.uefisecapp`): systemd's first EFI
-  variable reads after init wait for the self test, and the initramfs's journald started at 3.88 s (0.97 s with
-  revision 1).
+- The hardware still comes up about 3 s late (the touch controller's SPI at 4.36 s, 1.44 s without the TPM driver).
+  `qcom_scm` runs every QSEECOM call under one mutex (`qcom_scm_qseecom_call_lock`), the self test is one such call,
+  and the EFI variables go through QSEECOM too (`qcom.tz.uefisecapp`): systemd's first EFI variable reads after init
+  wait for the self test, and the initramfs's journald starts at 3.88 s (0.97 s without).
 - This TPM answers `TPM2_Shutdown` with `TPM_RC_FAILURE` (0x101) and refuses every command after it until a
   reset (a software TPM goes on, as the specification has it). The kernel sends it at every restart and poweroff
   and when the driver is unbound: harmless before a reset, but an unbound driver cannot bind again (2026-11-22).
-- One SELinux denial per boot: `systemd-tpm2-setup` (`init_t`) may not write `/run/log/systemd/tpm2-measure.log`
-  (`syslogd_var_run_t`), 2026-11-22. Fedora's dracut 111 puts no `systemd-tpm2-setup-early.service` into the
-  initramfs, so the unit runs in the root under SELinux and opens the log before it finds it may not create
-  NvPCRs; the refused write recorded nothing (systemd 262.1's source). From support 3.17 a drop-in
-  (`ConditionPathExists=/etc/initrd-release`) keeps the unit to the initramfs; nothing in systemd 262.1 reads the
-  SRK copies in `/run` that only it writes. On the device with 3.17 the unit is skipped and no denial is logged
+- Up to support 3.16, one SELinux denial per boot: `systemd-tpm2-setup` (`init_t`) may not write
+  `/run/log/systemd/tpm2-measure.log` (`syslogd_var_run_t`). Fedora's dracut 111 puts no
+  `systemd-tpm2-setup-early.service` into the initramfs, so the unit runs in the root under SELinux and opens the
+  log before it finds it may not create NvPCRs; the refused write recorded nothing (systemd 262.1's source). Support
+  3.17's drop-in (`ConditionPathExists=/etc/initrd-release`) keeps the unit to the initramfs, and nothing in systemd
+  262.1 reads the SRK copies in `/run` that only it writes: the unit is skipped and no denial is logged
   (2026-11-23).
 
 ### Measured boot and the disk
@@ -357,12 +330,11 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   Secure Boot route the units ran on 2026-11-22: `SRK already stored in the TPM.`, `Skipped 4 NvPCR(s)`.
 - The TPM is shared with Windows: a sealed LUKS key lives in the LUKS header under Windows' storage key, and wrong
   PINs would count against the lockout counter Windows Hello uses.
-- Since 2026-11-23 the tested installation's root is btrfs in LUKS2 (`aes-xts-plain64`, 512-bit key), opened in
-  the initramfs about 2 s after the passphrase. Its second key slot holds a key sealed in the TPM and bound to
-  PCR 7 (`systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7`, enrolled in a start through the signed entry):
-  with `tpm2-device=auto` in `crypttab` the next start opened the root in 1.3 s without a prompt, and
-  `systemd-tpm2-setup` found the TPM's storage root key unchanged (2026-11-23). A kernel change left it alone:
-  under revision 4's image, signed with the same key, the root opened in 1.35 s (2026-11-24).
+- The tested installation's root is btrfs in LUKS2 (`aes-xts-plain64`, 512-bit key), opened in the initramfs about 2
+  s after the passphrase. Its second key slot holds a key sealed in the TPM and bound to PCR 7
+  (`systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7`, enrolled in a start through the signed entry): with
+  `tpm2-device=auto` in `crypttab` the root opens in about 1.3 s without a prompt, also under a new kernel's image
+  signed with the same key, and `systemd-tpm2-setup` found the TPM's storage root key unchanged (2026-11-23 and 24).
 - systemd 262 tries the TPM token only when `crypttab` names `tpm2-device=`. A TPM that is not there yet is
   waited for, up to `token-timeout` (30 s), only when the firmware or the boot loader reports one: the signed
   image's stub sets `LoaderTpm2ActivePcrBanks`, while the device-tree start has no ACPI `TPM2` table. A policy that
@@ -373,26 +345,24 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
   PCR 11, both with `FailureAction=reboot-force`. On 2026-11-23, after a deep sleep 30 s into a start, the TPM
   answered systemd-pcrextend's TPM2_Startup with `TPM_RC_FAILURE` (0x101) until the next start: the login's
   measurement (`systemd-pcrlogin@`) and both stop measurements failed, and every poweroff became a restart.
-- From support 3.21 (`shutdown`) and 3.22 (`final`) drop-ins ignore the failure of these two stop measurements;
-  nothing here reads PCR 11. After a 31 s deep sleep two minutes into a start the TPM answered as before it (PCR 0
-  through the kernel, TPM2_Startup, the self test, a measurement), as after the sleeps of 2026-11-22 and 23: what
-  made it fail is open (2026-11-24).
+- Drop-ins of support 3.21 (`shutdown`) and 3.22 (`final`) ignore the failure of these two stop measurements;
+  nothing here reads PCR 11. What made the TPM fail is open: after the other sleeps, the last a 31 s one two minutes
+  into a start, it answered as before them (2026-11-24).
 - The kernel's object interface to TrustZone (`qcomtee`) is up under Linux and reports its QTEE version at every
   start.
 
 ## The DSP on the live media
 
-- An ADSP restart resets USB-C, and the live system runs from a USB-C stick. Since 2026-11-23 the live initramfs
-  starts the ADSP as the installed one does, before the root is looked for: Fedora 45's dracut module `qcom-adsp`
-  modprobes `qcom_q6v5_pas` from a pre-udev hook, and the support RPM's dracut drop-in installs the Denali firmware.
-  On 7.3.5 the stick is not found otherwise (USB-C data, above): the live initramfs of 2026-11-23 waited for
-  `/dev/disk/by-label/Fedora-WS-Live-45` until the emergency shell. With the ADSP started the ADSP was up 5.8 s
-  into the live start, the stick enumerated at 5000 Mb/s at 6.9 s and the live root was mounted at 10.9 s; sound
-  and the battery level worked live (2026-11-23).
-- Media up to then booted with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas` (no audio or
-  battery live). Anaconda makes `/etc/modprobe.d/anaconda-denylist.conf` from the first argument; the kernel-install
-  plugin and `sp11-first-boot.service` remove that file and the arguments (`module_blacklist=` would avoid the file
-  but spams `pr_err`).
+- The live initramfs starts the ADSP as the installed one does, before the root is looked for (support 3.18): Fedora
+  45's dracut module `qcom-adsp` modprobes `qcom_q6v5_pas` from a pre-udev hook, and the support RPM's dracut
+  drop-in installs the Denali firmware. On 7.3.5 the stick is not found otherwise (USB-C data, above). On 2026-11-23
+  the ADSP was up 5.8 s into the live start, the stick enumerated at 5000 Mb/s at 6.9 s and the live root was
+  mounted at 10.9 s; sound and the battery level worked live. An ADSP restart resets USB-C, which the live system
+  runs from.
+- Media before support 3.18 booted with `modprobe.blacklist=qcom_q6v5_pas rd.driver.blacklist=qcom_q6v5_pas`;
+  Anaconda makes `/etc/modprobe.d/anaconda-denylist.conf` from the first argument, and the kernel-install plugin and
+  `sp11-first-boot.service` still remove that file and the arguments (`module_blacklist=` would avoid the file but
+  spams `pr_err`).
 
 ## Windows in GRUB
 

@@ -12,8 +12,7 @@ holding their boot-time votes, and the boot's kernel warnings and journal errors
 controller and every device BlueZ knows by address.
 
 `sudo /usr/libexec/sp11/sp11-sensors-check`, run from a terminal in the desktop, covers the sensors stack and
-tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials since support RPM 3.7 and
-`sp11-sensors` 1.14; earlier versions searched only the kernel's messages and showed none.
+tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials.
 
 ## Known limitations
 
@@ -39,12 +38,9 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
 - GPS (5G SKU) needs a view of the sky: near a window the first position came within about a minute, away from
   windows none in two minutes. Until then, and wherever GPS is weaker, GeoClue gives the Wi-Fi location
   ([`docs/gnss.md`](../gnss.md)).
-- Mobile data (5G SKU, kernel revision 8 or later): Fedora's provider list offers no APN for some carriers (o2
-  Germany: set `internet` in Settings > Mobile Network). Up to kernel revision 8 the modem restarts after every
-  sleep, so a SIM with a PIN asks for it again and the connection returns about a minute after a wake; from
-  revision 9 the modem keeps its power through a sleep and the connection is back within about 17 s, within
-  2 s with support 3.9 (ModemManager's quick resume). Either way only if the profile connects automatically
-  ([`docs/modem.md`](../modem.md), Across a sleep).
+- Mobile data (5G SKU): Fedora's provider list offers no APN for some carriers (o2 Germany: set `internet` in
+  Settings > Mobile Network). After a wake the connection is back within about 2 s, but only if the profile
+  connects automatically (next item; [`docs/modem.md`](../modem.md), Across a sleep).
 - Mobile data does not come back by itself after a wake, and GNOME's Mobile Data switch shows off: the profile's
   `connection.autoconnect` is `no`. Set it once, with the profile's name from
   `nmcli -g NAME,TYPE connection show | grep gsm`:
@@ -62,11 +58,10 @@ tablet mode ([`docs/guide/sensors.md`](sensors.md)). Both list SELinux denials s
 - With Secure Boot on ([`docs/guide/secure-boot.md`](secure-boot.md)), Fedora's own boot entries start no kernel
   on this tablet: a kernel without a signed boot image needs Secure Boot off, and so does the installer. The
   kernel also refuses modules its build did not sign.
-- With Secure Boot on, GRUB loads no font file from the disk. From support RPM 3.15 its menu is drawn from
-  images and looks like the usual one; the text menu behind it, GRUB's editor and its command line are in small
-  text. A menu in small text from the start means the images could not be drawn
-  ([`docs/guide/secure-boot.md`](secure-boot.md), GRUB's menu while Secure Boot is on). Fedora starts by itself
-  after ten seconds either way.
+- With Secure Boot on, GRUB loads no font file from the disk: its menu is drawn from images and looks like the usual
+  one, while the text menu behind it, GRUB's editor and its command line are in small text. A menu in small text
+  from the start means the images could not be drawn ([`docs/guide/secure-boot.md`](secure-boot.md),
+  GRUB's menu while Secure Boot is on). Fedora starts by itself after ten seconds either way.
 - Boot messages seen on the tested unit that mean nothing:
   - `qcom_pmic_glink … Failed to create device link` for the PD and USB nodes (probe deferral, retried);
   - `surface_hid … unexpected descriptor length` for one Surface Aggregator endpoint nothing depends on;
@@ -94,7 +89,7 @@ Systems running an older build of the RPMs can show these; the release named fix
   sensors still working: fixed in `sp11-sensors` 1.12 (2026-10-08).
 - A boot that sat minutes in `dracut-initqueue` and came up without battery reading, Wi-Fi and sensors, and
   then would not shut down (three of twenty boots): fixed in kernel 7.2.15 revision 2 (2026-11-06), a lock-order
-  deadlock in the QRTR driver's start-up ([`docs/kernel-patches.md`](../kernel-patches.md), 7.2.15 revision 2).
+  deadlock in the QRTR driver's start-up ([`docs/kernel.md`](../kernel.md), Sync state and the CDSP).
   Until then only a long press of the power button ended such a boot.
 - GeoClue without a heading from the compass: `sp11-sensors` 1.13 (2026-10-23). Five SELinux denials logged by
   iio-sensor-proxy at every start, the sensors working regardless: `sp11-sensors` 1.15 (2026-10-24).
@@ -152,5 +147,4 @@ busctl --user call org.kde.Solid.PowerManagement /org/kde/Solid/PowerManagement 
 
 To check, sleep from the launcher with the cover open, wake with the power key and wait 15 s: the tablet stays on
 the lock screen. With the cover closed it goes back to sleep 10 s after any wake, by design
-([`docs/sleep.md`](../sleep.md)). A kernel change that drops the waking press is described in
-[`docs/kernel-patches.md`](../kernel-patches.md).
+([`docs/sleep.md`](../sleep.md)).
