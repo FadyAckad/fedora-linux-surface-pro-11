@@ -52,12 +52,11 @@ never touches the host.
   to `/etc/default/grub` and the menu fails; both paths compare the font in `/boot` with the package's.
 - Its `/boot` image is 200 MB, which the source media's `/boot` (532 MB with the stock kernel and its rescue
   initramfs) overflows: the root must be past step 50's kernel swap.
-- Both paths check the 3.x payload (dnf override, `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover); from
-  3.5 the modem's files and the GNSS feed's policy module on a 5G unit (loaded by hand on the live path, as step
-  50 does) and their absence on the others; from 3.6 the sleep hook's pause instead of a stop; from 3.7
-  `sp11-diag`'s denial search of the whole journal; from 3.23 the feed's own domain (the script's file context,
-  GeoClue's connect rule naming it and no unconfined one, its notify rule, the relabel after a downgrade, a start
-  from the standard library alone).
+- Both paths check the 3.x payload (dnf override, `scmi-cpufreq`, no FIPS omission, no 2.x or 3.1 leftover); the
+  modem's files and the GNSS feed's policy module on a 5G unit (loaded by hand on the live path, as step 50 does)
+  and their absence on the others; the sleep hook's pause instead of a stop; `sp11-diag`'s denial search of the
+  whole journal; the feed's own domain (the script's file context, GeoClue's connect rule naming it and no
+  unconfined one, its notify rule, the relabel after a downgrade, a start from the standard library alone).
 
 ### Step 36: the kernel install
 
@@ -69,7 +68,7 @@ never touches the host.
   `%posttrans` writes the menu an installed system has; `20-grub.install` regenerates it only when
   `/etc/kernel/cmdline` is older than `/etc/default/grub`, and the SP11 plugin rewrites that file first.
 - The entry's device tree is the one the unit's SKU takes (`load_hardware`), so the support RPM must be one built
-  for the unit (from 7.2.11 revision 3 the 5G SKU's tree differs).
+  for the unit (the 5G SKU's tree differs).
 - `kernel-install` exits non-zero in the chroot (`95-set-boot-entry.install` wants an initramfs the previous
   kernel's entry lacks), so the script judges by the entry, as the RPM's `%posttrans` does with `|| :`; that
   plugin turns `tmp_saved_entry` into `saved_entry`, so a kernel without an initramfs never becomes the default.
@@ -130,8 +129,8 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
 `CLAUDE.md` lists the version variables; here are rationale and enforcement.
 
 - Support RPM: bump `VERSION=` in `scripts/30-build-support-rpm.sh` whenever the payload changes, so `dnf upgrade`
-  works; its `%posttrans` must run `sp11-grub-defaults` before regenerating `grub.cfg` (up to 2.3 a changed policy
-  never reached the machine), which step 35 guards.
+  works; its `%posttrans` must run `sp11-grub-defaults` before regenerating `grub.cfg`, or a changed policy never
+  reaches the machine (as up to 2.3); step 35 guards it.
 - Input hashes: steps 30, 45 and 47 record `inputs_sha256` (`lib.sh`; the payload, the spec template, the rendered
   `sp11.conf` values, for step 30 also `grub-font-cell.py`, for step 45 also the
   registry export and the DriverStore package, for step 47 the patches and the source RPM's checksum) as
@@ -139,10 +138,9 @@ The ISO keeps Fedora's libcamera; step 20 checks the kernel side: sensors, priva
   inputs, `FORCE=1` or not. The hash covers repo-relative
   paths, so a payload rename invalidates it too.
 - The input hash does not cover the host's toolchain: step 30 compiles `sp11-bt-set-addr` with the host's gcc and
-  links glibc's startup code in. The helper of support 3.9 (built 2026-11-01 on the Fedora 44 host) and of 3.10
-  (Fedora 45) differ in that code, 72512 and 72608 bytes; the helper's own object code is the same from both
-  releases, and both set the address on the device (2026-11-10). A rebuilt earlier version is therefore not the
-  installed package: compare a new RPM with the device's `rpm -q --dump`.
+  links glibc's startup code in, which differs between a Fedora 44 and a Fedora 45 host (support 3.9 and 3.10: 72512
+  and 72608 bytes, the helper's own object code the same). A rebuilt earlier version is therefore not the installed
+  package: compare a new RPM with the device's `rpm -q --dump`.
 - Kernel revision pins: `KERNEL_SP11_REV_SHA256` in `sp11.conf` pins each revision's content (`kernel_rev_sha256`
   over the revision number, the effective `kernel-local` lines, the base commit and the gitlink); step 20 dies when
   either differs from the pin and prints the value to set after a bump.
@@ -186,10 +184,10 @@ rebuilds; `build_rpm`, `mock_rebuild` and `mock_rebuild_family` delete older RPM
 
 ## Host
 
-- WSL2 Fedora 45 aarch64 on the Surface itself (12 cores, 11 GiB RAM; Fedora 44 until 2026-11-03), passwordless
-  sudo, Windows at `/mnt/c`; `powershell.exe` interop serves the hardware detection and the registry export. The
-  host's release matters only to step 40: with host and target both 45, `IPTSD_BUILD_MODE=auto` builds
-  `sp11-iptsd` on the host; the kernel and the sensors chain always build in mock.
+- WSL2 Fedora 45 aarch64 on the Surface itself (12 cores, 11 GiB RAM), passwordless sudo, Windows at `/mnt/c`;
+  `powershell.exe` interop serves the hardware detection and the registry export. The host's release matters only to
+  step 40: with host and target both 45, `IPTSD_BUILD_MODE=auto` builds `sp11-iptsd` on the host; the kernel and the
+  sensors chain always build in mock.
 - No Docker: the kernel and the cross-release packages build in mock buildroots of the target release; the
   kernel's root needs about 40 GiB on the same disk, hence the 80 GiB check in step 0.
 - `00-setup-host.sh` installs every tool, even those the stock WSL image lacks; its checks before the install

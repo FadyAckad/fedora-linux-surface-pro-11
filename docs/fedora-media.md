@@ -7,9 +7,8 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 - `FEDORA_TARGET` in `sp11.conf` picks the compose family: `ga` (`releases/<n>/`), `beta`
   (`releases/test/<n>_Beta/`) or `nightly` (`development/<n>/`, needs `FEDORA_COMPOSE=<stamp>`). `FEDORA_RELEASE`
   stays the numeric release (`--releasever`, `%{dist}`, cache keys); `FEDORA_MEDIA_VERSION` is the version string
-  inside the ISO name (`45` for the release, `45_Beta` for the Beta). The default since 2026-11-03 is the Fedora 45
-  release, compose 1.4 (`Fedora-Workstation-Live-45-1.4.aarch64.iso`); the 45 Beta 1.3 stays under
-  `releases/test/45_Beta/`.
+  inside the ISO name (`45` for the release, `45_Beta` for the Beta). The default is the Fedora 45 release, compose
+  1.4 (`Fedora-Workstation-Live-45-1.4.aarch64.iso`); the 45 Beta 1.3 stays under `releases/test/45_Beta/`.
 - The CHECKSUM file name differs per family: GA `Fedora-Workstation-<v>-<c>-<arch>-CHECKSUM`, Beta
   `Fedora-Workstation-iso-<v>-<c>-<arch>-CHECKSUM`, nightly `Fedora-Workstation-iso-<n>-<arch>-<stamp>-CHECKSUM`;
   the body is the same clearsigned BSD digest, checked with `sha256sum -c --ignore-missing`.
@@ -20,12 +19,11 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 
 ## ISO layout
 
-- `Fedora-Workstation-Live-44-1.7.aarch64.iso`, volume id `Fedora-WS-Live-44`, built by kiwi. The live root
-  `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe), 2.36 GB. The 45 release image
-  (`Fedora-Workstation-Live-45-1.4.aarch64.iso`, 2.99 GB, volume id `Fedora-WS-Live-45`, composed 2026-10-28) has
-  the same layout, loader paths and live menu, only the marker differs; its root is 2.59 GB, 1950 packages.
+- `Fedora-Workstation-Live-45-1.4.aarch64.iso` (2.99 GB, volume id `Fedora-WS-Live-45`, composed 2026-10-28) is
+  built by kiwi, as the 44 1.7 image was: the live root `/LiveOS/squashfs.img` is EROFS (LZMA, fragments, dedupe),
+  1950 packages in 2.59 GB.
 - Hybrid GPT + El Torito UEFI image + appended ESP. `/EFI/BOOT/grub.cfg` does
-  `search --file --set=root /boot/<marker>` (`0x503d6c7e` in 44 1.7, `0xcdf4802f` in 45 1.4), then
+  `search --file --set=root /boot/<marker>` (`0xcdf4802f` in 45 1.4; it differs per compose), then
   `configfile ($root)/boot/grub2/grub.cfg`.
 - Loader paths under `/boot/aarch64/loader/`: `linux`, `initrd`, the font `grub2/fonts/unicode.pf2`. Step 50 reads
   them from the ISO, maps `sp11-console.pf2` in beside the font and reproduces the layout with
@@ -48,12 +46,12 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
   19x38 px, 150x50 characters at 2880x1920: `gfxterm` keeps 10 pixels free at every side and lays the cells from
   the top left (the menu's frame measured in QEMU at that size, 2026-11-22). DejaVu's Bitstream-Vera licence
   needs the extra `License:` term and a font name without "Bitstream" or "Vera".
-- `gfxterm`'s cell is as high as the font's tallest glyph (PF2 `MAXH`) with the baseline `ASCE` rows below its
-  top, and rows a glyph draws outside its cell are lost. grub2-mkfont takes `ASCE` and `DESC` from the highest and
-  lowest glyph of the whole face: at size 40 (support up to 3.9) 42 and 15 against a cell of 48, so the menu
-  showed no underscore and cut every descender (the device, 2026-11-10). Step 30 builds the font twice, the
-  second time with the `--asce` and `--desc` that `scripts/grub-font-cell.py` reads from the first, and refuses a
-  font whose menu glyphs leave the cell.
+- `gfxterm`'s cell is as high as the font's tallest glyph (PF2 `MAXH`) with the baseline `ASCE` rows below its top,
+  and rows a glyph draws outside its cell are lost. grub2-mkfont takes `ASCE` and `DESC` from the highest and lowest
+  glyph of the whole face: at size 40 they were 42 and 15 against a cell of 48, so the menu showed no underscore and
+  cut every descender (support 3.9 on the device, 2026-11-10). Step 30 builds the font twice, the second time with
+  the `--asce` and `--desc` that `scripts/grub-font-cell.py` reads from the first, and refuses a font whose menu
+  glyphs leave the cell.
 - GRUB's drawing can be checked on the host: the ISO's `grubaa64.efi` as `EFI/BOOT/BOOTAA64.EFI` beside a
   `grub.cfg` and the font on a `fat:` drive, under `qemu-system-aarch64 -M virt` with EDK2's `QEMU_EFI.fd` and
   `-device ramfb` (its GOP offers at most 1024x768; the host has no `virtio-gpu-pci`), a `usb-kbd` for `send-key`
@@ -71,14 +69,12 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
   `search --fs-uuid <boot uuid>` and `configfile $prefix/grub.cfg` with `$prefix` set to `/boot/grub2`; it names
   one /boot, so a second Fedora on the same ESP takes the menu over.
 - The Windows generator is `29_sp11_windows`, named to precede `30_uefi-firmware` (UEFI Firmware Settings) in
-  `/etc/grub.d/` order. From support 3.20 its entry is the only Windows entry: `sp11-grub-defaults` sets
-  `GRUB_DISABLE_OS_PROBER=true`, and `30_os-prober` then ends before it runs os-prober. On the installation of
-  2026-11-23 `grub.cfg` then held the SP11 entry alone, and Fedora's own menu (Secure Boot off) listed Windows once.
+  `/etc/grub.d/` order. Its entry is the only Windows entry: `sp11-grub-defaults` sets `GRUB_DISABLE_OS_PROBER=true`
+  (support 3.20), and `30_os-prober` then ends before it runs os-prober.
 - Fedora's aarch64 os-prober up to 1.81-12, the live image's, finds no Windows: its build sets no `ARCH` for
   aarch64, so the arm64 probes land in `os-probes/mounted/arm64/`, which os-prober never runs, and `mounted/efi/`
-  holds only `05shell`. 1.81-13 (update FEDORA-2026-0e1a5d7a05, stable on 2026-11-22) sets `ARCH=arm64`: with
-  support 3.19 `grub.cfg` held a second `Windows Boot Manager (on …)` entry (`osprober-efi-…`), without
-  `--unrestricted` (2026-11-23).
+  holds only `05shell`. 1.81-13 (update FEDORA-2026-0e1a5d7a05, stable on 2026-11-22) sets `ARCH=arm64` and wrote a
+  second `Windows Boot Manager (on …)` entry (`osprober-efi-…`), without `--unrestricted` (2026-11-23).
 
 ## Live initramfs and live menu
 
@@ -89,9 +85,9 @@ live root repack, chroot and RPM pitfalls, and the Fedora 45 differences.
 - Fedora's live `grub.cfg` is kept (`set default="1"` selects the media check, `timeout=10`). Step 50 changes only
   what the SP11 needs: the console-font block replaces `terminal_output console` after the
   `search --file --set=root <marker>` line, every `linux` line gets `$sp11_args` (installed plus live-only
-  arguments) and loses Fedora's `quiet rhgb` (since 2026-11-03: the boot messages tell a slow live boot from a
-  frozen one; Anaconda gives the installed system its own `rhgb quiet`), and every `initrd` line a following
-  `devicetree $sp11_dtb`; an unrecognised layout stops the build.
+  arguments) and loses Fedora's `quiet rhgb` (the boot messages tell a slow live boot from a frozen one; Anaconda
+  gives the installed system its own `rhgb quiet`), and every `initrd` line a following `devicetree $sp11_dtb`; an
+  unrecognised layout stops the build.
 - `rd.live.check` needs the ISO checksum that `implantisomd5` writes and xorriso's remastering drops; step 50
   implants it again and checks the result with `checkisomd5`.
 
@@ -167,9 +163,8 @@ Installation order, from `modules/boss/installation.py`:
   `-Efragments -C1048576 --workers=N -zlzma,level=6` takes about 5 minutes and is only slightly larger. Use
   `--file-contexts` from the root's own SELinux policy.
 - `mkfs.erofs -T` alone implies `--all-time`, so every file gets the build time and Anaconda's `rsync -t` copies
-  that onto the installed system; step 50 passes `--mkfs-time` since 2026-09-22 and asserts that
-  `/usr/lib/os-release` keeps its time. Systems installed from an ISO built up to 2026-09-21 carry the build date
-  on every file (`rpm -V` flags the times; no malfunction).
+  that onto the installed system; step 50 passes `--mkfs-time` and asserts that `/usr/lib/os-release` keeps its
+  time.
 
 ## Chroot and RPM pitfalls
 
@@ -178,16 +173,16 @@ Installation order, from `modules/boss/installation.py`:
 - `%systemd_postun_with_restart NAME@.service` on a template unit is a no-op (`systemctl try-restart` rejects a
   name without instance); restart `'NAME@*.service'` explicitly.
 - dracut `install_items` applies to `--no-hostonly` builds too: the support RPM's drop-in brings the Denali
-  firmware into the live initramfs as well, which since 2026-11-23 starts the ADSP.
+  firmware into the live initramfs as well, which starts the ADSP.
 - `rpm --noscripts` also skips triggers, so step 50 runs `sp11-ucm-apply` in the chroot itself; on a normal install
   the support RPM's `%triggerin -- alsa-ucm` and `%triggerin -- grub2-efi-aa64-modules` fire for its own
   installation too, and systemd's file triggers reload systemd and udev, so the spec needs no `%post`.
 - Fedora 45's rpm requires a valid signature by default (`%_pkgverify_level all`, rpm 6.0.1-5, the Change
   "Enforcing signature checking by default"): `rpm -U` refuses an unsigned SP11 RPM (`does not verify: no
   signature`) and Fedora's own dependency RPM as long as the target root has not imported Fedora's key (`NOKEY`).
-  The verification steps pass `--define '_pkgverify_level none'` to the live root's rpm since the 45 Beta; since
-  the host runs Fedora 45 (2026-11-03) steps 50 and 60 pass `_pkgverify_level digest` to the host's `rpm --root`:
-  digests stay mandatory, a signature is verified when its key is known, an unknown key is a warning again.
+  The verification steps pass `--define '_pkgverify_level none'` to the live root's rpm; steps 50 and 60 pass
+  `_pkgverify_level digest` to the Fedora 45 host's `rpm --root`: digests stay mandatory, a signature is verified
+  when its key is known, an unknown key is a warning again.
 - Never install RPMs into the live root with `--nodeps`: `sp11-iptsd` without `spdlog` (which Workstation Live
   lacks) fails udev's `check-device`, so no `sp11-iptsd@` unit starts. `LIVE_EXTRA_PKGS` in `sp11.conf` lists
   what step 10 downloads and step 50 installs first; step 50 refuses unmet dependencies (`rpm -U --test`) and
@@ -227,8 +222,8 @@ modules `devicetree-firmware` and `qcom-adsp`; its `os-release` says `VERSION_ID
 - The support RPM keeps stock kernels off installed systems with
   `/usr/share/dnf5/repos.override.d/90-sp11-kernel.repo`, a `[*]` section with
   `excludepkgs=kernel,kernel-core,…,kernel-uki-*` that dnf5 5.4 applies to configured repositories only, so a
-  kernel RPM given as a file installs from `@commandline` (step 35 checks this). Support 1.6 to 2.7 used a global
-  `[main] excludepkgs` in `libdnf5.conf.d`, which also hid local RPMs of those names.
+  kernel RPM given as a file installs from `@commandline` (step 35 checks this). A global `[main] excludepkgs` in
+  `libdnf5.conf.d` (support 1.6 to 2.7) also hides local RPMs of those names.
 - dnf5 has no `--disableexcludes`; the override is `dnf --setopt=disable_excludes='*' ...`.
 
 ### Rescue image and initramfs content
@@ -237,9 +232,9 @@ modules `devicetree-firmware` and `qcom-adsp`; its `os-release` says `VERSION_ID
   kernel's BLS entry with the version replaced, so `devicetree /dtb-<version>/…` becomes
   `/dtb-0-rescue-<machine-id>/…`, a directory nothing creates.
 - `LIVE_DRACUT_OMIT` in step 50 omits `devicetree-firmware`, whose `--no-hostonly` path globs
-  `$fw_dir/qcom/x1e80100/*/*/*.mbn|elf`, the Denali set the support RPM's drop-in installs anyway. `qcom-adsp` stays
-  since 2026-11-23: it modprobes `qcom_q6v5_pas` from a pre-udev hook, before the live root is looked for. Up to
-  then step 50 omitted it as well and parked the drop-in, keeping the live initramfs free of DSP firmware.
+  `$fw_dir/qcom/x1e80100/*/*/*.mbn|elf`, the Denali set the support RPM's drop-in installs anyway. `qcom-adsp`
+  stays: it modprobes `qcom_q6v5_pas` from a pre-udev hook, before the live root is looked for (`docs/hardware.md`,
+  The DSP on the live media).
 - The installed initramfs needs the Adreno microcode for plymouth's GPU probe, or early boot logs
   `failed to load gen70500_sqe.fw` until switch-root: `payload/90-sp11.conf` installs `qcom/gen70500_sqe.fw.xz`
   and `qcom/gen70500_gmu.bin.xz` from `qcom-firmware`, a support RPM `Requires:` since 2.0.
@@ -252,5 +247,5 @@ modules `devicetree-firmware` and `qcom-adsp`; its `os-release` says `VERSION_ID
   `/boot/efi/<machine-id>/<ver>/initrd` and fails with `Can't write to ...`). The depmod outputs are `%ghost`, so
   nothing stays behind; step 50 still removes unowned leftovers and refuses any other module tree.
 - `/boot/loader/entries` is `0700 root`, so an unprivileged shell cannot expand a glob inside it: the BLS cleanup
-  runs root-side (`as_root find ... -delete`); the earlier `rm -rf .../entries/*.conf` was a silent no-op that
-  shipped the source media's stock and rescue entries.
+  runs root-side (`as_root find ... -delete`); an unprivileged `rm -rf .../entries/*.conf` is a silent no-op, which
+  once shipped the source media's stock and rescue entries.

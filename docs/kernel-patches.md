@@ -15,434 +15,52 @@ License: GPL-2.0 like the kernel files they modify; `mshw0485_touch.c` and its h
 
 ## Where they come from
 
-Dates and Fedora kernels: the revision table in `docs/kernel.md`. Adapted commits carry an `[sp11: ...]` note
-after their trailers that names the source and the change.
+Dates and Fedora kernels: the revision table in `docs/kernel.md`. One row per revision, with the head of the fork
+branch it was pushed as and the patches it added, by the numbers of its own branch; a rebase names the patches it
+dropped or adapted by the numbers of the branch it started from (Contents uses `sp11/7.3.5`'s). Adapted commits
+carry an `[sp11: ...]` note after their trailers that names the source and the change.
 
-### Revision 1: the extraction from v23.2
+| Revision | Fork head | What it added |
+|---|---|---|
+| 1 to 4 | `sp11/7.2.5` `df9cc406` (3 and 4) | 61 patches extracted from ooaklee's linux_ms_dev_kit-sp11 v23.2 (`sp11-qcom-x1e-7.2.0-jg-0sp11v23`, `ce78e6ebc3d7`, with the 7.2.5 update): jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses, ooaklee's branch commits (OLED link-rate quirk, dwc3 PHY re-init, platform profile) and topic patches (touch and pen, audio, the Surface battery guard, the Denali device tree), this repository's POS tablet-mode switch. They reproduce 70 of the 80 files they touch byte for byte; the other 10 differ by the parts left out (Left out of v23.2). Revision 2's CDSP boot-order patch did not help and was dropped; 3 and 4 changed the configuration only. |
+| 5 | `sp11/7.2.7` `8ed6c0df` | rebased onto `v7.2.7`: the DP EDID update, the DPU and DSI `dev_pm_opp_set_rate(0)` removals and the Denali QMP PHY supplies dropped as upstream in 7.2.6, three adapted; new: 0058, 7.2.6's SoundWire port check made to accept the amplifiers' CPS feedback port 13 (`docs/kernel.md`, Rebase) |
+| 6 to 9 | `95a74f27` (6 to 8), `30c57e66` (9) | the cameras, 0059–0074 (`docs/camera.md`): ten commits of turbineBMW/surface-pro-11-linux's `sp11-camera-review` (bundle at `15e590c3`, sha256 `bacf60dc…`, on Linux 7.1.3) without its three ath12k rfkill commits, turbineBMW's OV13858 retry (`integration/review10-camera-switch`) and ooaklee's IMX681 exposure fix (`b1754869f458`, its `imx681.c` hunk), every driver file equal to turbineBMW's 7.3 port; this repository's front-camera light (7), the IMX681's frame length at `0x033d` (8), the OV13858's lowest pixel rate and the IMX681's controls under the handler's lock (9) |
+| 10, 11, 7.2.11 revision 1 | `sp11/7.2.8` `c9a90d97`, `sp11/7.2.9` `0fdddb4d`, `sp11/7.2.11` `56b04f67` | the 74 commits rebased unchanged onto `v7.2.8`, `v7.2.9` and `v7.2.11` |
+| 7.2.11 revision 2 | `e1de27e3` | 0075–0077, three battery-driver fixes carried unchanged from lkarlslund/linux-x1e-t14s (`t14s/jens-7.3`), pending upstream there |
+| 7.2.11 revision 3 | `a4c9a6c7` | 0078, the 5G SKU's device tree (`docs/modem.md`) |
+| 7.2.11 revisions 4 and 5 | `f9f03105` | 0079–0081 from mainline `v7.3-rc1` (`d4c79b63d82d`, `d0cd9c8d0fd5`, `6f5569203bb6`: D3 for native hot-plug root ports on non-x86, GENI UARTs released in system sleep, the crypto engine's bandwidth vote only while busy; `docs/sleep.md`); 0082, a busy modem powered down for a system suspend (mainline's `no_m3` of 7.3 is for devices without M3) |
+| 7.2.11 revision 6 | not pushed | a device test: revision 7 plus Brian Masney's clock `sync_state` series (Left out of v23.2) |
+| 7.2.11 revision 7 | `7f035fc3` | 0083–0089, from a comparison with jglathe's tree on 2026-10-26: the Type-C switch array fix, five fixes of Qualcomm's "drm/msm: Assorted fixes - October" (patches 2 to 6, each note with its message-id), this repository's 0089, the video codec in the Denali tree |
+| 7.2.11 revision 8 | `86f4bc1a` | 0090, the 5G modem's MBIM data channels in `mhi-pci-generic`; mainline has no entry for this modem (`docs/modem.md`, Mobile data) |
+| 7.2.11 revisions 9 to 12 | not pushed | 0091, the modem's supply kept on through a sleep (`docs/modem.md`, Across a sleep); the first forms of 0092, the country re-sent when a radio starts (`docs/hardware.md`, Wi-Fi) |
+| 7.2.11 revision 13 | `2155c742` | 0091 and the final 0092: a known country kept when the 11d scan reports none, restored when a radio starts |
+| 7.2.14 revision 1 | `sp11/7.2.14` `db86d659` | the 92 commits rebased unchanged onto `v7.2.14` |
+| 7.2.14 revision 2 | `1ca86c76` | 0093, no power-on in the touch controller's resume callback; 0094, the PCIe controllers suspended and resumed asynchronously, which mainline's `pcie-qcom.c` lacks (2026-11-02; `docs/sleep.md`, Wake) |
+| 7.2.15 revision 1 | `sp11/7.2.15` `395b0aab` | the 94 commits rebased unchanged onto `v7.2.15`; 0095, the PS8830 retimer told of the connection 30 ms before its mode (`docs/hardware.md`, USB-C data) |
+| 7.2.15 revision 2 | `7a8c230b` | 0096, the QRTR SMD probe's send lock released before a failed open's unregistration (`docs/kernel.md`, Sync state and the CDSP) |
+| 7.3.3 revisions 1 and 2 | `sp11/7.3.3` `476df635` | rebased onto `v7.3.3`: 0013, 0018–0021, 0031 and 0079–0081 dropped as upstream in 7.3, 0049, 0053 and 0061 adapted (`docs/kernel.md`, Rebase), 0088 new (the crypto engine's node disabled); revision 2: 0089, upstream's PDC bypass for the GPIO wake interrupts (`602cb14e310a`) again, which 7.3 reverted with its PDC rework (`77fbc756d9cb`; `docs/sleep.md`) |
+| 7.3.3 revision 3 | `fe43e1a3` | 0090–0111, Xilin Wu's series "drm/msm/dp: Add static HDR support for DP and eDP" from the list (v2 of 2026-10-09, `20261009-msm-dp-hdr10-v2-0-1835d4966da3@radxa.com`, with two fixes of v1; `docs/display.md`); adapted where it meets SP11 patches: 0099 and 0100 keep 0033's delayed clock defaults, 0102 keeps 0036's link-rate quirk ahead of the capability read, 0107 keeps the peripheral flush for a stream outside PSR |
+| 7.3.3 revision 4 | `216231c9` | 0112 and 0113, patches 7 and 9 of Dmitry Baryshkov's "drm/msm: fix SMMU fault dumps" v5 (`20261024-fd-kms-fix-smmu-v5-0-a5b0b284aead@oss.qualcomm.com`), 0113 without its `dpu_crtc_atomic_check()` hunk (0018 had it) and dropping the loop that held 0017's gamma lines, so nothing of 0017 is left; 0114, the DSPPs reserved with every mode set (`docs/display.md`). Under review on 2026-11-12: the next rebase takes upstream's version and checks 0114 against it |
+| 7.3.3 revision 5 | `e53fd0c5` | 0115 and 0116, PCIe 5 probed again once the modem asserts WAKE# (`docs/modem.md`, The link at boot) |
+| 7.3.5 revision 1 | `sp11/7.3.5` `1b01078e` | rebased onto `v7.3.5`: 0003 (the pmic_glink altmode worker) and 0071 (the charger supplies' change notice) dropped as upstream since 7.3.4; 0046, the AudioReach patch, on 7.3.4's unmap and position fixes (`docs/kernel.md`, Rebase) |
+| 7.3.5 revisions 2 and 3 | `d18c8996` | 0115 and 0116, the TPM behind `qcom.tz.mssecapp` (`docs/hardware.md`, TPM); 0117, its registration from a work item. Revision 2 was committed as `8de86335` and pushed with revision 3 |
+| 7.3.5 revision 4 | `67d93d33` | 0118–0121 from the fork's pull request 1 for the X1P64100 LCD model, of which this project has no unit: Dale Whinham's backlight and `x1p64100.dtsi`, Friedrich Schrödter's `scmi-cpufreq` change, the pull request's video codec. Merged by GitHub's rebase merge: new ids, no signature, the tested authors, dates, messages and changes |
 
-- Source: ooaklee's linux_ms_dev_kit-sp11 release `sp11-qcom-x1e-7.2.0-jg-0sp11v23` (`ce78e6ebc3d7`) with the 7.2.5
-  stable update (the v23.2 kernel of `docs/kernel.md`).
-- Result: 61 patches reproducing 70 of the 80 files they touch byte for byte from v23.2; the other 10 differ only
-  by the parts left out (below). In the numbering of the branch `sp11/7.2.15` (the maps to `sp11/7.3.3` and
-  `sp11/7.3.5` are under those kernels' revision 1):
-  - 0001–0041: jglathe's 7.2.0 commits (`746b3477`) that touch code or nodes this machine uses; 0014 lacks a
-    jglathe-only X1P file, 0030 keeps only its Denali hunk.
-  - 0042–0047: ooaklee's branch commits as they are (OLED link-rate quirk, dwc3 PHY re-init, platform profile).
-  - 0048–0056: ooaklee's work as topic patches (touch and pen, audio, the Surface battery guard, the Denali device
-    tree) whose headers name the source commits and authors.
-  - 0057: this repository's POS tablet-mode switch.
-- The patches moved into the fork as `sp11/7.2.5` (head `df9cc406`) with revisions 3 and 4; only the POS switch's
-  author changed. Revision 2's CDSP boot-order patch did not help and was dropped.
+The maps across the two rebases onto 7.3, for the older numbers in the rows above and in `docs/verified.md`:
 
-### Revision 5: the rebase onto 7.2.7
-
-- `sp11/7.2.7` (head `8ed6c0df`, tree `1ec390ba`): the 61 commits rebased onto `v7.2.7` in one step
-  (`git rebase --onto v7.2.7 v7.2.5`) plus one new commit.
-- Dropped, upstream in 7.2.6: the DP EDID update, the DPU and DSI `dev_pm_opp_set_rate(0)` removals, the Denali QMP
-  PHY supplies.
-- Adapted: 0031 keeps only the `msm_dp_ctrl_off_link_stream()` hunk that 7.2.6's version of the fix lacks; 0049's
-  QSPI path returns `-EPROBE_DEFER` directly, since 7.2.6's `spi_geni_init()` lost the `out_pm` label it used;
-  0052 takes 7.2.6's `q6apm_graph_start()` and keeps its guard in `q6apm_graph_stop()`.
-- New: 0058, since 7.2.6's port check in `qcom_swrm_stream_alloc_ports()` refuses the controller's highest master
-  port, the amplifiers' CPS feedback (13 of 13).
-- Old numbers to new: 0001–0023 unchanged, 0025–0031 to 0024–0030, 0033 to 0031, 0035–0044 to 0032–0041, 0046–0061
-  to 0042–0057.
-
-### Revisions 6 to 9: the cameras
-
-- Revision 6: twelve commits on top of revision 5 (0059–0070, `docs/camera.md`); every driver file equals
-  turbineBMW's 7.3 port. Sources: ten commits of turbineBMW/surface-pro-11-linux's `sp11-camera-review` (bundle
-  `kernel/sp11-camera-review.bundle` at `15e590c3`, sha256 `bacf60dc…`, on Linux 7.1.3) minus its three ath12k
-  rfkill commits (0015 and 0016 here); turbineBMW's OV13858 retry (branch `integration/review10-camera-switch`);
-  ooaklee's IMX681 exposure fix (linux_ms_dev_kit-sp11 `b1754869f458`, only its `imx681.c` hunk).
-- Adapted in revision 6: 0064 (C-PHY) is rebased around 7.2's CSID test pattern generator routing
-  (`4b14db418b6e`, `51fe835c485b`); 0065 and 0068 add their lines to this series' Denali tree; 0062 puts the
-  IMX681 Kconfig and Makefile entries after MAX9271's, clear of Fedora's IMX471 hunks in `patch-7.2-redhat.patch`.
-- Revision 7, 0071 (this repository): the front camera's light (TLMM GPIO 225, active high) as the IMX681's
-  `privacy` GPIO LED, switched by the V4L2 core with the stream.
-- Revision 8, 0072: the IMX681's frame length at the 24-bit register `0x033d` the sensor uses, not the ignored
-  `0x0340`. Revisions 6 to 8 pushed together 2026-09-28 (head `95a74f27`, tree `9d1a0c38`).
-- Revision 9: 0073, the OV13858's lowest pixel rate from the lowest link frequency (the 270 MHz modes had reported
-  432 instead of 216 MHz, halving libcamera's line and exposure times); 0074, the IMX681's controls applied at
-  stream start under the control handler's lock (`v4l2_ctrl_handler_setup()`). Pushed 2026-09-28 (head
-  `30c57e66`, tree `5ef459c8`).
-
-### Revisions 10, 11 and 7.2.11 revision 1: rebases without a change
-
-- The 74 commits rebased unchanged onto `v7.2.8` (`sp11/7.2.8`, head `c9a90d97`, tree `6b506039`, pushed
-  2026-10-05), `v7.2.9` (`sp11/7.2.9`, head `0fdddb4d`, tree `c94f9d28`, 2026-10-08) and `v7.2.11`
-  (`sp11/7.2.11`, head `56b04f67`, tree `a7a10207`, 2026-10-19); every number stays.
-
-### 7.2.11 revision 2: three battery-driver fixes
-
-- 0075–0077, carried unchanged from lkarlslund/linux-x1e-t14s (branch `t14s/jens-7.3`, which carries them as
-  pending upstream fixes); found by a comparison with lkarlslund/linux-x1e-jglathe on 2026-10-22. Pushed 2026-10-22
-  (head `e1de27e3`, tree `0977cb32`).
-
-### 7.2.11 revision 3: the 5G SKU's device tree
-
-- 0078 (this repository): `x1e80100-microsoft-denali-oled-5g.dts`, the OLED tree plus the Snapdragon X65 modem on
-  PCIe 5, wired as on Qualcomm's CRD (`docs/modem.md`). The OLED tree is unchanged (its DTB is revision 2's byte
-  for byte) and goes to the SKUs without a modem. Pushed 2026-10-23 (head `a4c9a6c7`, tree `870d479a`).
-
-### 7.2.11 revisions 4 and 5: deep sleep
-
-- Revision 4: 0079–0081, carried unchanged from mainline (all in `v7.3-rc1`), chosen by the sleep rounds of
-  2026-10-27 (`docs/sleep.md`): 0079 (`d4c79b63d82d`) lets native hot-plug root ports enter D3 on non-x86, so a
-  sleep takes the PCIe links down; 0080 (`d0cd9c8d0fd5`) makes an open GENI UART release its clocks, interconnect
-  votes and CX level in system sleep; 0081 (`6f5569203bb6`) makes the crypto engine vote for memory bandwidth only
-  while busy.
-- Left out: mainline's fix of 0080 (`3098c989bd38`), which concerns only serial consoles with
-  `no_console_suspend`; a change to the bandwidth monitors (`icc_bwmon`), whose votes are active-only and drop out
-  of the sleep set by themselves.
-- Revision 5: 0082 (this repository): `mhi-pci-generic` no longer aborts a system suspend when the modem refuses
-  M3 (pending transfers, as while ModemManager probes the modem restarted by the last wake); it powers MHI down as
-  for hibernation and restarts the modem through its recovery on resume. Mainline has no such change (its `no_m3`
-  support of 7.3 is for devices without M3). Both pushed 2026-10-28 (head `f9f03105`, tree `bc657515`).
-
-### 7.2.11 revision 7: Type-C switch array, GPU fixes, video codec
-
-- 0083–0089, found by the 2026-10-26 comparison with jglathe's linux_ms_dev_kit, which carries all but 0089. The
-  six posted ones are carried from their postings, each note giving its message-id; 0085's last hunk applies with
-  less context (7.2 calls `a6xx_gmu_rpmh_dep_votes_init()` above it), the change being the same as in jglathe's
-  tree.
-- 0083: the Type-C switch lookup initializes the array it checks for duplicates (a fix of 7.2.5's duplicate check;
-  it does not fix the reversed USB-C plug, `docs/hardware.md`). 0084–0088: five fixes of Qualcomm's "drm/msm:
-  Assorted fixes - October" series (patches 2 to 6, posted 2026-10-24). 0089 (this repository): the Denali tree
-  enables Iris, the video codec, with the Surface's `qcvss8380.mbn` (shipped by support 3.8).
-- Revision 6 (2026-10-28, a device test only) also carried Brian Masney's clock `sync_state` series between 0088
-  and the codec; it is left out (below). Pushed 2026-10-29 (head `7f035fc3`, tree `d9bc0070`).
-
-### 7.2.11 revision 8: the 5G modem's MBIM data channels
-
-- 0090 (this repository): `mhi-pci-generic` matches the modem by its subsystem (`17cb:0308`, subsystem
-  `17cb:0308`) and gives it the generic channel set with the hardware data channels named `IP_HW0_MBIM`, for
-  `mhi_wwan_mbim`, without the software data channels, and a 32 kB MRU. The modem frames its data as MBIM NTBs,
-  which `mhi_net`, the bare entry's data driver, cannot carry (`docs/modem.md`, Mobile data). Mainline has no entry
-  for this modem.
-- A module build of the same `pci_generic.c` on revision 7 passed the device test first; revision 8 passed the
-  same day and was pushed (head `86f4bc1a`, tree `f5de3f91`).
-
-### 7.2.11 revision 9: the modem kept powered through a sleep, Wi-Fi's country restored after it
-
-- 0091 (this repository): the 5G device tree keeps the modem's supply `vreg_wwan` on (`regulator-always-on`)
-  and no longer hands it to PCIe 5 as `vddpe-3v3-supply`, so a deep sleep takes the link down but not the
-  modem's power; the change the test tree of 2026-10-29 carried (`docs/modem.md`, Across a sleep).
-- 0092 (this repository): ath12k sends the firmware the country its 11d scan found before (`ar->alpha2`) when
-  a radio starts, as `reconfig_complete` does after a crash recovery; the firmware restarts in world roaming
-  after every system suspend and the driver never told it (`docs/hardware.md`, Wi-Fi). A boot has no country
-  yet; the 11d scan still runs and replaces a stale country before an association.
-- The device round of 2026-10-31: 0091 and ModemManager's quick resume passed (mobile data 2.0 s after a wake,
-  the night at 0.32 W); 0092's answer from the firmware was dropped by the `regd_updated` gate, so the first scan
-  after a wake still ran in world roaming. Not pushed; revision 10 carries the fix.
-
-### 7.2.11 revisions 10 and 11: the country re-send waits for the firmware's answer
-
-- 0091 unchanged. 0092 reworked: after sending the country, `ath12k_mac_start` waits up to 500 ms for the
-  firmware's regulatory answer (`regd_update_completed`), clears the `regd_updated` gate and applies the answer,
-  so the interfaces added right after and the first scan see the country's channel list; a `00` country (the
-  registration's default without an SMBIOS code) is not sent.
-- Revision 10 waited for any regulatory event and lost the race once in two wakes: the firmware's own first
-  event after the restart completed the wait, the world rules were applied, the answer was dropped. Revision 11
-  loops on the completion until `ab->reg_info` carries the restored country, within the 500 ms, and applies it;
-  without such an answer the start goes on with a warning and the behaviour of revision 8. On the device
-  (2026-11-01) the answer was found and the world rules were still applied at both wakes.
-
-### 7.2.11 revision 12: the country re-send with diagnostics
-
-- 0092 again: every stored regulatory event, every apply to the wiphy and the restore's steps logged at info
-  level; the regulatory event handler clears the `regd_updated` gate so that a changed country is applied, and
-  sends the known country again (twice at most per start) when the firmware reports world roaming while a
-  country is known. The device round (2026-11-01) showed the real cause at the sleep: the 11d scan, stopped by
-  the link going down, reports `00`, which the driver takes over as the known country; neither guard mattered.
-
-### 7.2.11 revision 13: the country kept across a sleep
-
-- 0092 in its final form: `ath12k_reg_11d_new_cc_event` keeps a known country when the 11d scan reports `00`
-  (and sends nothing to the firmware then); `ath12k_mac_start` sends the known country, waits up to 500 ms for
-  the answer that carries it, clears the `regd_updated` gate and applies it; without an answer the start goes
-  on with a warning. No diagnostics, no re-send, no gate release in the event handler. Passed its device round
-  on 2026-11-01 (`DE` before the first scan at both wakes, Wi-Fi online after 13.2 and 13.5 s). Pushed 2026-11-01
-  (head `2155c742`, tree `e202be02`).
-
-### 7.2.14 revision 1: a rebase without a change
-
-- The 92 commits rebased unchanged onto `v7.2.14` (`sp11/7.2.14`, head `db86d659`, tree `46612749`, pushed
-  2026-11-02); every number stays. The stable update itself brings the Wi-Fi power sequencer's reset of the chip
-  at its probe, which the Wi-Fi boot campaign's test patch had planned (`docs/hardware.md`, Wi-Fi).
-
-### 7.2.14 revision 2: the wake's resume path
-
-- 0093 (this repository): `g6ts_resume()` in `mshw0485_touch.c` no longer runs `g6ts_power_on()`, whose 500 and
-  300 ms delays held the PM core's resume phase; the recovery work the callback schedules powers the controller off
-  and on again on its hardware path anyway, so the callback's power-on was undone 100 ms later (`docs/sleep.md`,
-  Wake).
-- 0094 (this repository): `qcom_pcie_probe()` enables asynchronous suspend and resume for the controller
-  (`device_enable_async_suspend()`), as the PCI core does for the host bridges, ports and devices below it, so the
-  three controllers' link resumes of 0.31 to 0.36 s overlap instead of following one another in the noirq phase.
-  Mainline's `pcie-qcom.c` has no such change (2026-11-02).
-- Passed its device round on 2026-11-02 (`docs/sleep.md`, Wake) and pushed the same evening (head `1ca86c76`,
-  tree `e42be2f1`, the tree the kernel was built from).
-
-### 7.2.15 revision 1: the rebase and the reversed USB-C plug
-
-- The 94 commits rebased unchanged onto `v7.2.15` (`docs/kernel.md`, Rebase to a new Fedora kernel).
-- 0095 (this repository): `ps883x_configure()` writes the PS8830 retimer's connection-status registers in two
-  steps when the retimer comes out of reset: `0x01` (connection present) and, 30 ms later, the configuration
-  (orientation and mode). Given the final word at once, the retimer brought up no USB 3 link with the plug
-  reversed on either port; the two-step write, replayed on the live retimer of a stuck port, trained the link
-  within a second (`docs/hardware.md`, USB-C data). Windows configures the chip the same way. A mode change on
-  an existing connection is written at once, as before.
-- Passed its device round on 2026-11-03: the stick at 5000 Mb/s turned over and the usual way on both ports, after
-  a wake and in a second boot (`docs/verified.md`). Pushed the same day (head `395b0aab`, tree `a90da6df`, the
-  tree the kernel was built from).
-
-### 7.2.15 revision 2: the QRTR probe deadlock
-
-- 0096 (this repository): `qcom_smd_qrtr_probe()` (0006's version of `net/qrtr/smd.c`) holds its send lock only
-  across the endpoint registration and the channel open, no longer through the unregistration a failed open
-  does. Held there, it deadlocked with a QRTR broadcast of the same moment: the name server, holding
-  `qrtr_node_lock` and the node's `ep_lock`, blocked in the send on the lock; the probe then blocked in
-  `qrtr_endpoint_unregister()` on `ep_lock`; every QRTR user queued behind `qrtr_node_lock`, and the glink edge's
-  work behind the probed device's lock.
-- The window is the 5 s the CDSP's IPCRTR open takes to time out in the initramfs (the CDSP announces the channel
-  and never acknowledges the open; `failed to create endpoint`, `rpmsg_dev_probe: failed: -121`, the reason the
-  initqueue ends at 7.1 s rather than 2.8 s in most boots). Three boots of 2026-11-05/06 had an ADSP service
-  announced inside it: `dracut-initqueue` gave udev's queue up after 120 s, udevd survived its SIGKILL, the root
-  was switched at 212 s, and the system ran without battery, Wi-Fi and sensors and could not shut down; the
-  stacks of the stuck tasks (`/proc/<pid>/stack`, `sysrq w`) named the locks. With the lock released, a blocked
-  sender finds no channel, drops its packet and the probe fails with `-121` as in the boots without a broadcast.
-- Left as they are: the CDSP's unanswered open (5 s per boot that announces the channel early, no CDSP QRTR) and
-  the name server's blocking send under `qrtr_node_lock`.
-- Passed its device round on 2026-11-06: fourteen boots in a row ended the initqueue at 1.8 to 7.1 s (the CDSP's
-  open still fails with `-121` in the 6.6 s boots, now without consequence), then the standard checks and a deep
-  sleep (`docs/verified.md`). Pushed the same day (head `7a8c230b`, tree `085f9693`, the tree the kernel was
-  built from).
-
-### 7.3.3 revision 1: the rebase onto 7.3
-
-- The 96 commits of `sp11/7.2.15` rebased onto `v7.3.3` (`docs/kernel.md`, Rebase to a new Fedora kernel): 87
-  remain, plus one new patch.
-- Dropped, upstream in 7.3: 0013 (`729e0af3c2b9`, the final form of the combo PHY's runtime-PM fix), 0018
-  (`30ae66afcacf`), 0019 and 0020 (`cd054a6e272c`, `eb667d0fbdd3`, the author's final versions), 0021 (7.3 checks
-  `clk_set_rate()`'s return, and `clk_set_rate(NULL)` is 0), 0031 (`cebfa9909e`), 0079 (`d4c79b63d82d`), 0080
-  (`d0cd9c8d0fd5`, with the `no_console_suspend` fix `3098c989bd38` on top), 0081 (`6f5569203bb6`).
-- Adapted (the `[sp11: ...]` notes name the changes): 0049 keeps 7.3's `qcom_geni_se` trace include, the
-  `geni_spi` tracepoints and the register names of `geni-se.h` (the extracted patch had deleted the tracepoints
-  and defined the set register as `SE_DMA_TX_IRQ_EN`, which 7.3's header names `SE_DMA_TX_IRQ_EN_SET`); 0053
-  re-applies only its functional change to `lpass-wsa-macro.c` (the extracted patch had reverted 0019 and 0021,
-  so the tested kernels ran the WSA macro on the clock handling that preceded the PM-clock conversion), sets the
-  WSA884x PA event's fields under 7.3's `scoped_guard()` and drops the VA macro's Denali 19.2 MHz divider base:
-  7.3's Denali tree asks for a 2.4 MHz DMIC rate (`35ce3c571297`), and both together gave a /8 divider instead of
-  Windows' /4; 0061 drops its `camcc` node, upstream in 7.3 (`6a3568f938`, enabled by default; the Denali tree's
-  `status = "okay"` stays, harmless).
-- New: 0088 (this repository): the Denali tree disables the crypto engine's node, whose driver 7.3 marks `BROKEN`
-  (`docs/kernel.md`, Sync state and the CDSP); `kernel-local` loses its six `CRYPTO_DEV_QCE` lines.
-- Old numbers to new: 0001–0012 unchanged, 0014–0017 to 0013–0016, 0022–0030 to 0017–0025, 0032–0078 to
-  0026–0072, 0082–0096 to 0073–0087; 0088 is new.
-- The device round of 2026-11-08 passed the standard checks (microphone clear, GNSS fixes, mobile data, the crypto
-  node `disabled`), with one finding: a suspend started with the lid open ended after 2 s, woken by the interrupt
-  a lid opening reports (`/sys/power/pm_wakeup_irq`); with the lid closed the suspend held. Revision 2 below.
-
-### 7.3.3 revision 2: GPIO wake interrupts off the PDC
-
-- 0089 (this repository): reapplies upstream's `602cb14e310a` ("pinctrl: qcom: x1e80100: Bypass PDC wakeup parent
-  for now"), which 7.3 reverted (`77fbc756d9cb`) together with its PDC rework (pass-through or secondary mode,
-  chosen by an SCM write the firmware may refuse). With the lid's GPIO 2 (a `gpio-keys` wakeup source,
-  `wakeup-event-action = EV_ACT_DEASSERTED`) routed through the PDC (port 70), a suspend with the lid open woke at
-  once; 7.2 kept the GPIO wake interrupts on the TLMM's summary interrupt, where the lid woke the system only
-  when opened. `nwakeirq_map` is 0 again.
-- Passed its device round on 2026-11-09: the suspend with the cover open held 68 s, the night drew 0.25 W with the
-  memory asleep 27112 of 28883 s (`docs/verified.md`); opening the cover no longer wakes the system
-  (`docs/sleep.md`). Pushed the same day as `sp11/7.3.3` (head `476df635`, tree `9eb147a1`, the tree the kernel
-  was built from), signed in place in the submodule without a clone of the fork.
-
-### 7.3.3 revision 3: HDR on DisplayPort and eDP
-
-- 0090–0111: 22 commits by Xilin Wu, carried from the mailing list and not merged upstream: the series
-  "drm/msm/dp: Add static HDR support for DP and eDP" in its second version of 2026-10-09 (0092–0111,
-  `20261009-msm-dp-hdr10-v2-0-1835d4966da3@radxa.com`) and two fixes of its first version that the second
-  builds on (0090, in msm-next as `62c6146e5fde`, and 0091). Each commit's `[sp11: ...]` note names its posting.
-- What they add: the connector properties `max bpc`, `Colorspace` and `HDR_OUTPUT_METADATA` on DP and eDP, the
-  BT.2020 VSC packet and the HDR static metadata packet, 10 bits per colour as the condition for HDR, HDR
-  streams kept out of PSR. On the way they rework the stream enable, the PHY's power bookkeeping and the read of
-  an eDP panel's capabilities; outside the msm driver, 0092–0094 let the bridge connector attach `max bpc` to a
-  non-HDMI chain.
-- Adapted where they meet SP11 patches: 0099 and 0100 keep 0033's delayed clock defaults between the PHY's
-  power-on and the link clocks, and a failure there powers the PHY off; 0102 keeps 0036's link-rate quirk ahead
-  of the capability read; 0107 lets 0026 choose the direct SDP flush only while PSR is enabled, so a stream
-  outside PSR keeps the peripheral flush that latches its packets.
-- Upstream on 2026-11-12: under review, with changes asked for on the `max bpc` handling in the bridge chain and
-  on the video test and VSC flush patches. The next rebase takes upstream's current version.
-- No configuration change: the built configuration is revision 2's, and the four module packages hold the same
-  modules.
-- Passed its device round on 2026-11-12: the standard checks, nine switches between SDR and HDR, seven suspends
-  with HDR on, 8 hours asleep at 0.31 W with the memory asleep 27167 of 28951 s (`docs/verified.md`,
-  `docs/display.md`). Pushed the same day: `sp11/7.3.3` moved forward by the 22 commits (head `fe43e1a3`, tree
-  `5aa74d68`, the tree the kernel was built from), signed in place in the submodule.
-
-### 7.3.3 revision 4: no mode set for a gamma table
-
-- 0112 and 0113: two commits by Dmitry Baryshkov, carried from the mailing list and not merged upstream: patches
-  7 and 9 of the series "drm/msm: fix SMMU fault dumps" in its fifth version of 2026-10-24
-  (`20261024-fd-kms-fix-smmu-v5-0-a5b0b284aead@oss.qualcomm.com`). 0112 clears a mixer's DSPP pointer when a
-  mode set leaves the mixer without one. 0113 asks for a mode set only for a CRTC that has a CTM or a gamma LUT
-  and lacks a DSPP, in `dpu_crtc_check_mode_changed()`, and drops the loop of `msm_atomic_check()` that forced
-  one whenever either came or went and allowed it in userspace's place.
-- 0113 is adapted: its `dpu_crtc_atomic_check()` hunk is left out, 0018 had made that change, and the loop it
-  drops also held 0017's gamma lines. Of 0017 nothing is left in the tree.
-- 0114 (this repository): `_dpu_rm_reserve_lms()` looks for mixers with a free DSPP first, whatever the topology
-  asks for, and reserves the DSPPs with the mixers; when none are left, a CRTC that asks for no DSPP gets mixers
-  without one, as before. A CRTC so has its DSPPs from its first mode set, and a CTM or gamma LUT set later is an
-  ordinary commit.
-- Why: a CRTC got its DSPPs only in a mode set that already carried a CTM or a gamma LUT, and 0017 forced a
-  full mode set whenever one came or went. At the login screen's start that happened twice, each powering the
-  panel off and on: mutter's first commit drops the table Plymouth set, and its own follows in a commit that
-  allows no mode set (`docs/display.md`). With 0113 and without 0114 a first table on a CRTC without DSPPs
-  fails instead (`-EINVAL` from `drm_atomic_check_only()`).
-- The cost: a CRTC holds DSPPs it may never use. X1E80100 has a DSPP on four of its six mixers; the panel takes
-  two mixers, a second display the other two with a DSPP, a third gets none and neither CTM nor gamma LUT.
-- Upstream on 2026-11-12: the series is under review. Open on patch 9: it forces a mode set on a disabled CRTC
-  that carries a CTM or gamma LUT, and whether dropping one should release the DSPPs. The next rebase takes
-  upstream's current version and checks 0114 against it.
-- No configuration change: the built configuration is revision 3's but for the build salt, and the four module
-  packages hold the same modules.
-- Passed its device round on 2026-11-13: three recorded boots (revision 3 with two mode sets before the login
-  screen settles, revision 4 with none, and with one at a login into HDR), Night Light, an HDR switch, three
-  suspends, an 8.9-hour sleep and the standard checks (`docs/verified.md`, `docs/display.md`). Pushed the same
-  day: `sp11/7.3.3` moved forward by the three commits (head `216231c9`, tree `ac3d82da`, the tree the kernel
-  was built from), signed in place in the submodule.
-
-### 7.3.3 revision 5: the modem's link at boot
-
-- 0115 (this repository): `qcom_pcie_probe()` schedules a work item when `dw_pcie_host_init()` fails with
-  `-ETIMEDOUT` and the controller's node has `wake-gpios`. The work waits up to 20 s for the line to be asserted
-  (polled every 100 ms, the GPIO held only for the wait), then calls `device_attach()`: up to three times, 5 s
-  apart. A list keeps a probe that fails meanwhile from scheduling a second work item.
-- 0116 (this repository): the 5G tree's `wake-gpios` on TLMM 151 in PCIe 5's controller node, and its pin
-  state.
-- Why: in 8 of revision 4's 58 boots the modem was not ready within the probe's single wait of 0.9 s for the
-  link, and that boot had no modem. A probe requested from user space once TLMM 151 read low brought the modem,
-  three times of three (`docs/modem.md`, The link at boot).
-- Not in the probe itself: `do_init_module()` waits for every asynchronous probe, so the module loads of that
-  time would wait for the modem. Not in the root port's node: the PCI core arms a port's `wake-gpios` as its
-  wake-up interrupt.
-- No configuration change: the built configuration is revision 4's but for the build salt, and the four module
-  packages hold the same modules.
-- The device round of 2026-11-16 passed the standard checks. The link was up at the first probe in 23 of the
-  revision's 24 boots; in the 24th (2026-11-19) the first probe failed and the second brought the modem up 8.1 s
-  after the kernel's start (`docs/verified.md`). Pushed on 2026-11-17: `sp11/7.3.3` moved forward by the two
-  commits (head `e53fd0c5`, tree `c83e6e9d`, the tree the kernel was built from), signed in place in the
-  submodule.
-
-### 7.3.5 revision 1: the rebase onto 7.3.5
-
-- The 116 commits of `sp11/7.3.3` rebased onto `v7.3.5`, straight past 7.3.4 (`docs/kernel.md`, Rebase to a new
-  Fedora kernel): 114 remain, none is new.
-- Dropped, upstream since 7.3.4: 0003 (`7d0767c5cd87`, the pmic_glink altmode worker) and 0071 (`87fd20da8ca8`,
-  the charger supplies' change notice).
-- Adapted (its `[sp11: ...]` note names the changes): 0046, the AudioReach patch, where 7.3.4 fixes code the
-  patch replaces with its own. `q6apm_dai_pointer()` takes the wrap of a full ring to 0 for its queue mode
-  (`0ea3e0b196f9`); one frame short of the ring's end, a drained stream never reached `appl_ptr` and ALSA saw no
-  underrun. The fixed region's unmap becomes a helper on the `q6apm` instance that `q6apm_audio_remove()` calls
-  for every graph (`a51c5dd7f7fc`), and its reply carries the DSP's status and clears a handle only on success
-  (`4b832a2af523`), the patch's own OOB and position handles included; the patch already matched the reply by
-  its real opcode. `topology.c` keeps the patch's bounded parser, which has the checks of `e21fb64a8c4a`.
-- Merged without a change: the hw pointer's reset with the fragment queue (`0337b8129cf6`) and 7.3.5's guard of
-  the callbacks until the driver data is published (`ef7062864c05`). The pull mode, the speakers' path, has
-  neither a fragment queue nor that position code.
-- Old numbers to new: 0001 and 0002 unchanged, 0004–0070 to 0003–0069, 0072–0116 to 0070–0114. The entries of
-  7.3.3 revisions 1 to 5 above keep the numbers of `sp11/7.3.3`.
-- No change to `kernel-local`. The built configuration differs from 7.3.3 revision 5's by Fedora's changes
-  (`docs/kernel.md`, Rebase) and the buildroot's Rust version; the four module packages hold the same 5723
-  modules, and both Denali device trees are byte for byte revision 5's.
-- Passed its device round on 2026-11-19, the day it was built: the standard checks, both speakers and a
-  recording from the microphone with no refused unmap from the DSP, the three PCIe links at the first probe in
-  both boots, and a deep sleep ended by opening the cover (`docs/verified.md`). Pushed the same day as
-  `sp11/7.3.5` (head `1b01078e`, tree `b341ab21`, the tree the kernel was built from), signed in place in the
-  submodule without a clone of the fork.
-
-### 7.3.5 revision 2: the TPM
-
-- 0115 (this repository): `qcom_qseecom` creates a client device for `qcom.tz.mssecapp`, as for
-  `qcom.tz.uefisecapp`, where the firmware has loaded the application.
-- 0116 (this repository): `tpm_qcom_mssecapp`, the TPM driver for that device. Its probe asks for the interface
-  version (`0x4007`, 1.0 required) and the CRB (`0x4004`), which must lie outside System RAM, maps it and requires
-  the command and response buffers its control area names to lie inside it, after the control area.
-- 0116 registers a synchronous chip: `send()` copies the command in, sets the start register, sends `0x4003` and
-  reads the response once the start register is clear.
-- `kernel-local` builds the driver in (`CONFIG_TCG_QCOM_MSSECAPP=y`), so the TPM is there before the initramfs
-  runs.
-- Why: the TPM is reachable only through that application (`docs/hardware.md`, TPM). The requests are those of
-  Windows' drivers; a probe module sent them on the device on 2026-11-22.
-- Left out: power management, as in `tpm_ftpm_tee` and `tpm_svsm` (without the driver's callbacks the TPM core
-  sends nothing at a suspend; at a poweroff or reboot it sends `TPM2_Shutdown`), the unload request `0x4005`, and
-  a MAINTAINERS entry.
-- The built configuration differs from revision 1's by the new line and the build salt; the four module packages
-  hold the same 5723 modules, and both Denali device trees are byte for byte revision 1's.
-- Passed its device round on 2026-11-22, the day it was built: the standard checks, the TPM through the driver,
-  and Windows' use of the TPM afterwards (`docs/verified.md`). The kernel's start is 3.0 s slower, the probe's
-  time, 2.87 s of it the TPM's first self test (`docs/hardware.md`, TPM).
-- Committed on top of `sp11/7.3.5`'s head `1b01078e` (head `8de86335`, tree `d0ff3635`), signed in the scratch
-  clone; pushed with revision 3.
-
-### 7.3.5 revision 3: the TPM registered from a work item
-
-- 0117 (this repository): `tpm_qcom_mssecapp`'s probe queues the chip's registration (`tpm2_probe()`,
-  `tpm_chip_register()`) on `system_dfl_long_wq` and returns; `remove()` cancels the work and unregisters only a
-  registered chip.
-- Why: the driver binds while the SCM device probes, from the deferred probes `deferred_probe_initcall` waits for,
-  and the TPM's first self test after the firmware takes 2.87 s, so revision 2's kernel ran init 3 s later
-  (`docs/hardware.md`, TPM). An asynchronous probe would not help: `kernel_init()` waits for all async work
-  (`async_synchronize_full()`) before it runs init.
-- What else it changes: the TPM appears about 3 s into the initramfs instead of before it.
-- Passed its device round on 2026-11-23, the day it was built, with support 3.17: the standard checks and the TPM
-  as with revision 2; the kernel ran init at 0.63 s. The hardware still comes up about 3 s late: the self test
-  holds `qcom_scm`'s QSEECOM mutex, which the EFI variables need too (`docs/hardware.md`, TPM). The built
-  configuration is revision 2's but for the build salt, with the same modules and device trees.
-- No change to `kernel-local`'s effective lines. Pushed on 2026-11-23 from the submodule: `sp11/7.3.5` moved
-  forward by revisions 2 and 3's three commits (head `d18c8996`, tree `c9b5b03f`, the tree the kernel was built
-  from), signed in the scratch clone.
-
-### 7.3.5 revision 4: the LCD model's device tree and its clusters' frequency scaling
-
-- Four commits from the fork's pull request 1, for the X1P64100 LCD model, of which this project has no unit:
-  0118 to 0120 are commits of dwhinham/linux-sp11 under their authors' names, 0121 is the pull request's own.
-- 0118 (Dale Whinham): a `pwm-backlight` for the LCD tree on the PMK8550 PWM (channel 0, 5 ms), its supply a
-  fixed regulator on `pmc8380_3` GPIO 10, its enable line `pmc8380_3` GPIO 4. That line is the OLED panel's
-  enable, so the panel's compatible, `enable-gpios` and pin state move from the common file into the two board
-  files.
-- 0119 (Dale Whinham): `x1p64100.dtsi`, `hamoa.dtsi` without `cpu7`, `cpu11`, their idle power domains and their
-  `cpu-map` entries; the LCD tree includes it.
-- 0120 (Friedrich Schrödter): `scmi-cpufreq` clears the boost flag of a frequency table whose every entry carries
-  it and logs `all OPPs flagged as turbo by firmware, using them as regular OPPs`.
-- 0121 (Openanonwriter): the LCD tree enables the video codec with `qcvss8380.mbn`, so it requests six Denali
-  firmware files, as the OLED tree does.
-- Why, as two owners of LCD units reported it in the pull request: the LCD panel does not follow the AUX backlight
-  the kernel registers, PSCI refuses CPUs 7 and 11, and the firmware's sustained frequency of 0 for performance
-  domains 1 and 2 marks all their OPPs as turbo, which left six of the ten cores without a cpufreq policy.
-- For the tested unit: the OLED and 5G trees keep revision 3's content, with two phandle numbers swapped (the
-  board file now names the panel's enable line); 0120 acts only on a table without a regular frequency, and the
-  unit has its three policies (`policy0`, `policy4`, `policy8`, 2026-11-23).
-- No change to `kernel-local`. The built configuration is revision 3's but for the build salt, and the four module
-  packages hold the same 5723 modules. Of the 410 device trees only the five Denali ones differ from revision
-  3's: the three OLED trees by those two phandle numbers, the two LCD trees as the patches intend.
-- Passed its device round on 2026-11-24, the day it was built, with support 3.22 and Secure Boot on: the
-  standard checks, the brightness keys, the three cpufreq policies without a line of 0120, and the root opened
-  by the TPM under the new signed image (`docs/verified.md`).
-- Pushed on 2026-11-24 by the pull request's rebase merge on GitHub: `sp11/7.3.5` moved forward by the four
-  commits (head `67d93d33`, tree `973aab98`, the tree the kernel was built from). The merge gave them new ids and
-  no signature; their authors, dates, messages and changes are the tested ones.
+- `sp11/7.2.15` to `sp11/7.3.3`: 0001–0012 unchanged, 0014–0017 to 0013–0016, 0022–0030 to 0017–0025, 0032–0078 to
+  0026–0072, 0082–0096 to 0073–0087; 0088 new.
+- `sp11/7.3.3` to `sp11/7.3.5`: 0001 and 0002 unchanged, 0004–0070 to 0003–0069, 0072–0116 to 0070–0114.
 
 ## Contents
 
-The patches by number, with their origin and what each is needed for.
+The patches by number in `sp11/7.3.5`, with their origin and what each is needed for.
 
 | Patches | What | Origin | Needed for |
 |---|---|---|---|
 | 0001 | EFI stub: signal the before-ExitBootServices event group | Johan Hovold (T14s workaround, applies to every arm64 machine) | boot (kept until a boot without it is tested) |
 | 0002 | UCSI connector worker on a freezable workqueue | Abel Vesa | USB-C across suspend (the pmic_glink altmode worker's fix is upstream since 7.3.4) |
-| 0003–0005 | rpmsg announce order, an rpmsg helper to open an endpoint during probe (needed by 0005), QRTR SMD open/close races | Stephan Gerhold | ADSP services (audio, battery, sensors). 0005's probe holds its send lock from the endpoint registration through a failed channel open into the unregistration; a QRTR broadcast in that window deadlocks with it (the CDSP's IPCRTR open times out after 5 s in the initramfs): three boots of 2026-11-05/06 waited 212 s in dracut-initqueue, udevd unkillable, and ran without battery, Wi-Fi and sensors, every QRTR user blocked, until a long power press; fixed by 0085 |
+| 0003–0005 | rpmsg announce order, an rpmsg helper to open an endpoint during probe (needed by 0005), QRTR SMD open/close races | Stephan Gerhold | ADSP services (audio, battery, sensors); 0005's probe deadlock is fixed by 0085 |
 | 0006 | x1e80100 machine driver match data (Dell XPS 13 channel map) | Abel Vesa | prerequisite of 0047 |
 | 0007 | qcom_battmgr request input checks | Jens Glathe | battery |
 | 0008 | WCN7850 Bluetooth: drop the unused baud-rate event | Cheng Jiang | Bluetooth |
@@ -487,7 +105,7 @@ The patches by number, with their origin and what each is needed for.
 | 0082 | MSHW0485 touch: no power-on in the resume callback; the recovery work powers the controller, once | this repository | 0.8 s less in a wake's resume phase (`docs/sleep.md`, Wake) |
 | 0083 | PCIe (qcom): the controllers suspend and resume asynchronously | this repository | the three links resumed side by side, about 0.65 s less in a wake |
 | 0084 | PS8830 retimer: the connection announced 30 ms before its mode | this repository | USB 3 with the plug reversed (`docs/hardware.md`, USB-C data) |
-| 0085 | QRTR SMD: the probe's send lock released before a failed open's unregistration | this repository | boots that sat 212 s in dracut-initqueue and ran without battery, Wi-Fi and sensors (0005's deadlock) |
+| 0085 | QRTR SMD: the probe's send lock released before a failed open's unregistration | this repository | boots that sat 212 s in dracut-initqueue and ran without battery, Wi-Fi and sensors (`docs/kernel.md`, Sync state and the CDSP) |
 | 0086 | Denali device tree: the crypto engine's node disabled | this repository | no user of the interconnect without a driver, since 7.3 marks the engine's driver `BROKEN` (`docs/kernel.md`, Sync state and the CDSP) |
 | 0087 | X1E80100 pin controller: GPIO wake interrupts stay on the TLMM summary interrupt, not the PDC (7.2's state) | this repository | a suspend with the lid open that holds; 7.3's PDC wake path woke it at once (`docs/sleep.md`) |
 | 0088, 0089 | DP: hot-plug state updates serialized, the debugfs connector pointer initialized | Xilin Wu (posted 2026-09-30; 0088 in msm-next) | prerequisites of 0090–0109 |
@@ -514,11 +132,10 @@ Nothing here drives hardware the feature table depends on; in parentheses, what 
 - The ADSP attach series (remoteproc, SMP2P, pmic_glink probe order): mainline's PAS driver restarts the ADSP itself
   (`docs/kernel.md`; audio, battery, sensors, USB-C after boot).
 - The clock `sync_state` series and a gcc UFS log change; the kernel arguments keep unused clocks and power domains
-  on (boot, suspend). Its v3 (Brian Masney, 2026-06-26) was tested in 7.2.11 revision 6: with `clk_ignore_unused`
-  it left only the AOSS clock provider waiting for `sync_state` (its consumer, the QDSS trace hub `10004000.tpda`,
-  has no driver loaded); boots without that argument, and without `pd_ignore_unused` too, switched the unused
-  clocks off and worked, but `cxsd` stayed at 0 in a 10-minute sleep, and the eDP pixel clock logged "rcg didn't
-  update its configuration" twice (`disp_cc_mdss_dptx3_pixel0_clk_src`) at the display's enable.
+  on (boot, suspend). Its v3 (Brian Masney, 2026-06-26), tried in 7.2.11 revision 6, left the AOSS clock provider
+  waiting for `sync_state` (its consumer, the QDSS trace hub `10004000.tpda`, has no driver loaded); without
+  `clk_ignore_unused` and `pd_ignore_unused` the unused clocks went off and the boot worked, but `cxsd` stayed at 0
+  in a sleep and the eDP pixel clock logged "rcg didn't update its configuration" twice at the display's enable.
 - The PCIe ASPM API series and ath12k's MAC-from-device-tree hack (Wi-Fi and NVMe, also after resume).
 - v23.2's camera stack (far too dark): revision 6 carries turbineBMW's instead (0052–0063 in the current
   numbering), revision 7 the privacy LED (0064).
@@ -528,29 +145,3 @@ Nothing here drives hardware the feature table depends on; in parentheses, what 
   DisplayPort DAI).
 - Other laptops' device trees, panels, EC and QSEECOM entries, EL2, X1P, Denali's ThinkPad T14s compatible and
   PMK8550 ADC (no driver in v23.2).
-
-## Planned: drop the power key's waking press
-
-Not started. The workaround in use is KDE's power button set to Lock screen (`docs/guide/troubleshooting.md`).
-
-- The problem: `drivers/input/misc/pm8941-pwrkey.c` (bound to `qcom,pmk8350-pwrkey`, `pon_pwrkey` under
-  `pmk8550_pon: pon@1300` in `hamoa-pmics.dtsi`) reports the press that woke the system, so a desktop whose power
-  button means sleep sleeps again 1 to 6 s after every power-key wake (`docs/sleep.md`). The precedent is ACPI's
-  `drivers/acpi/button.c`: it sets `button->suspended` in `.suspend`, clears it in `.resume`, and meanwhile reports
-  only `acpi_pm_wakeup_event()`, no key.
-- The driver in 7.2.11: a threaded handler (`IRQF_ONESHOT`) reads `PON_RT_STS` and reports press and release,
-  with a press synthesized for a release without one; `.suspend` and `.resume` only arm and disarm the interrupt
-  as a wake source. Fedora builds it as a module; `pm_wakeup_irq()` is not exported, `pm_wakeup_dev_event()` is.
-- The commit: flag the sleep in `.suspend` when the device may wake the system; while the flag is set, account
-  the wake with `pm_wakeup_dev_event()`, keep `last_status` current and report no key, the synthesized press
-  included; clear the flag at the release that ends the waking press and after a wake from another source. The
-  IRQ thread is not frozen and can run before `.resume`, so a flag cleared there alone races with the waking
-  press: compare a `.complete` callback, a noirq check of the interrupt's pending state, and clearing on the first
-  release. Make it opt-in (a device-tree property or a module parameter set for Denali): phones use the waking
-  press to turn the screen on.
-- In this project: a commit on top of the pinned `sp11/<version>` branch with a `[sp11: ...]` note, a host compile
-  check of `drivers/input/misc` and the DTBs (`docs/kernel.md`, Rebase, step 4), the new pins, steps 10, 20 and
-  36, a revision entry here and in `docs/kernel.md`'s table, the device round, the push after it.
-- Device checks: no `Power key pressed short.` line from `systemd-logind` for the waking press, and KDE with the
-  button on Sleep stays awake; `cat /sys/power/pm_wakeup_irq` still names the power key's interrupt; a press while
-  awake still runs KDE's button action; after a wake by the cover the first press counts.
