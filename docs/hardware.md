@@ -178,13 +178,20 @@ Windows. Sleep and its wake sources: `docs/sleep.md`. The 5G modem: `docs/modem.
 - The way in is libwacom's bus override for uinput devices, the udev properties `UINPUT_DEVICE` and
   `UINPUT_SUBSYSTEM`: `serial` is the one value it accepts on that path, and it then looks the device up as
   `serial|0000|0000|<name>`. `payload/iptsd/71-sp11-pen-libwacom.rules` sets the two properties on the stylus of
-  both digitizers, and `payload/iptsd/sp11-surface-pro-11.tablet` (installed under `/usr/share/libwacom`) matches
-  both names as a 274 x 184 mm tablet built into the display.
-- Checked on 2026-11-26 on a unit with the `045E:0C80` digitizer (kernel 7.3.5 revision 1, GNOME 51, libwacom
-  2.19.0), with 3.1.0-5 upgraded over 3.1.0-4: `libwacom-list-local-devices` lists "Microsoft Surface Pro 11" on
-  the stylus's event node with the general pen and its eraser, also on the device the upgrade's restart of the
-  daemon created. By hand (that unit's owner), after a new login: GNOME Settings lists the pen under Wacom
-  Tablet. Not checked: the `045E:0C83` name.
+  both digitizers.
+- `payload/iptsd/sp11-surface-pro-11.tablet` (installed under `/usr/share/libwacom`) matches both names as a
+  274 x 184 mm tablet built into the display. Without it the override alone gets libwacom's stock
+  `serial|0000|0000` entry, "Wacom Serial Tablet WACf004" (libwacom 2.19.0 on the host, 2026-11-27).
+- On the tested unit (2026-11-28, 3.1.0-5 upgraded over 3.1.0-4, libwacom 2.19.0, GNOME 51):
+  `libwacom-list-local-devices` lists "Microsoft Surface Pro 11", bus `serial`, on the stylus's event node with
+  the general pen and its eraser, also after the upgrade's restart and a wake created the device anew. The
+  kernel's G6 Pen node stays "a tablet but not supported by libwacom".
+- GNOME Settings shows the tablet in its Graphics Tablets panel ("Tablet mounted on laptop panel": tablet mode,
+  monitor mapping, calibration) without a new login, and the General Pen's settings (tip and eraser pressure,
+  two buttons, though the Slim Pen 2 has one) once the pen has been used. libinput's `Left-handed` for the
+  stylus went from `disabled` to `n/a`, as for any tablet libwacom knows and does not list as reversible.
+- The `045E:0C80` name was checked by the pull request's author on that model (2026-11-26), not on the tested
+  unit.
 - Known issue, recovering by itself: about 10 s into a boot the touch driver can log `invalid HID-SPI
   header=09 00 00 05 ready=1` and `host HID-SPI fault #1 ret=-71; scheduling cold recovery`. Those four bytes are
   the acknowledgement of the driver's own `SET_FEATURE` 0x05, which its initialization had read 0.4 ms earlier:

@@ -41,7 +41,7 @@ by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-2
 installation from the ISO built with revision 3 and support 3.18, its root encrypted, passed its round's checks by
 hand, with Secure Boot on. With support 3.19 a key sealed in the TPM then opened that root without a prompt.
 Revision 4 (2026-11-24) passed the standard checks and its round's checks by hand, with Secure Boot on and the
-root opened by the TPM.
+root opened by the TPM. Pen daemon 3.1.0-5 (2026-11-28) passed its round's checks by hand.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
@@ -107,6 +107,9 @@ revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md)
   the pen daemon's sleep hook no longer holds the wake for 1.3 s, and the kernel's resume takes 1.4 s instead of
   2.6 s, since it no longer powers the touch controller twice nor brings the three PCIe links up one after the
   other ([`docs/sleep.md`](docs/sleep.md), Wake).
+- Since pen daemon 3.1.0-5 GNOME's Settings show the pen in their Graphics Tablets panel: the pressure feel of
+  tip and eraser, the button actions, the monitor it maps to and a calibration (2026-11-28,
+  [`docs/hardware.md`](docs/hardware.md), Pen).
 - Hardware video decoding works from kernel revision 7: a 720p VP9 clip decoded frame for frame in GStreamer, and
   H.264 and H.265 clips once their colorimetry was relabelled ([`docs/hardware.md`](docs/hardware.md), Video
   codec).

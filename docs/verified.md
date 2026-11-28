@@ -654,3 +654,14 @@ One entry per round; the facts each established live in the topic notes.
   resume. The kernel's messages are kinds earlier rounds had, the QRTR pair at the resume among them.
 - shim's loader stops as before (`docs/secure-boot.md`, shim's loader).
 - By hand (owner): no passphrase prompt at the first start, mobile data came up, the lid woke the Surface.
+
+## Pen daemon 3.1.0-5: the pen in libwacom (2026-11-28)
+
+- Installed: `sp11-iptsd` 3.1.0-5 (the libwacom udev rule and tablet file) by `dnf upgrade` over 3.1.0-4, the
+  ISO's build.
+- Confirmed: before the upgrade `libwacom-list-local-devices` called the stylus's node and the kernel's G6 Pen
+  node "a tablet but not supported by libwacom"; after it, "Microsoft Surface Pro 11", bus `serial`, on the
+  stylus's node with the general pen and its eraser, and again on the stylus's new node after a wake. libinput's
+  `Left-handed` for the stylus went from `disabled` to `n/a`.
+- By hand (owner): GNOME Settings' Graphics Tablets panel showed the tablet without a new login and the General
+  Pen once the pen had been used; the pen worked as before in landscape and portrait, and after the wake.
