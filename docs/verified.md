@@ -655,6 +655,20 @@ One entry per round; the facts each established live in the topic notes.
 - shim's loader stops as before (`docs/secure-boot.md`, shim's loader).
 - By hand (owner): no passphrase prompt at the first start, mobile data came up, the lid woke the Surface.
 
+## The GNSS feed in its own SELinux domain, support 3.23 (2026-11-27)
+
+- Installed: `sp11-surface-support` 3.23 over 3.22, back to 3.22 with `dnf downgrade` and a restart, then a
+  second build of 3.23 over 3.22; `Enforcing`.
+- First build: the feed ran in `sp11_gnss_t` and GeoClue connected (45 fixes), but `sendto` on systemd's notify
+  socket (`kernel_t`) was denied, so `READY=1` never arrived and systemd ended each start after its timeout. After
+  the downgrade and the restart the feed's file read as `unlabeled_t`; its socket listened.
+- Second build: the install relabelled the feed (`sp11_gnss_exec_t`) and restarted its socket. With GNOME Maps
+  near a window the feed became `active` in `sp11_gnss_t` with fixes, no SELinux denial in the boot; a deep sleep
+  while Maps asked for the location paused it (46 fixes) and resumed it, `StatusText=running`; closing Maps
+  stopped the session (28 fixes).
+- Third build, the uninstall script's comment corrected and nothing else (2026-11-28): `dnf reinstall` over the
+  second build; the new comment installed, the feed still `sp11_gnss_exec_t`, its socket active, no denial.
+
 ## Pen daemon 3.1.0-5: the pen in libwacom (2026-11-28)
 
 - Installed: `sp11-iptsd` 3.1.0-5 (the libwacom udev rule and tablet file) by `dnf upgrade` over 3.1.0-4, the

@@ -60,15 +60,27 @@ Inputs: @INPUTS@
 cp -a %{stage}/. %{buildroot}/
 
 %if %{sp11_modem}
-# GeoClue may not connect to the GNSS feed's socket without this module (sp11-gnss.cil).
+# The GNSS feed's policy module (sp11-gnss.cil): the feed's own domain and GeoClue's access to its socket. rpm
+# labels the feed before the module is loaded, so it is relabelled here. The socket takes the feed's domain when it
+# starts listening, so it is restarted, but only while the feed is not running: the restart would close GeoClue's
+# connection, which GeoClue 2.8 does not survive (docs/gnss.md); a feed running now has its new socket after a boot.
 %post
 if [ -d /etc/selinux/targeted ] && [ -x /usr/sbin/semodule ]; then
   /usr/sbin/semodule -i /usr/share/selinux/packages/sp11-gnss.cil >/dev/null 2>&1 || :
+  /usr/sbin/restorecon /usr/libexec/sp11/sp11-gnss >/dev/null 2>&1 || :
 fi
+systemctl -q is-active sp11-gnss.service 2>/dev/null || systemctl try-restart sp11-gnss.socket >/dev/null 2>&1 || :
 
 %postun
+# After an upgrade or a downgrade rpm labelled the other version's feed with this module's contexts. An older
+# module lacks the feed's types (3.22's does): after a downgrade to 3.22 the feed read as unlabeled_t. Relabel the
+# feed and restart its socket as after an install.
 if [ $1 -eq 0 ]; then
   [ -x /usr/sbin/semodule ] && /usr/sbin/semodule -r sp11-gnss >/dev/null 2>&1 || :
+else
+  [ -x /usr/sbin/restorecon ] && /usr/sbin/restorecon /usr/libexec/sp11/sp11-gnss >/dev/null 2>&1 || :
+  systemctl -q is-active sp11-gnss.service 2>/dev/null \
+    || systemctl try-restart sp11-gnss.socket >/dev/null 2>&1 || :
 fi
 %endif
 

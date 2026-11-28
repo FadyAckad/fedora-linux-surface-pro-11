@@ -18,7 +18,7 @@ for the Workstation or the KDE Plasma Desktop edition. How the pieces fit, and t
 |---|---|
 | Fedora | 45 (compose 1.4), Workstation or KDE Plasma Desktop |
 | Kernel | Fedora's `kernel-7.3.5-300.fc45`, SP11 revision 4 (`7.3.5-300.sp11.4.fc45.aarch64`) |
-| Support RPM (`sp11-surface-support`) | 3.22 |
+| Support RPM (`sp11-surface-support`) | 3.23 |
 | Signed boot image for Secure Boot (`sp11-kernel-secureboot-<kernel>`, optional, built with your own key) | 1-1, with the boot stub `262.1-sp11.1` |
 | Pen daemon (`sp11-iptsd`) | 3.1.0-5.sp11 |
 | Sensors stack | hexagonrpc 0.5.0-8, libssc 0.4.4-3, iio-sensor-proxy 3.9-3.sp11.2, sp11-sensors 1.15 |
@@ -41,7 +41,8 @@ by hand, with Secure Boot on, and so did revision 3 with support 3.17 (2026-11-2
 installation from the ISO built with revision 3 and support 3.18, its root encrypted, passed its round's checks by
 hand, with Secure Boot on. With support 3.19 a key sealed in the TPM then opened that root without a prompt.
 Revision 4 (2026-11-24) passed the standard checks and its round's checks by hand, with Secure Boot on and the
-root opened by the TPM. Pen daemon 3.1.0-5 (2026-11-28) passed its round's checks by hand.
+root opened by the TPM. Support 3.23 (2026-11-27) confirmed GPS with the GNSS feed in its own SELinux domain, and
+pen daemon 3.1.0-5 (2026-11-28) passed its round's checks by hand.
 The KDE Plasma Desktop edition builds from the same RPMs; its rows were last confirmed on 2026-10-08 with kernel
 revision 11 (7.2.9). The results by date: [`docs/verified.md`](docs/verified.md).
 
